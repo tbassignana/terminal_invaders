@@ -62,7 +62,7 @@ python3 invaders.py
 
 ## Soundtrack
 
-To enable background music, place an MP3 file at `~/soundtrack.mp3`. The game will loop it automatically during gameplay.  An AI generated soundtrack.mp3 from Suno is included in the repository
+To enable background music, place an MP3 file at `~/soundtrack.mp3`. The game will loop it automatically during gameplay.  An AI generated soundtrack.mp3 from Suno is included in the repository.
 
 ## Gameplay
 
