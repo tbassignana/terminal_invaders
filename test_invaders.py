@@ -3685,6 +3685,71 @@ class TestGameOverScreenAndStats(unittest.TestCase):
             am.stop()  # Should not raise
 
 
+class TestLevelTransitionCountdown(unittest.TestCase):
+    """Step 46: Level transition countdown animation (3... 2... 1... GO!)."""
+
+    def test_countdown_shows_3_at_start(self):
+        """Countdown text is '3' immediately after transition starts."""
+        game = Game(test_mode=True)
+        game.level_transition_time = time.time()
+        info = game.get_level_transition_info()
+        self.assertEqual(info["countdown_text"], "3")
+
+    def test_countdown_shows_2(self):
+        """Countdown text is '2' after 1 second."""
+        game = Game(test_mode=True)
+        game.level_transition_time = time.time() - 1.5
+        info = game.get_level_transition_info()
+        self.assertEqual(info["countdown_text"], "2")
+
+    def test_countdown_shows_1(self):
+        """Countdown text is '1' after 2 seconds."""
+        game = Game(test_mode=True)
+        game.level_transition_time = time.time() - 2.5
+        info = game.get_level_transition_info()
+        self.assertEqual(info["countdown_text"], "1")
+
+    def test_countdown_shows_go(self):
+        """Countdown text is 'GO!' after 3 seconds."""
+        game = Game(test_mode=True)
+        game.level_transition_time = time.time() - 3.5
+        info = game.get_level_transition_info()
+        self.assertEqual(info["countdown_text"], "GO!")
+
+    def test_auto_advance_after_countdown(self):
+        """State auto-advances to PLAYING after countdown completes."""
+        game = Game(test_mode=True)
+        game.state = GameState.LEVEL_TRANSITION
+        game.level_transition_time = time.time() - 5.0  # Well past 4s
+        game.update()
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_no_auto_advance_during_countdown(self):
+        """State stays LEVEL_TRANSITION during countdown."""
+        game = Game(test_mode=True)
+        game.state = GameState.LEVEL_TRANSITION
+        game.level_transition_time = time.time()  # Just started
+        game.update()
+        self.assertEqual(game.state, GameState.LEVEL_TRANSITION)
+
+    def test_space_skips_countdown(self):
+        """Pressing SPACE during countdown advances to PLAYING."""
+        game = Game(test_mode=True)
+        game.state = GameState.LEVEL_TRANSITION
+        game.handle_input(ord(" "))
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_info_includes_level_and_lives(self):
+        """Transition info includes level number and lives awarded."""
+        game = Game(test_mode=True)
+        game.level = 3
+        game.lives_awarded = 2
+        game.level_transition_time = time.time()
+        info = game.get_level_transition_info()
+        self.assertEqual(info["level"], 3)
+        self.assertEqual(info["lives_awarded"], 2)
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

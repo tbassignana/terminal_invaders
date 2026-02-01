@@ -1093,6 +1093,10 @@ class Game:
         self.total_kills: int = 0
         self.game_over_time: float = 0  # When GAME_OVER state was entered
 
+        # Level transition countdown (3... 2... 1... GO!)
+        self.level_transition_time: float = 0  # When LEVEL_TRANSITION started
+        self.level_countdown_duration: float = 4.0  # 3s countdown + 1s "GO!"
+
         # Mutable speed state (changes per level, not stored in frozen config)
         self.alien_move_interval = self.config.alien_move_interval
 
@@ -1394,6 +1398,13 @@ class Game:
         # Title screen color cycling runs in MENU state
         if self.state == GameState.MENU:
             self.title_color_frame += 1
+            return
+
+        # Auto-advance level transition countdown
+        if self.state == GameState.LEVEL_TRANSITION:
+            elapsed = time.time() - self.level_transition_time
+            if elapsed >= self.level_countdown_duration:
+                self.state = GameState.PLAYING
             return
 
         if self.state not in (GameState.PLAYING,):
@@ -1805,6 +1816,7 @@ class Game:
 
         self.level += 1
         self.state = GameState.LEVEL_TRANSITION
+        self.level_transition_time = time.time()
 
         # Green flash for level complete (0.15s)
         self.flash_active = True
@@ -2223,6 +2235,31 @@ class Game:
             "row": self.height - 1,
         }
 
+    def get_level_transition_info(self) -> dict:
+        """Return level transition countdown info (testable without curses).
+
+        Returns dict with:
+            level: current level number
+            lives_awarded: lives gained
+            countdown_text: "3", "2", "1", or "GO!"
+            elapsed: seconds since transition started
+        """
+        elapsed = time.time() - self.level_transition_time if self.level_transition_time > 0 else 0
+        if elapsed < 1.0:
+            countdown_text = "3"
+        elif elapsed < 2.0:
+            countdown_text = "2"
+        elif elapsed < 3.0:
+            countdown_text = "1"
+        else:
+            countdown_text = "GO!"
+        return {
+            "level": self.level,
+            "lives_awarded": self.lives_awarded,
+            "countdown_text": countdown_text,
+            "elapsed": elapsed,
+        }
+
     def get_game_over_stats(self) -> dict:
         """Return game over statistics (testable without curses).
 
@@ -2338,22 +2375,31 @@ class Game:
         )
 
     def _render_level_transition(self) -> None:
-        """Render level transition screen with bonus lives info."""
-        level_text = f"LEVEL {self.level}"
-        bonus_text = f"+{self.lives_awarded} {'LIFE' if self.lives_awarded == 1 else 'LIVES'} BONUS!"
+        """Render level transition screen with countdown and bonus lives info."""
+        info = self.get_level_transition_info()
+        level_text = f"LEVEL {info['level']}"
+        bonus_text = f"+{info['lives_awarded']} {'LIFE' if info['lives_awarded'] == 1 else 'LIVES'} BONUS!"
         lives_text = f"Lives: {self.player.lives}/{self.config.max_lives}"
-        continue_text = "Press SPACE to Continue"
+        countdown = info["countdown_text"]
 
         center_y = self.height // 2
         self._safe_addstr(
-            center_y - 2, (self.width - len(level_text)) // 2, level_text, curses.color_pair(COLOR_TEXT) | curses.A_BOLD
+            center_y - 3, (self.width - len(level_text)) // 2, level_text, curses.color_pair(COLOR_TEXT) | curses.A_BOLD
         )
         self._safe_addstr(
-            center_y, (self.width - len(bonus_text)) // 2, bonus_text, curses.color_pair(COLOR_PLAYER) | curses.A_BOLD
+            center_y - 1, (self.width - len(bonus_text)) // 2, bonus_text, curses.color_pair(COLOR_PLAYER) | curses.A_BOLD
         )
-        self._safe_addstr(center_y + 1, (self.width - len(lives_text)) // 2, lives_text, curses.color_pair(COLOR_TEXT))
+        self._safe_addstr(center_y, (self.width - len(lives_text)) // 2, lives_text, curses.color_pair(COLOR_TEXT))
+
+        # Countdown display (large, bold, centered)
+        cd_attr = curses.color_pair(COLOR_TEXT) | curses.A_BOLD
+        if countdown == "GO!":
+            cd_attr = curses.color_pair(COLOR_PLAYER) | curses.A_BOLD | curses.A_REVERSE
+        self._safe_addstr(center_y + 2, (self.width - len(countdown)) // 2, countdown, cd_attr)
+
+        skip_text = "Press SPACE to skip"
         self._safe_addstr(
-            center_y + 3, (self.width - len(continue_text)) // 2, continue_text, curses.color_pair(COLOR_TEXT)
+            center_y + 4, (self.width - len(skip_text)) // 2, skip_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM
         )
 
     def _safe_addstr(self, y, x, text: str, attr: int = 0) -> None:
