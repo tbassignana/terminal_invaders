@@ -752,6 +752,12 @@ class Game:
         # Pause tracking
         self.pause_start_time: float = 0
 
+        # Screen shake
+        self.shake_end_time: float = 0
+        self.shake_duration: float = 0.3
+        self.shake_offset_x: int = 0
+        self.shake_offset_y: int = 0
+
         # Power-ups
         self.power_ups: List[PowerUp] = []
         self.active_power_ups: List[ActivePowerUp] = []
@@ -871,6 +877,10 @@ class Game:
             self.flash_active = True
             self.flash_end_time = time.time() + 0.2
 
+            # Screen shake (not in test_mode)
+            if not self.test_mode:
+                self.shake_end_time = time.time() + self.shake_duration
+
             # Clear projectiles
             self.player_projectiles.clear()
             self.alien_projectiles.clear()
@@ -942,6 +952,16 @@ class Game:
         # Update flash effect
         if self.flash_active and current_time >= self.flash_end_time:
             self.flash_active = False
+
+        # Update screen shake
+        if current_time < self.shake_end_time:
+            remaining = self.shake_end_time - current_time
+            intensity = remaining / self.shake_duration  # Decay from 1 to 0
+            self.shake_offset_x = random.choice([-1, 0, 1]) if intensity > 0.3 else 0
+            self.shake_offset_y = random.choice([-1, 0, 1]) if intensity > 0.3 else 0
+        else:
+            self.shake_offset_x = 0
+            self.shake_offset_y = 0
 
         # Update alien animation
         if current_time - self.last_animation_time >= 0.5:
@@ -1388,11 +1408,11 @@ class Game:
                          continue_text, curses.color_pair(COLOR_TEXT))
 
     def _safe_addstr(self, y, x, text: str, attr: int = 0) -> None:
-        """Safely add string to screen, handling boundary issues."""
+        """Safely add string to screen, handling boundary issues and shake offset."""
         try:
             # Convert to int to handle float coordinates from projectile speed
-            y_int = int(y)
-            x_int = int(x)
+            y_int = int(y) + self.shake_offset_y
+            x_int = int(x) + self.shake_offset_x
             if 0 <= y_int < self.height and 0 <= x_int < self.width:
                 # Truncate if necessary
                 max_len = self.width - x_int - 1

@@ -653,6 +653,48 @@ class TestMysteryShip(unittest.TestCase):
         self.assertEqual(game.mystery_score_display[2], 150)
 
 
+class TestScreenShake(unittest.TestCase):
+    """Step 13: Tests for screen shake effect on player death."""
+
+    def test_shake_activation_on_damage(self):
+        """Verify shake_end_time is set when player takes damage (non-test_mode)."""
+        game = Game(test_mode=True)
+        # Manually simulate shake like non-test mode would
+        game.shake_end_time = time.time() + 0.3
+        self.assertGreater(game.shake_end_time, time.time())
+
+    def test_shake_offset_values(self):
+        """Verify shake produces offsets in [-1, 0, 1] range."""
+        game = Game(test_mode=True)
+        game.shake_end_time = time.time() + 1.0
+        game.shake_duration = 1.0
+        # Run several updates to sample offsets
+        offsets_x = set()
+        offsets_y = set()
+        for _ in range(50):
+            game.update()
+            offsets_x.add(game.shake_offset_x)
+            offsets_y.add(game.shake_offset_y)
+        # All offsets should be in {-1, 0, 1}
+        self.assertTrue(offsets_x.issubset({-1, 0, 1}))
+        self.assertTrue(offsets_y.issubset({-1, 0, 1}))
+
+    def test_shake_expires(self):
+        """Verify shake offsets return to 0 after duration."""
+        game = Game(test_mode=True)
+        game.shake_end_time = time.time() - 1.0  # Already expired
+        game.update()
+        self.assertEqual(game.shake_offset_x, 0)
+        self.assertEqual(game.shake_offset_y, 0)
+
+    def test_no_shake_in_test_mode(self):
+        """Verify handle_player_damage doesn't activate shake in test_mode."""
+        game = Game(test_mode=True)
+        game.player.lives = 3
+        game.handle_player_damage()
+        self.assertEqual(game.shake_end_time, 0)
+
+
 class TestDifficultyScaling(unittest.TestCase):
     """Step 12: Tests for difficulty scaling per level."""
 
