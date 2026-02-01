@@ -224,6 +224,7 @@ class GameState(Enum):
     """Game state machine states."""
     MENU = auto()
     PLAYING = auto()
+    PAUSED = auto()
     LEVEL_TRANSITION = auto()
     GAME_OVER = auto()
 
@@ -725,6 +726,9 @@ class Game:
         self.last_mystery_spawn_check = time.time()
         self.mystery_score_display: Optional[Tuple[int, int, int, float]] = None  # (x, y, pts, end_time)
 
+        # Pause tracking
+        self.pause_start_time: float = 0
+
         # Event bus
         self.event_bus = EventBus()
 
@@ -882,7 +886,7 @@ class Game:
 
     def update(self) -> None:
         """Main game update loop."""
-        if self.state != GameState.PLAYING:
+        if self.state not in (GameState.PLAYING,):
             return
 
         current_time = time.time()
@@ -1075,6 +1079,24 @@ class Game:
         # Speed up aliens slightly each level (mutable instance state, not global)
         self.alien_move_interval = max(0.1, self.alien_move_interval - 0.05)
 
+    def _toggle_pause(self) -> None:
+        """Toggle between PLAYING and PAUSED states, adjusting timers."""
+        if self.state == GameState.PLAYING:
+            self.state = GameState.PAUSED
+            self.pause_start_time = time.time()
+        elif self.state == GameState.PAUSED:
+            # Offset all time-based state by the duration of the pause
+            pause_duration = time.time() - self.pause_start_time
+            self.last_animation_time += pause_duration
+            self.last_alien_move_time += pause_duration
+            self.last_mystery_spawn_check += pause_duration
+            if self.flash_end_time > 0:
+                self.flash_end_time += pause_duration
+            if self.mystery_score_display:
+                x, y, pts, end = self.mystery_score_display
+                self.mystery_score_display = (x, y, pts, end + pause_duration)
+            self.state = GameState.PLAYING
+
     def handle_input(self, key: int) -> bool:
         """
         Handle keyboard input.
@@ -1092,7 +1114,9 @@ class Game:
                     self.audio.start()
 
         elif self.state == GameState.PLAYING:
-            if key == curses.KEY_LEFT or key == ord('a'):
+            if key == ord('p') or key == ord('P') or key == 27:  # P or Escape
+                self._toggle_pause()
+            elif key == curses.KEY_LEFT or key == ord('a'):
                 self.player.x = max(0, self.player.x - self.config.player_speed)
             elif key == curses.KEY_RIGHT or key == ord('d'):
                 self.player.x = min(self.width - 3, self.player.x + self.config.player_speed)
@@ -1103,6 +1127,10 @@ class Game:
                         Projectile(x=self.player.x + 1, y=self.player.y - 1, direction=-1)
                     )
                     self.event_bus.publish(GameEvent.SHOT_FIRED)
+
+        elif self.state == GameState.PAUSED:
+            if key == ord('p') or key == ord('P') or key == 27:  # P or Escape
+                self._toggle_pause()
 
         elif self.state == GameState.GAME_OVER:
             if key == ord('r') or key == ord('R'):
@@ -1131,6 +1159,9 @@ class Game:
             self._render_menu()
         elif self.state == GameState.PLAYING:
             self._render_game()
+        elif self.state == GameState.PAUSED:
+            self._render_game()
+            self._render_pause_overlay()
         elif self.state == GameState.GAME_OVER:
             self._render_game_over()
         elif self.state == GameState.LEVEL_TRANSITION:
@@ -1188,6 +1219,16 @@ class Game:
         for proj in self.alien_projectiles:
             self._safe_addstr(proj.y, proj.x, self.config.projectile_alien,
                              curses.color_pair(COLOR_GAME_OVER))
+
+    def _render_pause_overlay(self) -> None:
+        """Render pause overlay on top of the game."""
+        pause_text = "PAUSED"
+        resume_text = "Press P or Escape to Resume"
+        center_y = self.height // 2
+        self._safe_addstr(center_y, (self.width - len(pause_text)) // 2,
+                         pause_text, curses.color_pair(COLOR_TEXT) | curses.A_BOLD)
+        self._safe_addstr(center_y + 2, (self.width - len(resume_text)) // 2,
+                         resume_text, curses.color_pair(COLOR_TEXT))
 
     def _render_game_over(self) -> None:
         """Render the game over screen."""

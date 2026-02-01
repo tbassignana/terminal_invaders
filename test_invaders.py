@@ -227,9 +227,9 @@ class TestGameStateTransitions(unittest.TestCase):
 
     def test_state_enum_values(self):
         """Verify all required game states exist."""
-        states = [GameState.MENU, GameState.PLAYING,
+        states = [GameState.MENU, GameState.PLAYING, GameState.PAUSED,
                   GameState.LEVEL_TRANSITION, GameState.GAME_OVER]
-        self.assertEqual(len(states), 4, "Should have 4 game states")
+        self.assertEqual(len(states), 5, "Should have 5 game states")
 
 
 class TestAlienMechanics(unittest.TestCase):
@@ -648,6 +648,51 @@ class TestMysteryShip(unittest.TestCase):
         game._check_collisions()
         self.assertIsNotNone(game.mystery_score_display)
         self.assertEqual(game.mystery_score_display[2], 150)
+
+
+class TestPauseSystem(unittest.TestCase):
+    """Step 9: Tests for the pause system."""
+
+    def test_pause_toggle_to_paused(self):
+        """Verify pressing pause changes state to PAUSED."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game._toggle_pause()
+        self.assertEqual(game.state, GameState.PAUSED)
+
+    def test_pause_toggle_to_playing(self):
+        """Verify pressing pause again resumes to PLAYING."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game._toggle_pause()
+        game._toggle_pause()
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_game_state_does_not_update_while_paused(self):
+        """Verify update() is a no-op when paused."""
+        game = Game(test_mode=True)
+        game.state = GameState.PAUSED
+        initial_aliens = len(game.aliens)
+        game.update()
+        # Nothing should change
+        self.assertEqual(len(game.aliens), initial_aliens)
+
+    def test_unpause_resumes_correctly(self):
+        """Verify time offsets are adjusted on unpause so no timer jump."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        old_alien_time = game.last_alien_move_time
+
+        game._toggle_pause()
+        time.sleep(0.05)  # Small pause
+        game._toggle_pause()
+
+        # Timer should have been offset forward
+        self.assertGreater(game.last_alien_move_time, old_alien_time)
+
+    def test_paused_state_exists_in_enum(self):
+        """Verify PAUSED is a valid GameState."""
+        self.assertIn(GameState.PAUSED, list(GameState))
 
 
 class TestCLIArgParser(unittest.TestCase):
