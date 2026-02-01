@@ -53,6 +53,8 @@ from invaders import (
     DEATH_ANIM_CHARS,
     DEFAULT_CONFIG,
     DEFAULT_EXPLOSION_CONFIG,
+    FORMATION_FUNCS,
+    FORMATION_NAMES,
     MENU_ITEMS,
     MYSTERY_SHIP_CHAR,
     PLAYER_START_LIVES,
@@ -88,6 +90,8 @@ from invaders import (
     build_argument_parser,
     config_from_args,
     get_explosion_config,
+    get_formation_for_level,
+    get_formation_positions,
     get_sound_backend,
     resolve_audio_path,
 )
@@ -4646,6 +4650,84 @@ class TestMenuCursorAnimation(unittest.TestCase):
             for c in calls
         )
         self.assertTrue(has_reverse, "Expected A_REVERSE attribute during flash")
+
+
+class TestAlienFormationPatterns(unittest.TestCase):
+    """Step 57: Alien formation patterns per level."""
+
+    def test_formation_names_defined(self):
+        """FORMATION_NAMES contains the four expected patterns."""
+        self.assertEqual(FORMATION_NAMES, ["rectangle", "v_shape", "diamond", "wave"])
+
+    def test_formation_funcs_match_names(self):
+        """Every name in FORMATION_NAMES has a corresponding function."""
+        for name in FORMATION_NAMES:
+            self.assertIn(name, FORMATION_FUNCS)
+
+    def test_level_1_is_rectangle(self):
+        """Level 1 always uses the rectangle formation."""
+        self.assertEqual(get_formation_for_level(1), "rectangle")
+
+    def test_level_2_plus_cycles_non_rectangle(self):
+        """Levels 2+ cycle through v_shape, diamond, wave."""
+        self.assertEqual(get_formation_for_level(2), "v_shape")
+        self.assertEqual(get_formation_for_level(3), "diamond")
+        self.assertEqual(get_formation_for_level(4), "wave")
+        # Cycle repeats
+        self.assertEqual(get_formation_for_level(5), "v_shape")
+
+    def test_rectangle_is_full_grid(self):
+        """Rectangle formation includes all positions."""
+        positions = get_formation_positions("rectangle", 5, 11)
+        self.assertEqual(len(positions), 55)
+
+    def test_v_shape_fewer_than_full(self):
+        """V-shape formation has fewer aliens than full grid."""
+        full = get_formation_positions("rectangle", 5, 11)
+        v = get_formation_positions("v_shape", 5, 11)
+        self.assertLess(len(v), len(full))
+        self.assertGreater(len(v), 0)
+
+    def test_diamond_fewer_than_full(self):
+        """Diamond formation has fewer aliens than full grid."""
+        full = get_formation_positions("rectangle", 5, 11)
+        d = get_formation_positions("diamond", 5, 11)
+        self.assertLess(len(d), len(full))
+        self.assertGreater(len(d), 0)
+
+    def test_wave_produces_positions(self):
+        """Wave formation produces a non-empty set of positions."""
+        w = get_formation_positions("wave", 5, 11)
+        self.assertGreater(len(w), 0)
+
+    def test_game_init_sets_initial_alien_count(self):
+        """Game.__init__ sets initial_alien_count matching len(aliens)."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.initial_alien_count, len(game.aliens))
+        self.assertGreater(game.initial_alien_count, 0)
+
+    def test_game_level_2_uses_v_shape(self):
+        """At level 2, game uses v_shape formation with fewer aliens."""
+        game = Game(test_mode=True)
+        level1_count = game.initial_alien_count
+        game.level = 2
+        game._init_aliens()
+        self.assertEqual(game.get_current_formation(), "v_shape")
+        self.assertLess(game.initial_alien_count, level1_count)
+
+    def test_unknown_formation_falls_back_to_rectangle(self):
+        """Unknown formation name falls back to rectangle."""
+        positions = get_formation_positions("nonexistent", 5, 11)
+        self.assertEqual(len(positions), 55)
+
+    def test_initial_alien_count_used_for_frenzy(self):
+        """initial_alien_count is set after _init_aliens for correct frenzy calc."""
+        game = Game(test_mode=True)
+        # Kill some aliens
+        game.aliens = game.aliens[:5]
+        # fire_probability should use initial_alien_count, not crash
+        prob = game.get_alien_fire_probability()
+        self.assertGreater(prob, 0)
 
 
 if __name__ == "__main__":

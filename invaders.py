@@ -270,6 +270,84 @@ def get_explosion_config(alien_type: int) -> dict:
     return ALIEN_EXPLOSION_CONFIGS.get(alien_type, DEFAULT_EXPLOSION_CONFIG)
 
 
+# ============================================================================
+# ALIEN FORMATION PATTERNS
+# ============================================================================
+# Each pattern is a function(rows, cols) -> set of (row, col) positions to include.
+# Level 1 always uses "rectangle". Patterns cycle starting from level 2.
+
+FORMATION_NAMES = ["rectangle", "v_shape", "diamond", "wave"]
+
+
+def _formation_rectangle(rows: int, cols: int) -> set:
+    """Full rectangular grid (classic)."""
+    return {(r, c) for r in range(rows) for c in range(cols)}
+
+
+def _formation_v_shape(rows: int, cols: int) -> set:
+    """V-shape: widens from top center to bottom edges."""
+    positions = set()
+    mid = cols // 2
+    for r in range(rows):
+        spread = int((r / max(rows - 1, 1)) * (mid))
+        for c in range(cols):
+            if mid - spread <= c <= mid + spread:
+                positions.add((r, c))
+    return positions
+
+
+def _formation_diamond(rows: int, cols: int) -> set:
+    """Diamond shape: widest at middle row, narrow at top and bottom."""
+    positions = set()
+    mid_r = rows // 2
+    mid_c = cols // 2
+    for r in range(rows):
+        dist = abs(r - mid_r)
+        half_w = max(1, mid_c - dist)
+        for c in range(cols):
+            if mid_c - half_w <= c <= mid_c + half_w:
+                positions.add((r, c))
+    return positions
+
+
+def _formation_wave(rows: int, cols: int) -> set:
+    """Wave pattern: sinusoidal vertical offset, skip positions below threshold."""
+    positions = set()
+    for r in range(rows):
+        for c in range(cols):
+            # Use sine wave to create undulating rows
+            offset = int(1.5 * math.sin(c * math.pi / max(cols - 1, 1)))
+            effective_row = r + offset
+            if 0 <= effective_row < rows:
+                positions.add((effective_row, c))
+    return positions
+
+
+FORMATION_FUNCS = {
+    "rectangle": _formation_rectangle,
+    "v_shape": _formation_v_shape,
+    "diamond": _formation_diamond,
+    "wave": _formation_wave,
+}
+
+
+def get_formation_for_level(level: int) -> str:
+    """Return the formation pattern name for a given level.
+
+    Level 1 is always rectangle. Levels 2+ cycle through the other patterns.
+    """
+    if level <= 1:
+        return "rectangle"
+    non_rect = [n for n in FORMATION_NAMES if n != "rectangle"]
+    return non_rect[(level - 2) % len(non_rect)]
+
+
+def get_formation_positions(name: str, rows: int, cols: int) -> set:
+    """Return the set of (row, col) positions for a named formation."""
+    func = FORMATION_FUNCS.get(name, _formation_rectangle)
+    return func(rows, cols)
+
+
 # ASCII art title for animated title screen (each line is one row)
 TITLE_ART = [
     " ███ ████  ██  ██ ██ █████",
@@ -1171,6 +1249,7 @@ class Game:
         self.score_manager = ScoreManager() if not test_mode else None
         self.score = 0
         self.level = 1
+        self.initial_alien_count: int = 0  # Set by _init_aliens()
 
         # Game stats tracking (for game over screen)
         self.total_shots: int = 0
@@ -1304,18 +1383,24 @@ class Game:
         self._initial_player_x = self.player.x
 
     def _init_aliens(self) -> None:
-        """Create the initial alien grid (rows scaled by level)."""
+        """Create the alien formation (pattern and rows scaled by level)."""
         self.aliens = []
         cfg = self.config
         rows = self.get_scaled_alien_rows()
         start_x = (self.width - (cfg.alien_cols * cfg.alien_spacing_x)) // 2
 
+        pattern_name = get_formation_for_level(self.level)
+        positions = get_formation_positions(pattern_name, rows, cfg.alien_cols)
+
         for row in range(rows):
             alien_type = row // 2  # Different types per rows
             for col in range(cfg.alien_cols):
+                if (row, col) not in positions:
+                    continue
                 x = start_x + col * cfg.alien_spacing_x
                 y = cfg.alien_start_y + row * cfg.alien_spacing_y
                 self.aliens.append(Alien(x=x, y=y, alien_type=alien_type % 3))
+        self.initial_alien_count = len(self.aliens)
 
     def _init_bunkers(self) -> None:
         """Create defensive bunkers (health scaled by level)."""
@@ -1344,7 +1429,7 @@ class Game:
 
         cfg = self.config
         # Calculate ratio of destroyed aliens
-        total_aliens = cfg.alien_rows * cfg.alien_cols
+        total_aliens = self.initial_alien_count or 1
         remaining = len(self.aliens)
         destroyed_ratio = 1 - (remaining / total_aliens)
 
@@ -1599,8 +1684,7 @@ class Game:
 
         # Update marching beat (speeds up as aliens die - iconic Space Invaders sound)
         if self.sfx and self.aliens:
-            total_aliens = self.config.alien_rows * self.config.alien_cols
-            self.sfx.update_march(len(self.aliens), total_aliens)
+            self.sfx.update_march(len(self.aliens), self.initial_alien_count or 1)
 
         # Check level complete
         if not self.aliens:
@@ -1913,6 +1997,10 @@ class Game:
         """Return alien rows for the current level (extra row every 3 levels, max 8)."""
         extra = (self.level - 1) // 3
         return min(self.config.alien_rows + extra, 8)
+
+    def get_current_formation(self) -> str:
+        """Return the formation pattern name for the current level."""
+        return get_formation_for_level(self.level)
 
     def get_scaled_bunker_health(self) -> int:
         """Return starting bunker health for the current level (reduced every 5 levels, min 1)."""
@@ -2477,7 +2565,7 @@ class Game:
         self._render_hud_border()
 
         # Render aliens (color per type, bold in frenzy mode)
-        total_aliens = self.config.alien_rows * self.config.alien_cols
+        total_aliens = self.initial_alien_count or 1
         frenzy = len(self.aliens) < total_aliens * 0.3
         for alien in self.aliens:
             char = ALIEN_CHARS[alien.alien_type][self.alien_animation_frame]
@@ -2653,7 +2741,7 @@ class Game:
             power_ups: str like "PWR: R S" or "PWR: --"
             row: int (bottom row for rendering)
         """
-        total = self.config.alien_rows * self.config.alien_cols
+        total = self.initial_alien_count or 1
         remaining = len(self.aliens)
         aliens_str = f"Aliens: {remaining}/{total}"
 

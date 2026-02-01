@@ -99,7 +99,7 @@
 
 ### Gameplay Enhancements
 
-- [ ] **Step 57:** Add alien formation patterns per level (rectangle, V-shape, diamond, wave)
+- [x] **Step 57:** Add alien formation patterns per level (rectangle, V-shape, diamond, wave)
 - [ ] **Step 58:** Add boss alien every 5 levels (large sprite, multi-HP, spread shots, big score)
 - [ ] **Step 59:** Add wave-based sub-levels (3 waves per level with escalating difficulty)
 - [ ] **Step 60:** Add player weapon upgrade system (5 levels: single→dual→triple→quad + speed)
