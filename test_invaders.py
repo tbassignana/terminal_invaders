@@ -28,11 +28,13 @@ from hypothesis import strategies as st
 
 from invaders import (
     COLOR_ALIEN,
+    DEATH_ANIM_CHARS,
     DEFAULT_CONFIG,
     PLAYER_START_LIVES,
     AbstractSoundBackend,
     ActivePowerUp,
     Alien,
+    DyingAlien,
     EventBus,
     Game,
     GameConfig,
@@ -2562,6 +2564,66 @@ class TestProjectileTrailEffect(unittest.TestCase):
             game._update_projectiles()
         self.assertEqual(len(game.player_projectiles), 0, "Projectile should be removed at top")
         # The removed projectile's trail is no longer in the game
+
+
+class TestAlienDeathAnimation(unittest.TestCase):
+    """Tests for alien death animation flash sequence (Step 29)."""
+
+    def test_alien_enters_dying_state_on_hit(self):
+        """Verify killed alien creates a DyingAlien entry."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=5, alien_type=0)]
+        game.player_projectiles = [Projectile(x=10, y=5, direction=-1)]
+        game._check_collisions()
+        self.assertEqual(len(game.dying_aliens), 1, "Dying alien should be created on kill")
+        self.assertEqual(game.dying_aliens[0].x, 10)
+        self.assertEqual(game.dying_aliens[0].y, 5)
+
+    def test_dying_animation_frame_progression(self):
+        """Verify DyingAlien advances through #, *, + frames."""
+        da = DyingAlien(x=5, y=5)
+        self.assertEqual(da.char, "#")
+        self.assertFalse(da.finished)
+        da.advance()
+        self.assertEqual(da.char, "*")
+        self.assertFalse(da.finished)
+        da.advance()
+        self.assertEqual(da.char, "+")
+        self.assertFalse(da.finished)
+        da.advance()
+        self.assertTrue(da.finished, "Should be finished after 3 advances")
+
+    def test_dying_alien_removed_after_animation(self):
+        """Verify dying alien is removed once animation completes."""
+        game = Game(test_mode=True)
+        game.dying_aliens = [DyingAlien(x=10, y=5, frame=0)]
+        # Simulate 3 update cycles to advance through all frames
+        for _ in range(3):
+            for da in game.dying_aliens[:]:
+                da.advance()
+                if da.finished:
+                    game.dying_aliens.remove(da)
+        self.assertEqual(len(game.dying_aliens), 0, "Dying alien should be removed after animation")
+
+    def test_score_awarded_immediately_on_kill(self):
+        """Verify score is awarded when alien is hit, not after animation."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=5, alien_type=0)]
+        game.player_projectiles = [Projectile(x=10, y=5, direction=-1)]
+        initial_score = game.score
+        game._check_collisions()
+        self.assertGreater(game.score, initial_score, "Score should increase immediately on kill")
+
+    def test_reset_clears_dying_aliens(self):
+        """Verify reset_game clears the dying_aliens list."""
+        game = Game(test_mode=True)
+        game.dying_aliens = [DyingAlien(x=5, y=5)]
+        game.reset_game()
+        self.assertEqual(len(game.dying_aliens), 0)
+
+    def test_death_anim_chars_sequence(self):
+        """Verify the death animation character sequence is correct."""
+        self.assertEqual(DEATH_ANIM_CHARS, ["#", "*", "+"])
 
 
 if __name__ == "__main__":

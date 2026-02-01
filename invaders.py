@@ -326,6 +326,36 @@ class Alien:
         pass
 
 
+# Death animation characters: # → * → + → gone
+DEATH_ANIM_CHARS = ["#", "*", "+"]
+DEATH_ANIM_FRAMES = len(DEATH_ANIM_CHARS)
+
+
+@dataclass
+class DyingAlien:
+    """An alien mid-death-animation (flash sequence before removal)."""
+
+    x: int
+    y: int
+    frame: int = 0  # current animation frame (0-based)
+
+    @property
+    def char(self) -> str:
+        """Return the current death animation character."""
+        if 0 <= self.frame < len(DEATH_ANIM_CHARS):
+            return DEATH_ANIM_CHARS[self.frame]
+        return ""
+
+    @property
+    def finished(self) -> bool:
+        """Return True when the death animation is complete."""
+        return self.frame >= DEATH_ANIM_FRAMES
+
+    def advance(self) -> None:
+        """Advance to the next animation frame."""
+        self.frame += 1
+
+
 @dataclass
 class Bunker:
     """Defensive bunker that erodes on hits."""
@@ -914,6 +944,7 @@ class Game:
         self.player_projectiles: List[Projectile] = []
         self.alien_projectiles: List[Projectile] = []
         self.bunkers: List[Bunker] = []
+        self.dying_aliens: List[DyingAlien] = []
 
         # Animation state
         self.alien_animation_frame = 0
@@ -1120,6 +1151,9 @@ class Game:
         self.power_ups.clear()
         self.active_power_ups.clear()
 
+        # Clear dying aliens
+        self.dying_aliens.clear()
+
         # Reset combo
         self.combo_count = 0
         self.combo_last_kill_time = 0
@@ -1181,6 +1215,12 @@ class Game:
         self._last_update_time = current_time
         if not self.test_mode:
             self.particle_system.update(dt)
+
+        # Update dying alien animations
+        for da in self.dying_aliens[:]:
+            da.advance()
+            if da.finished:
+                self.dying_aliens.remove(da)
 
         # Check invasion
         self.check_invasion()
@@ -1351,6 +1391,8 @@ class Game:
                     multiplier = self._register_kill(current_time)
                     self.score += 10 * (3 - alien.alien_type) * multiplier
                     self._spawn_power_up(alien.x, alien.y)
+                    # Add dying alien animation
+                    self.dying_aliens.append(DyingAlien(x=alien.x, y=alien.y))
                     # Spawn explosion particles at alien death position
                     if not self.test_mode:
                         self.particle_system.spawn(
@@ -1606,6 +1648,10 @@ class Game:
         for alien in self.aliens:
             char = ALIEN_CHARS[alien.alien_type][self.alien_animation_frame]
             self._safe_addstr(alien.y, alien.x, char, curses.color_pair(COLOR_ALIEN))
+
+        # Render dying aliens (death animation flash)
+        for da in self.dying_aliens:
+            self._safe_addstr(da.y, da.x, da.char, curses.color_pair(COLOR_TEXT) | curses.A_BOLD)
 
         # Render bunkers
         for bunker in self.bunkers:
