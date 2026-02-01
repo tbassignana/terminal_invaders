@@ -25,6 +25,7 @@ import threading
 import subprocess
 import atexit
 import signal
+from abc import ABC, abstractmethod
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
@@ -268,6 +269,85 @@ class Projectile:
 # AUDIO SYSTEM
 # ============================================================================
 
+class AbstractSoundBackend(ABC):
+    """Abstract interface for sound playback backends."""
+
+    @abstractmethod
+    def play(self, path: str, volume: float = 0.5) -> None:
+        """Play a sound file at the given volume (non-blocking)."""
+
+    @abstractmethod
+    def stop(self) -> None:
+        """Stop all currently playing sounds."""
+
+    @abstractmethod
+    def is_available(self) -> bool:
+        """Return True if this backend can play audio on the current platform."""
+
+
+class MacOSSoundBackend(AbstractSoundBackend):
+    """Sound backend using macOS afplay command."""
+
+    def play(self, path: str, volume: float = 0.5) -> None:
+        if not os.path.exists(path):
+            return
+
+        def _play():
+            try:
+                subprocess.run(
+                    ['afplay', '-v', str(volume), path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2
+                )
+            except Exception:
+                logger.debug("MacOSSoundBackend: failed to play '%s'", path, exc_info=True)
+
+        thread = threading.Thread(target=_play, daemon=True)
+        thread.start()
+
+    def stop(self) -> None:
+        try:
+            subprocess.run(['pkill', '-9', 'afplay'],
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL)
+        except Exception:
+            logger.debug("MacOSSoundBackend: failed to stop sounds", exc_info=True)
+
+    def is_available(self) -> bool:
+        try:
+            result = subprocess.run(
+                ['which', 'afplay'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
+
+class NullSoundBackend(AbstractSoundBackend):
+    """Silent sound backend for testing and unsupported platforms."""
+
+    def play(self, path: str, volume: float = 0.5) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+    def is_available(self) -> bool:
+        return True
+
+
+def get_sound_backend() -> AbstractSoundBackend:
+    """Select the best available sound backend for the current platform."""
+    if sys.platform == 'darwin':
+        backend = MacOSSoundBackend()
+        if backend.is_available():
+            return backend
+    return NullSoundBackend()
+
+
 class AudioManager:
     """
     Non-blocking audio manager using daemon threads.
@@ -336,7 +416,7 @@ class SoundEffects:
     """
     Retro-style sound effects mimicking original Space Invaders.
 
-    Uses macOS system sounds and afplay for non-blocking audio.
+    Uses a pluggable SoundBackend for cross-platform audio.
     The original Space Invaders had:
     - Marching beat that sped up as aliens decreased
     - Shooting "pew" sound
@@ -356,8 +436,9 @@ class SoundEffects:
         'life_bonus': '/System/Library/Sounds/Hero.aiff',
     }
 
-    def __init__(self):
+    def __init__(self, backend: Optional[AbstractSoundBackend] = None):
         self.enabled = True
+        self.backend = backend or get_sound_backend()
         self.march_beat = 0  # Alternates between 0 and 1
         self.last_march_time = 0
         self.march_interval = 0.5  # Starting interval (speeds up)
@@ -370,28 +451,14 @@ class SoundEffects:
             self.available_sounds[name] = os.path.exists(path)
 
     def _play_async(self, sound_name: str, volume: float = 0.5):
-        """Play a sound asynchronously (non-blocking)."""
+        """Play a sound via the backend."""
         if not self.enabled:
             return
         if sound_name not in self.SOUNDS:
             return
         if not self.available_sounds.get(sound_name, False):
             return
-
-        def play():
-            try:
-                # afplay with volume control
-                subprocess.run(
-                    ['afplay', '-v', str(volume), self.SOUNDS[sound_name]],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=2
-                )
-            except Exception:
-                logger.debug("Failed to play sound '%s'", sound_name, exc_info=True)
-
-        thread = threading.Thread(target=play, daemon=True)
-        thread.start()
+        self.backend.play(self.SOUNDS[sound_name], volume)
 
     def play_shoot(self):
         """Player shooting sound."""

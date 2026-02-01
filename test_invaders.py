@@ -24,6 +24,11 @@ from invaders import (
     Alien,
     Projectile,
     Game,
+    AbstractSoundBackend,
+    MacOSSoundBackend,
+    NullSoundBackend,
+    get_sound_backend,
+    SoundEffects,
     resolve_audio_path,
     PLAYER_START_LIVES
 )
@@ -451,6 +456,45 @@ class TestLogging(unittest.TestCase):
         finally:
             os.chdir(old_cwd)
             self.logger.handlers.clear()
+
+
+class TestSoundBackend(unittest.TestCase):
+    """Step 4: Tests for abstract sound backend interface."""
+
+    def test_null_backend_plays_silently(self):
+        """Verify NullSoundBackend.play() does nothing without error."""
+        backend = NullSoundBackend()
+        # Should not raise any exception
+        backend.play('/nonexistent/path.aiff', volume=0.5)
+
+    def test_null_backend_stop(self):
+        """Verify NullSoundBackend.stop() does nothing without error."""
+        backend = NullSoundBackend()
+        backend.stop()
+
+    def test_null_backend_is_available(self):
+        """NullSoundBackend is always available."""
+        backend = NullSoundBackend()
+        self.assertTrue(backend.is_available())
+
+    def test_backend_selection_returns_valid_backend(self):
+        """Verify get_sound_backend returns an AbstractSoundBackend."""
+        backend = get_sound_backend()
+        self.assertIsInstance(backend, AbstractSoundBackend)
+
+    def test_macos_backend_path_resolution(self):
+        """Verify MacOSSoundBackend is available on macOS."""
+        if sys.platform == 'darwin':
+            backend = MacOSSoundBackend()
+            self.assertTrue(backend.is_available())
+        else:
+            self.skipTest("Not on macOS")
+
+    def test_sound_effects_uses_backend(self):
+        """Verify SoundEffects delegates to backend."""
+        backend = NullSoundBackend()
+        sfx = SoundEffects(backend=backend)
+        self.assertIs(sfx.backend, backend)
 
 
 if __name__ == '__main__':
