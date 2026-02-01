@@ -15,6 +15,8 @@ Author: Claude AI
 License: MIT
 """
 
+__version__ = "0.1.0"
+
 import argparse
 import atexit
 import curses
@@ -167,6 +169,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--fps", type=int, default=None, help="Target FPS (default: 60)")
     parser.add_argument("--show-fps", action="store_true", help="Display FPS counter during gameplay")
+    parser.add_argument("--version", action="version", version=f"Terminal Invaders {__version__}")
     return parser
 
 

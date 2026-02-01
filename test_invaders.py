@@ -2269,6 +2269,55 @@ class TestPreCommitAndRuff(unittest.TestCase):
         self.assertIn("ruff", data.get("tool", {}))
 
 
+class TestVersionAndChangelog(unittest.TestCase):
+    """Step 25: Tests for version management and changelog."""
+
+    def test_version_attribute_exists(self):
+        """Verify __version__ attribute exists in invaders module."""
+        import invaders
+
+        self.assertTrue(hasattr(invaders, "__version__"))
+        self.assertIsInstance(invaders.__version__, str)
+
+    def test_version_matches_pyproject(self):
+        """Verify __version__ matches version in pyproject.toml."""
+        import tomllib
+
+        import invaders
+
+        toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
+        with open(toml_path, "rb") as f:
+            data = tomllib.load(f)
+        self.assertEqual(invaders.__version__, data["project"]["version"])
+
+    def test_version_flag_output(self):
+        """Verify --version flag prints version and exits."""
+        import subprocess
+
+        result = subprocess.run(
+            [sys.executable, "-m", "invaders", "--version"],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(__file__),
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("0.1.0", result.stdout)
+
+    def test_changelog_exists(self):
+        """Verify CHANGELOG.md exists."""
+        changelog_path = os.path.join(os.path.dirname(__file__), "CHANGELOG.md")
+        self.assertTrue(os.path.exists(changelog_path))
+
+    def test_changelog_has_version_entry(self):
+        """Verify CHANGELOG.md documents the current version."""
+        changelog_path = os.path.join(os.path.dirname(__file__), "CHANGELOG.md")
+        with open(changelog_path) as f:
+            content = f.read()
+        self.assertIn("[0.1.0]", content)
+        self.assertIn("Step 1:", content)
+        self.assertIn("Step 25:", content)
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

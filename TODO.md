@@ -41,4 +41,4 @@
 - [x] **Step 22:** Add GitHub Actions CI pipeline
 - [x] **Step 23:** Add a Makefile for common development tasks
 - [x] **Step 24:** Add pre-commit hooks and ruff linting configuration
-- [ ] **Step 25:** Add CHANGELOG.md, version management, and `--version` flag
+- [x] **Step 25:** Add CHANGELOG.md, version management, and `--version` flag
