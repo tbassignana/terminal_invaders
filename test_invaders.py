@@ -112,6 +112,7 @@ from invaders import (
     ScoreManager,
     ScorePopup,
     SoundEffects,
+    StatsManager,
     build_argument_parser,
     config_from_args,
     get_explosion_config,
@@ -5789,6 +5790,108 @@ class TestBulletTimePowerUp(unittest.TestCase):
         """Bullet time constants are properly defined."""
         self.assertEqual(BULLET_TIME_DURATION, 4.0)
         self.assertEqual(BULLET_TIME_SPEED_MULT, 0.5)
+
+
+class TestStatsManager(unittest.TestCase):
+    """Tests for persistent lifetime statistics tracking."""
+
+    def _make_stats(self):
+        """Create StatsManager with temp file."""
+        tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+        tmp.close()
+        os.unlink(tmp.name)  # Start fresh
+        return StatsManager(stats_path=tmp.name), tmp.name
+
+    def _cleanup(self, path):
+        """Remove temp file if it exists."""
+        if os.path.exists(path):
+            os.unlink(path)
+
+    def test_default_stats(self):
+        """Default stats are all zero."""
+        sm, path = self._make_stats()
+        stats = sm.get_stats()
+        self.assertEqual(stats["games_played"], 0)
+        self.assertEqual(stats["total_kills"], 0)
+        self.assertEqual(stats["best_score"], 0)
+        self._cleanup(path)
+
+    def test_record_game(self):
+        """Recording a game updates all stat fields."""
+        sm, path = self._make_stats()
+        sm.record_game(score=500, level=3, kills=20, shots=50, play_time=60.0)
+        stats = sm.get_stats()
+        self.assertEqual(stats["games_played"], 1)
+        self.assertEqual(stats["total_kills"], 20)
+        self.assertEqual(stats["total_shots"], 50)
+        self.assertEqual(stats["total_score"], 500)
+        self.assertEqual(stats["best_score"], 500)
+        self.assertEqual(stats["highest_level"], 3)
+        self._cleanup(path)
+
+    def test_best_score_tracked(self):
+        """Best score reflects the highest of all games."""
+        sm, path = self._make_stats()
+        sm.record_game(score=100, level=1, kills=5, shots=10, play_time=10.0)
+        sm.record_game(score=500, level=3, kills=20, shots=50, play_time=60.0)
+        sm.record_game(score=200, level=2, kills=10, shots=30, play_time=30.0)
+        self.assertEqual(sm.get_stats()["best_score"], 500)
+        self._cleanup(path)
+
+    def test_persistence_across_instances(self):
+        """Stats persist to disk and load in new instance."""
+        sm, path = self._make_stats()
+        sm.record_game(score=1000, level=5, kills=50, shots=100, play_time=120.0)
+        sm2 = StatsManager(stats_path=path)
+        self.assertEqual(sm2.get_stats()["games_played"], 1)
+        self.assertEqual(sm2.get_stats()["best_score"], 1000)
+        self._cleanup(path)
+
+    def test_accuracy_calculation(self):
+        """Accuracy is calculated from kills/shots."""
+        sm, path = self._make_stats()
+        sm.record_game(score=100, level=1, kills=25, shots=100, play_time=30.0)
+        self.assertAlmostEqual(sm.get_stats()["accuracy"], 25.0, places=1)
+        self._cleanup(path)
+
+    def test_accuracy_zero_shots(self):
+        """Accuracy is 0.0 when no shots fired."""
+        sm, path = self._make_stats()
+        self.assertEqual(sm.get_stats()["accuracy"], 0.0)
+        self._cleanup(path)
+
+    def test_cumulative_stats(self):
+        """Stats accumulate across multiple games."""
+        sm, path = self._make_stats()
+        sm.record_game(score=100, level=1, kills=10, shots=20, play_time=30.0)
+        sm.record_game(score=200, level=2, kills=15, shots=25, play_time=40.0)
+        stats = sm.get_stats()
+        self.assertEqual(stats["games_played"], 2)
+        self.assertEqual(stats["total_kills"], 25)
+        self.assertEqual(stats["total_shots"], 45)
+        self.assertEqual(stats["total_score"], 300)
+        self._cleanup(path)
+
+    def test_game_has_stats_manager_field(self):
+        """Game has a stats_manager field."""
+        game = Game(test_mode=True)
+        self.assertIsNone(game.stats_manager)  # None in test mode by default
+
+    def test_game_records_stats_on_death(self):
+        """Game records stats to stats_manager on game over."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        sm, path = self._make_stats()
+        game.stats_manager = sm
+        game.score = 500
+        game.level = 3
+        game.total_kills = 20
+        game.total_shots = 50
+        game.player.lives = 1
+        game.handle_player_damage()  # Should trigger game over
+        self.assertEqual(sm.get_stats()["games_played"], 1)
+        self.assertEqual(sm.get_stats()["best_score"], 500)
+        self._cleanup(path)
 
 
 if __name__ == "__main__":

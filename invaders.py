@@ -1038,6 +1038,74 @@ class ScoreManager:
 
 
 # ============================================================================
+# STATISTICS MANAGER
+# ============================================================================
+
+DEFAULT_STATS_PATH = os.path.expanduser("~/.invaders_stats.json")
+
+
+class StatsManager:
+    """Tracks and persists lifetime game statistics."""
+
+    def __init__(self, stats_path: str = DEFAULT_STATS_PATH):
+        self.stats_path = stats_path
+        self.stats: Dict = self._default_stats()
+        self._load()
+
+    @staticmethod
+    def _default_stats() -> Dict:
+        return {
+            "games_played": 0,
+            "total_kills": 0,
+            "total_shots": 0,
+            "total_score": 0,
+            "best_score": 0,
+            "highest_level": 0,
+            "total_play_time": 0.0,
+        }
+
+    def _load(self) -> None:
+        try:
+            with open(self.stats_path, "r") as f:
+                loaded = json.load(f)
+                # Merge with defaults to handle new fields
+                for key in self._default_stats():
+                    if key not in loaded:
+                        loaded[key] = self._default_stats()[key]
+                self.stats = loaded
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.stats = self._default_stats()
+
+    def _save(self) -> None:
+        try:
+            with open(self.stats_path, "w") as f:
+                json.dump(self.stats, f, indent=2)
+        except OSError:
+            logger.warning("Failed to save stats to %s", self.stats_path, exc_info=True)
+
+    def record_game(self, score: int, level: int, kills: int, shots: int, play_time: float) -> None:
+        """Record stats from a completed game."""
+        self.stats["games_played"] += 1
+        self.stats["total_kills"] += kills
+        self.stats["total_shots"] += shots
+        self.stats["total_score"] += score
+        self.stats["best_score"] = max(self.stats["best_score"], score)
+        self.stats["highest_level"] = max(self.stats["highest_level"], level)
+        self.stats["total_play_time"] += play_time
+        self._save()
+
+    def get_stats(self) -> Dict:
+        """Return a copy of current stats."""
+        stats = dict(self.stats)
+        stats["accuracy"] = (
+            round(stats["total_kills"] / stats["total_shots"] * 100, 1)
+            if stats["total_shots"] > 0
+            else 0.0
+        )
+        return stats
+
+
+# ============================================================================
 # AUDIO SYSTEM
 # ============================================================================
 
@@ -1405,6 +1473,8 @@ class Game:
         self.sound_enabled: bool = True
         self.music_enabled: bool = True
         self.score_manager = ScoreManager() if not test_mode else None
+        self.stats_manager: Optional[StatsManager] = None  # Created in test or real mode
+        self.game_start_time: float = time.time()
         self.score = 0
         self.level = 1
         self.initial_alien_count: int = 0  # Set by _init_aliens()
@@ -1670,6 +1740,14 @@ class Game:
         if self.player.lives <= 0:
             self.state = GameState.GAME_OVER
             self.game_over_time = time.time()
+            # Record lifetime stats
+            if self.stats_manager:
+                play_time = time.time() - self.game_start_time
+                self.stats_manager.record_game(
+                    score=self.score, level=self.level,
+                    kills=self.total_kills, shots=self.total_shots,
+                    play_time=play_time,
+                )
             self.event_bus.publish(GameEvent.GAME_OVER)
         else:
             # Red flash effect for damage
@@ -1701,6 +1779,13 @@ class Game:
             if alien.y >= player_y:
                 self.state = GameState.GAME_OVER
                 self.game_over_time = time.time()
+                if self.stats_manager:
+                    play_time = time.time() - self.game_start_time
+                    self.stats_manager.record_game(
+                        score=self.score, level=self.level,
+                        kills=self.total_kills, shots=self.total_shots,
+                        play_time=play_time,
+                    )
                 return
 
     def reset_game(self) -> None:
@@ -1713,6 +1798,7 @@ class Game:
         self.total_shots = 0
         self.total_kills = 0
         self.game_over_time = 0
+        self.game_start_time = time.time()
         self.milestones_reached.clear()
 
         # Reset player
