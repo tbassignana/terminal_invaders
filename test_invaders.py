@@ -65,6 +65,7 @@ from invaders import (
     PowerUpType,
     Projectile,
     ScoreManager,
+    ScorePopup,
     SoundEffects,
     build_argument_parser,
     config_from_args,
@@ -2939,6 +2940,60 @@ class TestAnimatedTitleScreen(unittest.TestCase):
         self.assertIn("SPACE", sub_text)
         _, _, ctrl_text = layout["controls"]
         self.assertIn("Fire", ctrl_text)
+
+
+class TestScorePopup(unittest.TestCase):
+    """Tests for score popup text on alien kill (Step 36)."""
+
+    def test_popup_created_on_alien_kill(self):
+        """Verify a ScorePopup is spawned when an alien is killed."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=5, alien_type=0)]
+        game.player_projectiles = [Projectile(x=10, y=5, direction=-1)]
+        game._check_collisions()
+        self.assertEqual(len(game.score_popups), 1)
+        self.assertIn("+", game.score_popups[0].text)
+
+    def test_popup_shows_correct_points(self):
+        """Verify popup text shows the correct point value (type 0 = 30pts)."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=5, alien_type=0)]
+        game.player_projectiles = [Projectile(x=10, y=5, direction=-1)]
+        game._check_collisions()
+        self.assertEqual(game.score_popups[0].text, "+30")
+
+    def test_popup_shows_combo_multiplier(self):
+        """Verify popup includes combo text when multiplier > 1."""
+        game = Game(test_mode=True)
+        # Set up combo state: count >= 2 triggers multiplier
+        game.combo_count = 2
+        game.combo_last_kill_time = time.time()
+        game.aliens = [Alien(x=10, y=5, alien_type=0)]
+        game.player_projectiles = [Projectile(x=10, y=5, direction=-1)]
+        game._check_collisions()
+        popup_text = game.score_popups[0].text
+        self.assertIn("x", popup_text, "Should show combo multiplier")
+
+    def test_popup_floats_upward(self):
+        """Verify ScorePopup moves upward on update."""
+        popup = ScorePopup(x=10.0, y=10.0, text="+30")
+        initial_y = popup.y
+        popup.update(0.1)
+        self.assertLess(popup.y, initial_y, "Popup should move upward")
+
+    def test_popup_expires_after_lifetime(self):
+        """Verify ScorePopup finishes after its lifetime elapses."""
+        popup = ScorePopup(x=10.0, y=10.0, text="+30", lifetime=1.0)
+        self.assertFalse(popup.finished)
+        popup.update(1.0)
+        self.assertTrue(popup.finished)
+
+    def test_popups_cleared_on_reset(self):
+        """Verify reset_game clears score_popups list."""
+        game = Game(test_mode=True)
+        game.score_popups.append(ScorePopup(x=5.0, y=5.0, text="+10"))
+        game.reset_game()
+        self.assertEqual(len(game.score_popups), 0)
 
 
 if __name__ == "__main__":

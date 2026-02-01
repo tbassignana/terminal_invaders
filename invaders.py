@@ -403,6 +403,28 @@ class DyingAlien:
 
 
 @dataclass
+class ScorePopup:
+    """Floating score text that drifts upward on alien kill."""
+
+    x: float
+    y: float
+    text: str  # e.g. "+30" or "+60 x2!"
+    age: float = 0.0
+    lifetime: float = 1.0
+    dy: float = -2.0  # Upward velocity (negative = up)
+
+    @property
+    def finished(self) -> bool:
+        """Return True when popup has expired."""
+        return self.age >= self.lifetime
+
+    def update(self, dt: float) -> None:
+        """Age and move the popup."""
+        self.age += dt
+        self.y += self.dy * dt
+
+
+@dataclass
 class Bunker:
     """Defensive bunker that erodes on hits."""
 
@@ -1004,6 +1026,7 @@ class Game:
         self.alien_projectiles: List[Projectile] = []
         self.bunkers: List[Bunker] = []
         self.dying_aliens: List[DyingAlien] = []
+        self.score_popups: List[ScorePopup] = []
 
         # Animation state
         self.alien_animation_frame = 0
@@ -1233,8 +1256,9 @@ class Game:
         self.power_ups.clear()
         self.active_power_ups.clear()
 
-        # Clear dying aliens
+        # Clear dying aliens and score popups
         self.dying_aliens.clear()
+        self.score_popups.clear()
 
         # Reset combo
         self.combo_count = 0
@@ -1324,6 +1348,12 @@ class Game:
             da.advance()
             if da.finished:
                 self.dying_aliens.remove(da)
+
+        # Update score popups (float upward, cull expired)
+        for popup in self.score_popups[:]:
+            popup.update(dt)
+            if popup.finished:
+                self.score_popups.remove(popup)
 
         # Check invasion
         self.check_invasion()
@@ -1492,7 +1522,15 @@ class Game:
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
                     multiplier = self._register_kill(current_time)
-                    self.score += 10 * (3 - alien.alien_type) * multiplier
+                    points = 10 * (3 - alien.alien_type) * multiplier
+                    self.score += points
+                    # Score popup floats upward from kill position
+                    popup_text = f"+{points}"
+                    if multiplier > 1:
+                        popup_text += f" x{multiplier}!"
+                    self.score_popups.append(
+                        ScorePopup(x=float(alien.x), y=float(alien.y), text=popup_text)
+                    )
                     self._spawn_power_up(alien.x, alien.y)
                     # Add dying alien animation
                     self.dying_aliens.append(DyingAlien(x=alien.x, y=alien.y))
@@ -1876,6 +1914,17 @@ class Game:
             if p.age > p.lifetime * 0.5:
                 attr |= curses.A_DIM
             self._safe_addstr(int(p.y), int(p.x), p.char, attr)
+
+        # Render score popups (float upward with fade effect)
+        for popup in self.score_popups:
+            attr = curses.color_pair(COLOR_TEXT) | curses.A_BOLD
+            # Fade: bold in first third, normal in middle, dim in last third
+            progress = popup.age / popup.lifetime if popup.lifetime > 0 else 1.0
+            if progress > 0.66:
+                attr = curses.color_pair(COLOR_TEXT) | curses.A_DIM
+            elif progress > 0.33:
+                attr = curses.color_pair(COLOR_TEXT)
+            self._safe_addstr(int(popup.y), int(popup.x), popup.text, attr)
 
         # FPS counter (when enabled via F1 or --show-fps)
         if self.show_fps:
