@@ -39,6 +39,8 @@ from invaders import (
     COLOR_BUNKER,
     COLOR_BUNKER_CRITICAL,
     COLOR_BUNKER_DAMAGED,
+    COLOR_GAME_OVER,
+    COLOR_PLAYER,
     COLOR_TEXT,
     DEATH_ANIM_CHARS,
     DEFAULT_CONFIG,
@@ -3179,6 +3181,48 @@ class TestPowerUpVisualIndicators(unittest.TestCase):
         game.test_mode = True
         count = len(game.particle_system.particles)
         self.assertGreaterEqual(count, 1, "Should spawn debris particles on bunker hit")
+
+
+class TestScreenFlashOnLevelComplete(unittest.TestCase):
+    """Tests for screen flash effect on level complete (Step 39)."""
+
+    def test_green_flash_on_level_complete(self):
+        """Verify _next_level() triggers a green flash."""
+        game = Game(test_mode=True)
+        game._next_level()
+        self.assertTrue(game.flash_active)
+        self.assertEqual(game.flash_color, COLOR_PLAYER, "Level complete should use green flash")
+
+    def test_flash_duration_is_015s(self):
+        """Verify level complete flash lasts ~0.15 seconds."""
+        game = Game(test_mode=True)
+        before = time.time()
+        game._next_level()
+        expected_end = before + 0.15
+        # Flash end time should be approximately 0.15s from now
+        self.assertAlmostEqual(game.flash_end_time, expected_end, delta=0.05)
+
+    def test_damage_flash_is_red(self):
+        """Verify player damage sets red flash color."""
+        game = Game(test_mode=True)
+        game.player.lives = 3
+        game.handle_player_damage()
+        self.assertTrue(game.flash_active)
+        self.assertEqual(game.flash_color, COLOR_GAME_OVER, "Damage should use red flash")
+
+    def test_flash_color_defaults_to_red(self):
+        """Verify initial flash_color is red (game over color)."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.flash_color, COLOR_GAME_OVER)
+
+    def test_flash_deactivates_after_time(self):
+        """Verify flash is deactivated in update() after end time passes."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.flash_active = True
+        game.flash_end_time = time.time() - 1  # Already expired
+        game.update()
+        self.assertFalse(game.flash_active)
 
 
 if __name__ == "__main__":

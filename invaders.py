@@ -1079,6 +1079,7 @@ class Game:
         # Flash effect state
         self.flash_active = False
         self.flash_end_time = 0
+        self.flash_color = COLOR_GAME_OVER  # Red for death, green for level complete
 
         # Mystery ship (UFO)
         self.mystery_ship: Optional[MysteryShip] = None
@@ -1224,8 +1225,9 @@ class Game:
             self.state = GameState.GAME_OVER
             self.event_bus.publish(GameEvent.GAME_OVER)
         else:
-            # Flash effect
+            # Red flash effect for damage
             self.flash_active = True
+            self.flash_color = COLOR_GAME_OVER  # Red
             self.flash_end_time = time.time() + 0.2
 
             # Screen shake (not in test_mode)
@@ -1674,6 +1676,12 @@ class Game:
 
         self.level += 1
         self.state = GameState.LEVEL_TRANSITION
+
+        # Green flash for level complete (0.15s)
+        self.flash_active = True
+        self.flash_color = COLOR_PLAYER  # Green
+        self.flash_end_time = time.time() + 0.15
+
         self._init_aliens()
         self._init_bunkers()
 
@@ -1808,9 +1816,9 @@ class Game:
             self.screen.refresh()
             return
 
-        # Handle flash effect
+        # Handle flash effect (red for damage, green for level complete)
         if self.flash_active:
-            self.screen.bkgd(" ", curses.color_pair(COLOR_GAME_OVER))
+            self.screen.bkgd(" ", curses.color_pair(self.flash_color))
         else:
             self.screen.bkgd(" ")
 
