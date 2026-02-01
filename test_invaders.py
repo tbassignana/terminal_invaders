@@ -653,6 +653,73 @@ class TestMysteryShip(unittest.TestCase):
         self.assertEqual(game.mystery_score_display[2], 150)
 
 
+class TestGameUpdateIntegration(unittest.TestCase):
+    """Step 15: Integration tests for the game update loop."""
+
+    def test_full_sequence_fire_kill_score(self):
+        """Test fire → kill alien → score updates."""
+        game = Game(test_mode=True)
+        # Place a single alien right where the projectile will be
+        alien = Alien(x=game.player.x + 1, y=game.player.y - 2, alien_type=0)
+        game.aliens = [alien]
+        game.player_projectiles.append(
+            Projectile(x=game.player.x + 1, y=float(game.player.y - 1), direction=-1)
+        )
+        # Run updates until collision (projectile speed=1.0, distance=1)
+        for _ in range(5):
+            game._update_projectiles()
+            game._check_collisions()
+        self.assertEqual(len(game.aliens), 0)
+        self.assertGreater(game.score, 0)
+
+    def test_level_transition_on_all_aliens_killed(self):
+        """Test kill all aliens → level increments and aliens respawn."""
+        game = Game(test_mode=True)
+        game.aliens = []
+        game.update()
+        self.assertEqual(game.state, GameState.LEVEL_TRANSITION)
+        self.assertEqual(game.level, 2)
+        self.assertGreater(len(game.aliens), 0)
+
+    def test_game_over_on_lives_depleted(self):
+        """Test deplete lives → game over state."""
+        game = Game(test_mode=True)
+        game.player.lives = 1
+        game.handle_player_damage()
+        self.assertEqual(game.state, GameState.GAME_OVER)
+
+    def test_reset_after_game_over(self):
+        """Test reset restores clean state."""
+        game = Game(test_mode=True)
+        game.score = 1000
+        game.player.lives = 0
+        game.state = GameState.GAME_OVER
+        game.reset_game()
+        self.assertEqual(game.score, 0)
+        self.assertEqual(game.player.lives, game.config.player_start_lives)
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_multiple_updates_projectile_movement(self):
+        """Test multiple updates move projectiles correctly."""
+        game = Game(test_mode=True)
+        game.aliens = []  # No aliens to interfere
+        proj = Projectile(x=40, y=15.0, direction=-1)
+        game.player_projectiles.append(proj)
+        initial_y = proj.y
+        for _ in range(5):
+            game._update_projectiles()
+        self.assertLess(proj.y, initial_y)
+
+    def test_alien_fire_produces_projectiles(self):
+        """Test alien firing over many frames produces projectiles."""
+        game = Game(test_mode=True)
+        import random as rng
+        rng.seed(1)
+        for _ in range(200):
+            game._alien_fire()
+        self.assertGreater(len(game.alien_projectiles), 0)
+
+
 class TestCollisionEdgeCases(unittest.TestCase):
     """Step 14: Edge case tests for collision detection."""
 
