@@ -1164,6 +1164,8 @@ class Game:
         self.menu_selection: int = 0  # Index into MENU_ITEMS
         self.options_selection: int = 0  # Index into options items
         self.credits_scroll_offset: float = 0.0  # Scrolls upward over time
+        self.menu_cursor_frame: int = 0  # For bobbing animation
+        self.menu_flash_until: float = 0  # Flash on select timestamp
         self.sound_enabled: bool = True
         self.music_enabled: bool = True
         self.score_manager = ScoreManager() if not test_mode else None
@@ -1480,6 +1482,7 @@ class Game:
         # Title screen color cycling runs in MENU state
         if self.state == GameState.MENU:
             self.title_color_frame += 1
+            self.menu_cursor_frame += 1
             # Scroll credits when on credits screen
             if self.menu_screen == MenuScreen.CREDITS:
                 self.credits_scroll_offset += 0.05
@@ -2038,6 +2041,7 @@ class Game:
                 elif key == curses.KEY_DOWN or key == ord("s"):
                     self.menu_selection = (self.menu_selection + 1) % len(MENU_ITEMS)
                 elif key == ord(" ") or key == ord("\n"):
+                    self.menu_flash_until = time.time() + 0.15
                     label, target = MENU_ITEMS[self.menu_selection]
                     if label == "Play":
                         self.state = GameState.PLAYING
@@ -2219,6 +2223,24 @@ class Game:
             "selection": self.menu_selection,
         }
 
+    def get_menu_cursor_info(self) -> dict:
+        """Return menu cursor animation state (testable without curses).
+
+        Returns dict with:
+            bob_offset: 0 or 1 for cursor bobbing effect
+            flash_active: True if selection flash is active
+            cursor_char: the cursor character ("> " or ">>")
+        """
+        # Bob every 15 frames (quarter-second at 60fps)
+        bob = 1 if (self.menu_cursor_frame // 15) % 2 == 0 else 0
+        flash = time.time() < self.menu_flash_until
+        cursor = ">>" if flash else "> " if bob else " >"
+        return {
+            "bob_offset": bob,
+            "flash_active": flash,
+            "cursor_char": cursor,
+        }
+
     def get_options_display(self) -> dict:
         """Return options screen display data (testable without curses).
 
@@ -2326,14 +2348,23 @@ class Game:
             self._safe_addstr(row, col, text, curses.color_pair(color_pair) | curses.A_BOLD)
 
         if self.menu_screen == MenuScreen.MAIN:
-            # Render menu items below title art
+            # Render menu items below title art with animated cursor
             menu_info = self.get_menu_info()
+            cursor_info = self.get_menu_cursor_info()
             sub_r, _, _ = layout["subtitle"]
             for i, (label, selected) in enumerate(menu_info["items"]):
-                prefix = "> " if selected else "  "
+                if selected:
+                    prefix = cursor_info["cursor_char"]
+                else:
+                    prefix = "  "
                 text = f"{prefix}{label}"
                 col = (self.width - len(text)) // 2
-                attr = curses.color_pair(COLOR_TEXT) | curses.A_BOLD if selected else curses.color_pair(COLOR_TEXT)
+                if selected and cursor_info["flash_active"]:
+                    attr = curses.color_pair(COLOR_TEXT) | curses.A_BOLD | curses.A_REVERSE
+                elif selected:
+                    attr = curses.color_pair(COLOR_TEXT) | curses.A_BOLD
+                else:
+                    attr = curses.color_pair(COLOR_TEXT)
                 self._safe_addstr(sub_r + i, col, text, attr)
 
             # Controls hint at bottom

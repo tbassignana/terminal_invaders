@@ -4547,6 +4547,107 @@ class TestCreditsScreen(unittest.TestCase):
         mock_screen.clear.assert_called()
 
 
+class TestMenuCursorAnimation(unittest.TestCase):
+    """Step 56: Menu cursor animation and selection effects."""
+
+    def test_cursor_info_returns_expected_keys(self):
+        """get_menu_cursor_info returns bob_offset, flash_active, cursor_char."""
+        game = Game(test_mode=True)
+        info = game.get_menu_cursor_info()
+        self.assertIn("bob_offset", info)
+        self.assertIn("flash_active", info)
+        self.assertIn("cursor_char", info)
+
+    def test_cursor_bob_alternates_with_frames(self):
+        """Bob offset alternates every 15 frames."""
+        game = Game(test_mode=True)
+        game.menu_cursor_frame = 0
+        info0 = game.get_menu_cursor_info()
+        game.menu_cursor_frame = 15
+        info15 = game.get_menu_cursor_info()
+        # They should differ since frames 0-14 vs 15-29 are different phases
+        self.assertNotEqual(info0["bob_offset"], info15["bob_offset"])
+
+    def test_cursor_char_changes_with_bob(self):
+        """Cursor char varies with bob phase."""
+        game = Game(test_mode=True)
+        chars = set()
+        for frame in range(30):
+            game.menu_cursor_frame = frame
+            info = game.get_menu_cursor_info()
+            chars.add(info["cursor_char"])
+        # Should have at least 2 different cursor chars across bob phases
+        self.assertGreaterEqual(len(chars), 2)
+
+    def test_flash_active_after_selection(self):
+        """Flash activates when menu_flash_until is set in the future."""
+        game = Game(test_mode=True)
+        game.menu_flash_until = time.time() + 1.0
+        info = game.get_menu_cursor_info()
+        self.assertTrue(info["flash_active"])
+        self.assertEqual(info["cursor_char"], ">>")
+
+    def test_flash_inactive_by_default(self):
+        """Flash is not active by default (menu_flash_until=0 is in the past)."""
+        game = Game(test_mode=True)
+        info = game.get_menu_cursor_info()
+        self.assertFalse(info["flash_active"])
+
+    def test_selection_triggers_flash(self):
+        """Pressing enter on a menu item sets menu_flash_until."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        # Select "High Scores" (should be index 1)
+        hs_idx = next(i for i, (label, _) in enumerate(MENU_ITEMS) if label == "High Scores")
+        game.menu_selection = hs_idx
+        old_flash = game.menu_flash_until
+        game.handle_input(ord("\n"))
+        self.assertGreater(game.menu_flash_until, old_flash)
+
+    def test_cursor_frame_increments_on_update(self):
+        """menu_cursor_frame increments during MENU state update."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        old_frame = game.menu_cursor_frame
+        game.update()
+        self.assertEqual(game.menu_cursor_frame, old_frame + 1)
+
+    def test_render_menu_uses_cursor_animation(self):
+        """_render_menu uses animated cursor for selected item."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        mock_screen = unittest.mock.MagicMock()
+        mock_screen.getmaxyx.return_value = (30, 80)
+        game.screen = mock_screen
+        with unittest.mock.patch("curses.color_pair", return_value=0):
+            game.render()
+        # Verify render was called (addstr invoked)
+        mock_screen.clear.assert_called()
+
+    def test_render_menu_flash_uses_reverse_attr(self):
+        """During flash, selected item uses REVERSE attribute."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        game.menu_flash_until = time.time() + 1.0  # Flash active
+        mock_screen = unittest.mock.MagicMock()
+        mock_screen.getmaxyx.return_value = (30, 80)
+        game.screen = mock_screen
+        with unittest.mock.patch("curses.color_pair", return_value=0):
+            game.render()
+        # Check that at least one addstr call used A_REVERSE
+        calls = mock_screen.addstr.call_args_list
+        has_reverse = any(
+            len(c.args) >= 4 and (c.args[3] & curses.A_REVERSE)
+            for c in calls
+        )
+        self.assertTrue(has_reverse, "Expected A_REVERSE attribute during flash")
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

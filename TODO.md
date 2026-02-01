@@ -95,7 +95,7 @@
 - [x] **Step 53:** Add options/settings menu screen (sound, music, difficulty, FPS toggles)
 - [x] **Step 54:** Add controls help screen (keybindings table, alien point values)
 - [x] **Step 55:** Add credits screen (scrolling text animation with version and repo link)
-- [ ] **Step 56:** Add menu cursor animation and selection effects (bobbing `>`, flash on select)
+- [x] **Step 56:** Add menu cursor animation and selection effects (bobbing `>`, flash on select)
 
 ### Gameplay Enhancements
 
