@@ -17,6 +17,8 @@ import sys
 # Import the game module (will be created next)
 from invaders import (
     GameState,
+    GameConfig,
+    DEFAULT_CONFIG,
     Player,
     Alien,
     Game,
@@ -246,6 +248,76 @@ class TestAlienMechanics(unittest.TestCase):
                           "Fire probability should increase with fewer aliens")
         self.assertGreater(few_prob, half_prob,
                           "Fire probability should be highest with few aliens")
+
+
+class TestGameConfig(unittest.TestCase):
+    """Step 1: Tests for the GameConfig dataclass and config-driven Game."""
+
+    def test_default_config_values(self):
+        """Verify default config matches the expected game constants."""
+        cfg = GameConfig()
+        self.assertEqual(cfg.player_start_lives, 5)
+        self.assertEqual(cfg.max_lives, 9)
+        self.assertEqual(cfg.target_fps, 60)
+        self.assertEqual(cfg.alien_rows, 5)
+        self.assertEqual(cfg.alien_cols, 11)
+        self.assertEqual(cfg.alien_move_interval, 0.5)
+        self.assertAlmostEqual(cfg.base_fire_probability, 0.00133)
+        self.assertAlmostEqual(cfg.max_fire_probability, 0.0133)
+        self.assertAlmostEqual(cfg.frame_time, 1.0 / 60)
+
+    def test_custom_config_overrides(self):
+        """Verify custom config values override defaults."""
+        cfg = GameConfig(player_start_lives=3, alien_rows=8, target_fps=30)
+        self.assertEqual(cfg.player_start_lives, 3)
+        self.assertEqual(cfg.alien_rows, 8)
+        self.assertEqual(cfg.target_fps, 30)
+        self.assertAlmostEqual(cfg.frame_time, 1.0 / 30)
+        # Unspecified fields keep defaults
+        self.assertEqual(cfg.max_lives, 9)
+        self.assertEqual(cfg.alien_cols, 11)
+
+    def test_config_is_frozen(self):
+        """Verify GameConfig is immutable (frozen dataclass)."""
+        cfg = GameConfig()
+        with self.assertRaises(AttributeError):
+            cfg.player_start_lives = 10
+
+    def test_game_uses_config(self):
+        """Verify Game instance uses the provided config."""
+        cfg = GameConfig(player_start_lives=3, alien_rows=2, alien_cols=3)
+        game = Game(test_mode=True, config=cfg)
+        self.assertEqual(game.player.lives, 3)
+        # 2 rows * 3 cols = 6 aliens
+        self.assertEqual(len(game.aliens), 6)
+
+    def test_game_default_config(self):
+        """Verify Game uses DEFAULT_CONFIG when no config is provided."""
+        game = Game(test_mode=True)
+        self.assertIs(game.config, DEFAULT_CONFIG)
+        self.assertEqual(game.player.lives, DEFAULT_CONFIG.player_start_lives)
+
+    def test_no_global_mutation_in_next_level(self):
+        """Verify _next_level does not mutate the global ALIEN_MOVE_INTERVAL."""
+        import invaders
+        original_global = invaders.ALIEN_MOVE_INTERVAL
+
+        game = Game(test_mode=True)
+        game.aliens = []  # Trigger level completion
+        game._next_level()
+
+        # Global should not have changed
+        self.assertEqual(invaders.ALIEN_MOVE_INTERVAL, original_global)
+        # But instance value should have decreased
+        self.assertLess(game.alien_move_interval, game.config.alien_move_interval)
+
+    def test_alien_move_interval_resets_on_game_reset(self):
+        """Verify alien_move_interval resets to config value on game reset."""
+        game = Game(test_mode=True)
+        # Simulate a few level ups
+        game.alien_move_interval = 0.2
+        game.reset_game()
+        self.assertEqual(game.alien_move_interval, game.config.alien_move_interval)
 
 
 if __name__ == '__main__':

@@ -58,47 +58,83 @@ signal.signal(signal.SIGINT, _signal_handler)
 signal.signal(signal.SIGTERM, _signal_handler)
 
 # ============================================================================
-# CONSTANTS
+# CONFIGURATION
 # ============================================================================
 
-PLAYER_START_LIVES = 5
-MAX_LIVES = 9  # Cap on maximum lives
-TARGET_FPS = 60
-FRAME_TIME = 1.0 / TARGET_FPS
+@dataclass(frozen=True)
+class GameConfig:
+    """Frozen configuration dataclass holding all game constants."""
+    # Player
+    player_start_lives: int = 5
+    max_lives: int = 9
 
-# Screen dimensions (will be adjusted based on terminal size)
-MIN_WIDTH = 60
-MIN_HEIGHT = 24
+    # Timing
+    target_fps: int = 60
+    input_timeout_ms: int = 8
 
-# Alien grid configuration
-ALIEN_ROWS = 5
-ALIEN_COLS = 11
-ALIEN_SPACING_X = 4
-ALIEN_SPACING_Y = 2
-ALIEN_START_Y = 3
+    # Screen dimensions (minimums; actual size comes from terminal)
+    min_width: int = 60
+    min_height: int = 24
 
-# Movement speeds
-PLAYER_SPEED = 1
-ALIEN_MOVE_INTERVAL = 0.5  # seconds between alien movements
-PLAYER_PROJECTILE_SPEED = 1.0   # Player laser speed
-ALIEN_PROJECTILE_SPEED = 0.4    # Alien laser speed (slower = easier to dodge)
+    # Alien grid
+    alien_rows: int = 5
+    alien_cols: int = 11
+    alien_spacing_x: int = 4
+    alien_spacing_y: int = 2
+    alien_start_y: int = 3
 
-# Input responsiveness (lower = faster lateral movement via quicker key repeat)
-INPUT_TIMEOUT_MS = 8  # milliseconds to wait for input (default was ~16ms at 60fps)
+    # Movement speeds
+    player_speed: int = 1
+    alien_move_interval: float = 0.5
+    player_projectile_speed: float = 1.0
+    alien_projectile_speed: float = 0.4
 
-# Firing configuration (reduced by 1/3 from original)
-BASE_FIRE_PROBABILITY = 0.00133  # Base probability per alien per frame (was 0.002)
-MAX_FIRE_PROBABILITY = 0.0133    # Maximum probability in frenzy mode (was 0.02)
+    # Firing
+    base_fire_probability: float = 0.00133
+    max_fire_probability: float = 0.0133
 
-# Visual characters
-PLAYER_CHAR = "^A^"
+    # Visual characters
+    player_char: str = "^A^"
+    projectile_player: str = "|"
+    projectile_alien: str = "!"
+
+    @property
+    def frame_time(self) -> float:
+        return 1.0 / self.target_fps
+
+
+# Default config instance used for module-level backward-compatible constants
+DEFAULT_CONFIG = GameConfig()
+
+# Legacy module-level constants (kept for backward compatibility)
+PLAYER_START_LIVES = DEFAULT_CONFIG.player_start_lives
+MAX_LIVES = DEFAULT_CONFIG.max_lives
+TARGET_FPS = DEFAULT_CONFIG.target_fps
+FRAME_TIME = DEFAULT_CONFIG.frame_time
+MIN_WIDTH = DEFAULT_CONFIG.min_width
+MIN_HEIGHT = DEFAULT_CONFIG.min_height
+ALIEN_ROWS = DEFAULT_CONFIG.alien_rows
+ALIEN_COLS = DEFAULT_CONFIG.alien_cols
+ALIEN_SPACING_X = DEFAULT_CONFIG.alien_spacing_x
+ALIEN_SPACING_Y = DEFAULT_CONFIG.alien_spacing_y
+ALIEN_START_Y = DEFAULT_CONFIG.alien_start_y
+PLAYER_SPEED = DEFAULT_CONFIG.player_speed
+ALIEN_MOVE_INTERVAL = DEFAULT_CONFIG.alien_move_interval
+PLAYER_PROJECTILE_SPEED = DEFAULT_CONFIG.player_projectile_speed
+ALIEN_PROJECTILE_SPEED = DEFAULT_CONFIG.alien_projectile_speed
+INPUT_TIMEOUT_MS = DEFAULT_CONFIG.input_timeout_ms
+BASE_FIRE_PROBABILITY = DEFAULT_CONFIG.base_fire_probability
+MAX_FIRE_PROBABILITY = DEFAULT_CONFIG.max_fire_probability
+PLAYER_CHAR = DEFAULT_CONFIG.player_char
+PROJECTILE_PLAYER = DEFAULT_CONFIG.projectile_player
+PROJECTILE_ALIEN = DEFAULT_CONFIG.projectile_alien
+
+# Characters not in config (lists/tuples can't be in frozen dataclass easily)
 ALIEN_CHARS = [
     ["/-\\", "\\-/"],  # Type 1 animation frames
     ["<O>", "<o>"],    # Type 2 animation frames
     ["/M\\", "\\W/"],  # Type 3 animation frames
 ]
-PROJECTILE_PLAYER = "|"
-PROJECTILE_ALIEN = "!"
 BUNKER_CHARS = ['O', 'o', '.']  # Erosion states: full, damaged, nearly destroyed
 
 # Color pairs
@@ -393,24 +429,29 @@ class Game:
     - Input handling
     """
 
-    def __init__(self, test_mode: bool = False):
+    def __init__(self, test_mode: bool = False, config: Optional[GameConfig] = None):
         """
         Initialize game.
 
         Args:
             test_mode: If True, skip curses initialization for unit testing.
+            config: Game configuration. Uses DEFAULT_CONFIG if not provided.
         """
+        self.config = config or DEFAULT_CONFIG
         self.test_mode = test_mode
         self.state = GameState.PLAYING if test_mode else GameState.MENU
         self.score = 0
         self.level = 1
+
+        # Mutable speed state (changes per level, not stored in frozen config)
+        self.alien_move_interval = self.config.alien_move_interval
 
         # Screen dimensions (defaults for test mode)
         self.width = 80
         self.height = 24
 
         # Initialize player at center-bottom
-        self.player = Player()
+        self.player = Player(lives=self.config.player_start_lives)
         self._init_player_position()
 
         # Game entities
@@ -458,13 +499,14 @@ class Game:
     def _init_aliens(self) -> None:
         """Create the initial alien grid."""
         self.aliens = []
-        start_x = (self.width - (ALIEN_COLS * ALIEN_SPACING_X)) // 2
+        cfg = self.config
+        start_x = (self.width - (cfg.alien_cols * cfg.alien_spacing_x)) // 2
 
-        for row in range(ALIEN_ROWS):
+        for row in range(cfg.alien_rows):
             alien_type = row // 2  # Different types per rows
-            for col in range(ALIEN_COLS):
-                x = start_x + col * ALIEN_SPACING_X
-                y = ALIEN_START_Y + row * ALIEN_SPACING_Y
+            for col in range(cfg.alien_cols):
+                x = start_x + col * cfg.alien_spacing_x
+                y = cfg.alien_start_y + row * cfg.alien_spacing_y
                 self.aliens.append(Alien(x=x, y=y, alien_type=alien_type % 3))
 
     def _init_bunkers(self) -> None:
@@ -491,17 +533,18 @@ class Game:
         if not self.aliens:
             return 0
 
+        cfg = self.config
         # Calculate ratio of destroyed aliens
-        total_aliens = ALIEN_ROWS * ALIEN_COLS
+        total_aliens = cfg.alien_rows * cfg.alien_cols
         remaining = len(self.aliens)
         destroyed_ratio = 1 - (remaining / total_aliens)
 
         # Linear interpolation between base and max probability
-        probability = BASE_FIRE_PROBABILITY + (
-            destroyed_ratio * (MAX_FIRE_PROBABILITY - BASE_FIRE_PROBABILITY)
+        probability = cfg.base_fire_probability + (
+            destroyed_ratio * (cfg.max_fire_probability - cfg.base_fire_probability)
         )
 
-        return min(probability, MAX_FIRE_PROBABILITY)
+        return min(probability, cfg.max_fire_probability)
 
     def handle_player_damage(self) -> None:
         """
@@ -552,7 +595,7 @@ class Game:
         self.score = 0
 
         # Reset player
-        self.player.lives = PLAYER_START_LIVES
+        self.player.lives = self.config.player_start_lives
         self.player.x = self._initial_player_x
 
         # Clear all projectiles
@@ -568,6 +611,7 @@ class Game:
 
         # Reset alien movement
         self.alien_direction = 1
+        self.alien_move_interval = self.config.alien_move_interval
         self.last_alien_move_time = time.time()
 
         # Set state to playing
@@ -590,7 +634,7 @@ class Game:
             self.last_animation_time = current_time
 
         # Move aliens
-        if current_time - self.last_alien_move_time >= ALIEN_MOVE_INTERVAL:
+        if current_time - self.last_alien_move_time >= self.alien_move_interval:
             self._move_aliens()
             self.last_alien_move_time = current_time
 
@@ -608,7 +652,7 @@ class Game:
 
         # Update marching beat (speeds up as aliens die - iconic Space Invaders sound)
         if self.sfx and self.aliens:
-            total_aliens = ALIEN_ROWS * ALIEN_COLS
+            total_aliens = self.config.alien_rows * self.config.alien_cols
             self.sfx.update_march(len(self.aliens), total_aliens)
 
         # Check level complete
@@ -641,13 +685,13 @@ class Game:
         """Update all projectile positions."""
         # Player projectiles move up (faster)
         for proj in self.player_projectiles[:]:
-            proj['y'] -= PLAYER_PROJECTILE_SPEED
+            proj['y'] -= self.config.player_projectile_speed
             if proj['y'] < 0:
                 self.player_projectiles.remove(proj)
 
         # Alien projectiles move down (slower for easier dodging)
         for proj in self.alien_projectiles[:]:
-            proj['y'] += ALIEN_PROJECTILE_SPEED
+            proj['y'] += self.config.alien_projectile_speed
             if proj['y'] >= self.height:
                 self.alien_projectiles.remove(proj)
 
@@ -710,8 +754,8 @@ class Game:
         # Award lives based on level completed (level 1 = +1, level 2 = +2, etc.)
         completed_level = self.level
         self.lives_awarded = completed_level
-        lives_to_add = min(completed_level, MAX_LIVES - self.player.lives)
-        self.player.lives = min(self.player.lives + lives_to_add, MAX_LIVES)
+        lives_to_add = min(completed_level, self.config.max_lives - self.player.lives)
+        self.player.lives = min(self.player.lives + lives_to_add, self.config.max_lives)
 
         # Play sound effects
         if self.sfx:
@@ -724,9 +768,8 @@ class Game:
         self._init_aliens()
         self._init_bunkers()
 
-        # Speed up aliens slightly each level
-        global ALIEN_MOVE_INTERVAL
-        ALIEN_MOVE_INTERVAL = max(0.1, ALIEN_MOVE_INTERVAL - 0.05)
+        # Speed up aliens slightly each level (mutable instance state, not global)
+        self.alien_move_interval = max(0.1, self.alien_move_interval - 0.05)
 
     def handle_input(self, key: int) -> bool:
         """
@@ -746,9 +789,9 @@ class Game:
 
         elif self.state == GameState.PLAYING:
             if key == curses.KEY_LEFT or key == ord('a'):
-                self.player.x = max(0, self.player.x - PLAYER_SPEED)
+                self.player.x = max(0, self.player.x - self.config.player_speed)
             elif key == curses.KEY_RIGHT or key == ord('d'):
-                self.player.x = min(self.width - 3, self.player.x + PLAYER_SPEED)
+                self.player.x = min(self.width - 3, self.player.x + self.config.player_speed)
             elif key == ord(' '):
                 # Fire projectile
                 if len(self.player_projectiles) < 3:  # Limit active projectiles
@@ -832,16 +875,16 @@ class Game:
                                  curses.color_pair(COLOR_BUNKER))
 
         # Render player
-        self._safe_addstr(self.player.y, self.player.x, PLAYER_CHAR,
+        self._safe_addstr(self.player.y, self.player.x, self.config.player_char,
                          curses.color_pair(COLOR_PLAYER))
 
         # Render projectiles
         for proj in self.player_projectiles:
-            self._safe_addstr(proj['y'], proj['x'], PROJECTILE_PLAYER,
+            self._safe_addstr(proj['y'], proj['x'], self.config.projectile_player,
                              curses.color_pair(COLOR_PROJECTILE))
 
         for proj in self.alien_projectiles:
-            self._safe_addstr(proj['y'], proj['x'], PROJECTILE_ALIEN,
+            self._safe_addstr(proj['y'], proj['x'], self.config.projectile_alien,
                              curses.color_pair(COLOR_GAME_OVER))
 
     def _render_game_over(self) -> None:
@@ -862,7 +905,7 @@ class Game:
         """Render level transition screen with bonus lives info."""
         level_text = f"LEVEL {self.level}"
         bonus_text = f"+{self.lives_awarded} {'LIFE' if self.lives_awarded == 1 else 'LIVES'} BONUS!"
-        lives_text = f"Lives: {self.player.lives}/{MAX_LIVES}"
+        lives_text = f"Lives: {self.player.lives}/{self.config.max_lives}"
         continue_text = "Press SPACE to Continue"
 
         center_y = self.height // 2
@@ -898,7 +941,7 @@ class Game:
             self.screen = stdscr
             curses.curs_set(0)  # Hide cursor
             stdscr.nodelay(True)  # Non-blocking input
-            stdscr.timeout(INPUT_TIMEOUT_MS)  # Fast input polling for responsive movement
+            stdscr.timeout(self.config.input_timeout_ms)  # Fast input polling for responsive movement
 
             # Initialize colors
             curses.start_color()
@@ -914,8 +957,8 @@ class Game:
             self.height, self.width = stdscr.getmaxyx()
 
             # Check minimum size
-            if self.width < MIN_WIDTH or self.height < MIN_HEIGHT:
-                stdscr.addstr(0, 0, f"Terminal too small! Need {MIN_WIDTH}x{MIN_HEIGHT}")
+            if self.width < self.config.min_width or self.height < self.config.min_height:
+                stdscr.addstr(0, 0, f"Terminal too small! Need {self.config.min_width}x{self.config.min_height}")
                 stdscr.refresh()
                 stdscr.getch()
                 return
@@ -951,7 +994,7 @@ class Game:
 
                     # Frame rate limiting
                     elapsed = time.time() - frame_start
-                    sleep_time = FRAME_TIME - elapsed
+                    sleep_time = self.config.frame_time - elapsed
                     if sleep_time > 0:
                         time.sleep(sleep_time)
             finally:
