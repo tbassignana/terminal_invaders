@@ -10,6 +10,7 @@ This test file validates the core game mechanics:
 - Reset/restart functionality
 """
 
+import curses
 import logging
 import os
 import sys
@@ -51,6 +52,7 @@ from invaders import (
     DEATH_ANIM_CHARS,
     DEFAULT_CONFIG,
     DEFAULT_EXPLOSION_CONFIG,
+    MENU_ITEMS,
     MYSTERY_SHIP_CHAR,
     PLAYER_START_LIVES,
     POWERUP_CHARS,
@@ -69,6 +71,7 @@ from invaders import (
     GameEvent,
     GameState,
     MacOSSoundBackend,
+    MenuScreen,
     MysteryShip,
     NullSoundBackend,
     Particle,
@@ -4054,6 +4057,131 @@ class TestVictoryCelebrationAnimation(unittest.TestCase):
         game.level_transition_time = time.time() - 1.5
         info = game.get_level_transition_info()
         self.assertEqual(info["wave_clear"], "")
+
+
+class TestMainMenuStateMachine(unittest.TestCase):
+    """Tests for the main menu state machine with multiple screens (Step 51)."""
+
+    def test_initial_menu_screen_is_main(self):
+        """Game starts with menu_screen set to MAIN."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.menu_screen, MenuScreen.MAIN)
+
+    def test_initial_menu_selection_is_zero(self):
+        """Menu selection starts at index 0 (Play)."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.menu_selection, 0)
+
+    def test_menu_items_defined(self):
+        """MENU_ITEMS contains expected entries."""
+        labels = [label for label, _ in MENU_ITEMS]
+        self.assertIn("Play", labels)
+        self.assertIn("High Scores", labels)
+        self.assertIn("Options", labels)
+        self.assertIn("Controls", labels)
+        self.assertIn("Credits", labels)
+        self.assertIn("Quit", labels)
+
+    def test_menu_navigate_down(self):
+        """Down key increments menu selection."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        game.handle_input(curses.KEY_DOWN)
+        self.assertEqual(game.menu_selection, 1)
+
+    def test_menu_navigate_up_wraps(self):
+        """Up key from index 0 wraps to last item."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        game.menu_selection = 0
+        game.handle_input(curses.KEY_UP)
+        self.assertEqual(game.menu_selection, len(MENU_ITEMS) - 1)
+
+    def test_menu_select_play_starts_game(self):
+        """Selecting 'Play' transitions to PLAYING state."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        game.menu_selection = 0  # Play
+        game.handle_input(ord("\n"))
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_menu_select_quit_returns_false(self):
+        """Selecting 'Quit' returns False from handle_input."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        # Find Quit index
+        quit_idx = next(i for i, (label, _) in enumerate(MENU_ITEMS) if label == "Quit")
+        game.menu_selection = quit_idx
+        result = game.handle_input(ord("\n"))
+        self.assertFalse(result)
+
+    def test_menu_select_high_scores_opens_sub_screen(self):
+        """Selecting 'High Scores' opens the HIGH_SCORES sub-screen."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        hs_idx = next(i for i, (label, _) in enumerate(MENU_ITEMS) if label == "High Scores")
+        game.menu_selection = hs_idx
+        game.handle_input(ord("\n"))
+        self.assertEqual(game.menu_screen, MenuScreen.HIGH_SCORES)
+
+    def test_sub_screen_escape_returns_to_main(self):
+        """Pressing Escape on a sub-screen returns to MAIN menu."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.HIGH_SCORES
+        game.handle_input(27)  # Escape
+        self.assertEqual(game.menu_screen, MenuScreen.MAIN)
+
+    def test_get_menu_info_returns_items(self):
+        """get_menu_info returns menu items with selection state."""
+        game = Game(test_mode=True)
+        game.menu_selection = 2
+        info = game.get_menu_info()
+        self.assertEqual(info["screen"], MenuScreen.MAIN)
+        self.assertEqual(info["selection"], 2)
+        # Item at index 2 should be selected
+        self.assertTrue(info["items"][2][1])
+        self.assertFalse(info["items"][0][1])
+
+    def test_menu_navigate_with_w_and_s_keys(self):
+        """W/S keys also navigate menu."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        game.handle_input(ord("s"))
+        self.assertEqual(game.menu_selection, 1)
+        game.handle_input(ord("w"))
+        self.assertEqual(game.menu_selection, 0)
+
+    def test_get_sound_backend_null_fallback(self):
+        """get_sound_backend returns NullSoundBackend when no backend is available."""
+        with unittest.mock.patch.object(MacOSSoundBackend, "is_available", return_value=False):
+            backend = get_sound_backend()
+            self.assertIsInstance(backend, NullSoundBackend)
+
+    def test_audio_manager_start_no_audio_file(self):
+        """AudioManager.start returns early when audio file doesn't exist."""
+        import invaders
+        am = invaders.AudioManager()
+        with unittest.mock.patch("os.path.exists", return_value=False):
+            am.start()
+            self.assertIsNone(am.audio_thread)
+
+    def test_audio_manager_stop_kill_exception(self):
+        """AudioManager.stop handles kill exception after terminate failure."""
+        import invaders
+        am = invaders.AudioManager()
+        mock_proc = unittest.mock.MagicMock()
+        mock_proc.terminate.return_value = None
+        mock_proc.wait.side_effect = Exception("terminate timeout")
+        mock_proc.kill.side_effect = Exception("kill failed")
+        am.current_process = mock_proc
+        am.stop()  # Should not raise
 
 
 if __name__ == "__main__":

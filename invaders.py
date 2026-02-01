@@ -301,6 +301,27 @@ TITLE_COLOR_CYCLE = [
 # ============================================================================
 
 
+class MenuScreen(Enum):
+    """Sub-screens within the main menu."""
+
+    MAIN = auto()
+    HIGH_SCORES = auto()
+    OPTIONS = auto()
+    CONTROLS = auto()
+    CREDITS = auto()
+
+
+# Main menu items: (label, target MenuScreen or None for actions)
+MENU_ITEMS = [
+    ("Play", None),          # Starts the game
+    ("High Scores", MenuScreen.HIGH_SCORES),
+    ("Options", MenuScreen.OPTIONS),
+    ("Controls", MenuScreen.CONTROLS),
+    ("Credits", MenuScreen.CREDITS),
+    ("Quit", None),          # Quits the game
+]
+
+
 class GameState(Enum):
     """Game state machine states."""
 
@@ -1110,6 +1131,8 @@ class Game:
         self.config = config or DEFAULT_CONFIG
         self.test_mode = test_mode
         self.state = GameState.PLAYING if test_mode else GameState.MENU
+        self.menu_screen: MenuScreen = MenuScreen.MAIN
+        self.menu_selection: int = 0  # Index into MENU_ITEMS
         self.score = 0
         self.level = 1
 
@@ -1969,10 +1992,25 @@ class Game:
             return True
 
         if self.state == GameState.MENU:
-            if key == ord(" ") or key == ord("\n"):
-                self.state = GameState.PLAYING
-                if self.audio:
-                    self.audio.start()
+            if self.menu_screen == MenuScreen.MAIN:
+                if key == curses.KEY_UP or key == ord("w"):
+                    self.menu_selection = (self.menu_selection - 1) % len(MENU_ITEMS)
+                elif key == curses.KEY_DOWN or key == ord("s"):
+                    self.menu_selection = (self.menu_selection + 1) % len(MENU_ITEMS)
+                elif key == ord(" ") or key == ord("\n"):
+                    label, target = MENU_ITEMS[self.menu_selection]
+                    if label == "Play":
+                        self.state = GameState.PLAYING
+                        if self.audio:
+                            self.audio.start()
+                    elif label == "Quit":
+                        return False
+                    elif target is not None:
+                        self.menu_screen = target
+            else:
+                # Sub-screen: Escape or Backspace returns to main menu
+                if key == 27 or key == curses.KEY_BACKSPACE or key == 127:
+                    self.menu_screen = MenuScreen.MAIN
 
         elif self.state == GameState.PLAYING:
             if key == ord("p") or key == ord("P") or key == 27:  # P or Escape
@@ -2085,6 +2123,21 @@ class Game:
             "color_index": color_idx,
         }
 
+    def get_menu_info(self) -> dict:
+        """Return current menu state info (testable without curses).
+
+        Returns dict with:
+            screen: current MenuScreen
+            items: list of (label, selected) tuples for MAIN screen
+            selection: current selection index
+        """
+        items = [(label, i == self.menu_selection) for i, (label, _) in enumerate(MENU_ITEMS)]
+        return {
+            "screen": self.menu_screen,
+            "items": items,
+            "selection": self.menu_selection,
+        }
+
     def _render_menu(self) -> None:
         """Render the animated title screen with ASCII art and color cycling."""
         layout = self.get_title_layout()
@@ -2095,14 +2148,30 @@ class Game:
             color_pair = TITLE_COLOR_CYCLE[(layout["color_index"] + i) % cycle_len]
             self._safe_addstr(row, col, text, curses.color_pair(color_pair) | curses.A_BOLD)
 
-        # Subtitle (blink effect using frame counter)
-        sub_r, sub_c, sub_text = layout["subtitle"]
-        if (self.title_color_frame // 15) % 2 == 0:  # Blink every ~15 frames
-            self._safe_addstr(sub_r, sub_c, sub_text, curses.color_pair(COLOR_TEXT))
+        if self.menu_screen == MenuScreen.MAIN:
+            # Render menu items below title art
+            menu_info = self.get_menu_info()
+            sub_r, _, _ = layout["subtitle"]
+            for i, (label, selected) in enumerate(menu_info["items"]):
+                prefix = "> " if selected else "  "
+                text = f"{prefix}{label}"
+                col = (self.width - len(text)) // 2
+                attr = curses.color_pair(COLOR_TEXT) | curses.A_BOLD if selected else curses.color_pair(COLOR_TEXT)
+                self._safe_addstr(sub_r + i, col, text, attr)
 
-        # Controls
-        ctrl_r, ctrl_c, ctrl_text = layout["controls"]
-        self._safe_addstr(ctrl_r, ctrl_c, ctrl_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM)
+            # Controls hint at bottom
+            ctrl_r, ctrl_c, ctrl_text = layout["controls"]
+            self._safe_addstr(ctrl_r, ctrl_c, ctrl_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM)
+        else:
+            # Sub-screen placeholder (implemented in steps 52-55)
+            screen_name = self.menu_screen.name.replace("_", " ").title()
+            text = f"[ {screen_name} ]"
+            self._safe_addstr(self.height // 2, (self.width - len(text)) // 2, text, curses.color_pair(COLOR_TEXT))
+            back_text = "Press ESC to return"
+            self._safe_addstr(
+                self.height // 2 + 2, (self.width - len(back_text)) // 2,
+                back_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM
+            )
 
     def _render_game(self) -> None:
         """Render the main gameplay."""
