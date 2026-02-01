@@ -967,6 +967,10 @@ class Game:
         self.alien_direction = 1  # 1=right, -1=left
         self.last_alien_move_time = time.time()
 
+        # Player thrust animation state
+        self.thrust_frame = 0  # Alternates 0/1 each frame for flicker
+        self.player_move_direction = 0  # -1=left, 0=stationary, 1=right
+
         # Flash effect state
         self.flash_active = False
         self.flash_end_time = 0
@@ -1185,6 +1189,9 @@ class Game:
             return
 
         current_time = time.time()
+
+        # Update thrust animation
+        self.thrust_frame = 1 - self.thrust_frame
 
         # Update flash effect
         if self.flash_active and current_time >= self.flash_end_time:
@@ -1597,8 +1604,10 @@ class Game:
                 self._toggle_pause()
             elif key == curses.KEY_LEFT or key == ord("a"):
                 self.player.x = max(0, self.player.x - self.config.player_speed)
+                self.player_move_direction = -1
             elif key == curses.KEY_RIGHT or key == ord("d"):
                 self.player.x = min(self.width - 3, self.player.x + self.config.player_speed)
+                self.player_move_direction = 1
             elif key == ord(" "):
                 # Fire projectile
                 if len(self.player_projectiles) < 3:  # Limit active projectiles
@@ -1699,6 +1708,21 @@ class Game:
 
         # Render player
         self._safe_addstr(self.player.y, self.player.x, self.config.player_char, curses.color_pair(COLOR_PLAYER))
+
+        # Render player thrust/engine animation
+        thrust_y = self.player.y + 1
+        thrust_x = self.player.x + 1  # Center of 3-char-wide ship
+        if thrust_y < self.height:
+            if self.player_move_direction < 0:
+                thrust_char = "/"
+            elif self.player_move_direction > 0:
+                thrust_char = "\\"
+            else:
+                thrust_char = "v" if self.thrust_frame == 0 else "^"
+            self._safe_addstr(thrust_y, thrust_x, thrust_char, curses.color_pair(COLOR_PLAYER) | curses.A_DIM)
+
+        # Reset movement direction for next frame (stationary unless a key is pressed)
+        self.player_move_direction = 0
 
         # Render projectiles and trails
         trail_chars = ["|", ":", "."]  # newest to oldest

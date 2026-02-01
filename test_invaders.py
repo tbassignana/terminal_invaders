@@ -2674,6 +2674,44 @@ class TestBunkerDamageVisualEffects(unittest.TestCase):
         self.assertGreater(len(game.particle_system.particles), 0, "Debris particles should spawn")
 
 
+class TestPlayerThrustAnimation(unittest.TestCase):
+    """Tests for player thrust/engine animation (Step 31)."""
+
+    def test_thrust_frame_alternates(self):
+        """Verify thrust_frame toggles between 0 and 1 on each update."""
+        game = Game(test_mode=True)
+        initial = game.thrust_frame
+        game.update()
+        self.assertNotEqual(game.thrust_frame, initial)
+        game.update()
+        self.assertEqual(game.thrust_frame, initial)
+
+    def test_directional_thrust_on_left_movement(self):
+        """Verify player_move_direction is set to -1 on left key."""
+        game = Game(test_mode=True)
+        import curses
+        game.handle_input(curses.KEY_LEFT)
+        self.assertEqual(game.player_move_direction, -1)
+
+    def test_directional_thrust_on_right_movement(self):
+        """Verify player_move_direction is set to 1 on right key."""
+        game = Game(test_mode=True)
+        import curses
+        game.handle_input(curses.KEY_RIGHT)
+        self.assertEqual(game.player_move_direction, 1)
+
+    def test_stationary_direction_default(self):
+        """Verify player_move_direction defaults to 0 (stationary)."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.player_move_direction, 0)
+
+    def test_thrust_state_exists_on_game(self):
+        """Verify Game has thrust_frame and player_move_direction attributes."""
+        game = Game(test_mode=True)
+        self.assertIsNotNone(game.thrust_frame)
+        self.assertIsNotNone(game.player_move_direction)
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)
