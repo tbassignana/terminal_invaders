@@ -10,39 +10,41 @@ This test file validates the core game mechanics:
 - Reset/restart functionality
 """
 
-import unittest
 import logging
 import os
 import sys
-import time
-
-# Import the game module (will be created next)
 import tempfile
+import time
+import unittest
+
+from hypothesis import given
+from hypothesis import settings as hyp_settings
+from hypothesis import strategies as st
+
 from invaders import (
-    GameState,
-    GameEvent,
-    EventBus,
-    GameConfig,
     DEFAULT_CONFIG,
-    DIFFICULTY_PRESETS,
+    PLAYER_START_LIVES,
+    AbstractSoundBackend,
+    ActivePowerUp,
+    Alien,
+    EventBus,
+    Game,
+    GameConfig,
+    GameEvent,
+    GameState,
+    MacOSSoundBackend,
+    MysteryShip,
+    NullSoundBackend,
+    Player,
+    PowerUp,
+    PowerUpType,
+    Projectile,
+    ScoreManager,
+    SoundEffects,
     build_argument_parser,
     config_from_args,
-    Player,
-    Alien,
-    Projectile,
-    MysteryShip,
-    PowerUpType,
-    PowerUp,
-    ActivePowerUp,
-    ScoreManager,
-    Game,
-    AbstractSoundBackend,
-    MacOSSoundBackend,
-    NullSoundBackend,
     get_sound_backend,
-    SoundEffects,
     resolve_audio_path,
-    PLAYER_START_LIVES
 )
 
 
@@ -56,17 +58,14 @@ class TestAudioSystem(unittest.TestCase):
         """
         path = resolve_audio_path()
         # Should be an absolute path
-        self.assertTrue(os.path.isabs(path),
-                       f"Path should be absolute, got: {path}")
+        self.assertTrue(os.path.isabs(path), f"Path should be absolute, got: {path}")
         # Should contain the home directory
-        home = os.path.expanduser('~')
-        self.assertTrue(path.startswith(home),
-                       f"Path should start with home dir: {path}")
+        home = os.path.expanduser("~")
+        self.assertTrue(path.startswith(home), f"Path should start with home dir: {path}")
         # Should end with soundtrack.mp3
-        self.assertTrue(path.endswith('soundtrack.mp3'),
-                       f"Path should end with soundtrack.mp3: {path}")
+        self.assertTrue(path.endswith("soundtrack.mp3"), f"Path should end with soundtrack.mp3: {path}")
         # Should match expected format: /Users/username/soundtrack.mp3
-        expected = os.path.expanduser('~/soundtrack.mp3')
+        expected = os.path.expanduser("~/soundtrack.mp3")
         self.assertEqual(path, expected)
 
 
@@ -79,14 +78,16 @@ class TestPlayerMechanics(unittest.TestCase):
         Simulate a collision. Assert lives decremented by 1.
         """
         player = Player()
-        self.assertEqual(player.lives, PLAYER_START_LIVES,
-                        f"Player should start with {PLAYER_START_LIVES} lives")
+        self.assertEqual(player.lives, PLAYER_START_LIVES, f"Player should start with {PLAYER_START_LIVES} lives")
 
         # Simulate collision/damage
         player.take_damage()
 
-        self.assertEqual(player.lives, PLAYER_START_LIVES - 1,
-                        f"Player should have {PLAYER_START_LIVES - 1} lives after taking damage")
+        self.assertEqual(
+            player.lives,
+            PLAYER_START_LIVES - 1,
+            f"Player should have {PLAYER_START_LIVES - 1} lives after taking damage",
+        )
 
     def test_player_multiple_damage(self):
         """Test that multiple hits correctly decrement lives."""
@@ -118,8 +119,7 @@ class TestGameOverConditions(unittest.TestCase):
         # Simulate collision that should trigger game over
         game.handle_player_damage()
 
-        self.assertEqual(game.state, GameState.GAME_OVER,
-                        "Game state should be GAME_OVER when lives reach 0")
+        self.assertEqual(game.state, GameState.GAME_OVER, "Game state should be GAME_OVER when lives reach 0")
 
     def test_game_over_by_invasion(self):
         """
@@ -137,8 +137,7 @@ class TestGameOverConditions(unittest.TestCase):
         # Check for invasion
         game.check_invasion()
 
-        self.assertEqual(game.state, GameState.GAME_OVER,
-                        "Game state should be GAME_OVER when aliens reach player row")
+        self.assertEqual(game.state, GameState.GAME_OVER, "Game state should be GAME_OVER when aliens reach player row")
 
     def test_no_game_over_when_aliens_above(self):
         """Ensure game continues when aliens haven't reached player."""
@@ -152,8 +151,7 @@ class TestGameOverConditions(unittest.TestCase):
 
         game.check_invasion()
 
-        self.assertEqual(game.state, GameState.PLAYING,
-                        "Game should continue when aliens are above player")
+        self.assertEqual(game.state, GameState.PLAYING, "Game should continue when aliens are above player")
 
 
 class TestResetMechanic(unittest.TestCase):
@@ -179,16 +177,11 @@ class TestResetMechanic(unittest.TestCase):
         game.reset_game()
 
         # Assert reset state
-        self.assertEqual(game.score, 0,
-                        "Score should be 0 after reset")
-        self.assertEqual(game.player.lives, PLAYER_START_LIVES,
-                        f"Lives should be {PLAYER_START_LIVES} after reset")
-        self.assertEqual(game.state, GameState.PLAYING,
-                        "Game state should be PLAYING after reset")
-        self.assertEqual(len(game.player_projectiles), 0,
-                        "Player projectiles should be cleared after reset")
-        self.assertEqual(len(game.alien_projectiles), 0,
-                        "Alien projectiles should be cleared after reset")
+        self.assertEqual(game.score, 0, "Score should be 0 after reset")
+        self.assertEqual(game.player.lives, PLAYER_START_LIVES, f"Lives should be {PLAYER_START_LIVES} after reset")
+        self.assertEqual(game.state, GameState.PLAYING, "Game state should be PLAYING after reset")
+        self.assertEqual(len(game.player_projectiles), 0, "Player projectiles should be cleared after reset")
+        self.assertEqual(len(game.alien_projectiles), 0, "Alien projectiles should be cleared after reset")
 
     def test_reset_reinitializes_aliens(self):
         """Ensure reset re-creates the full alien grid."""
@@ -200,8 +193,7 @@ class TestResetMechanic(unittest.TestCase):
         game.reset_game()
 
         # Should have aliens again
-        self.assertGreater(len(game.aliens), 0,
-                          "Aliens should be reinitialized after reset")
+        self.assertGreater(len(game.aliens), 0, "Aliens should be reinitialized after reset")
 
     def test_reset_centers_player(self):
         """Ensure reset returns player to center position."""
@@ -214,8 +206,7 @@ class TestResetMechanic(unittest.TestCase):
         game.reset_game()
 
         # Player should be back at center
-        self.assertEqual(game.player.x, initial_x,
-                        "Player should be centered after reset")
+        self.assertEqual(game.player.x, initial_x, "Player should be centered after reset")
 
 
 class TestGameStateTransitions(unittest.TestCase):
@@ -230,8 +221,7 @@ class TestGameStateTransitions(unittest.TestCase):
 
     def test_state_enum_values(self):
         """Verify all required game states exist."""
-        states = [GameState.MENU, GameState.PLAYING, GameState.PAUSED,
-                  GameState.LEVEL_TRANSITION, GameState.GAME_OVER]
+        states = [GameState.MENU, GameState.PLAYING, GameState.PAUSED, GameState.LEVEL_TRANSITION, GameState.GAME_OVER]
         self.assertEqual(len(states), 5, "Should have 5 game states")
 
 
@@ -255,7 +245,7 @@ class TestAlienMechanics(unittest.TestCase):
         initial_prob = game.get_alien_fire_probability()
 
         # Reduce aliens to half
-        game.aliens = game.aliens[:len(game.aliens) // 2]
+        game.aliens = game.aliens[: len(game.aliens) // 2]
         half_prob = game.get_alien_fire_probability()
 
         # Reduce to just a few
@@ -263,10 +253,8 @@ class TestAlienMechanics(unittest.TestCase):
         few_prob = game.get_alien_fire_probability()
 
         # Probability should increase as aliens decrease
-        self.assertGreater(half_prob, initial_prob,
-                          "Fire probability should increase with fewer aliens")
-        self.assertGreater(few_prob, half_prob,
-                          "Fire probability should be highest with few aliens")
+        self.assertGreater(half_prob, initial_prob, "Fire probability should increase with fewer aliens")
+        self.assertGreater(few_prob, half_prob, "Fire probability should be highest with few aliens")
 
 
 class TestGameConfig(unittest.TestCase):
@@ -319,6 +307,7 @@ class TestGameConfig(unittest.TestCase):
     def test_no_global_mutation_in_next_level(self):
         """Verify _next_level does not mutate the global ALIEN_MOVE_INTERVAL."""
         import invaders
+
         original_global = invaders.ALIEN_MOVE_INTERVAL
 
         game = Game(test_mode=True)
@@ -352,9 +341,7 @@ class TestProjectileDataclass(unittest.TestCase):
     def test_player_fire_creates_projectile(self):
         """Verify firing creates a Projectile instance, not a dict."""
         game = Game(test_mode=True)
-        game.player_projectiles.append(
-            Projectile(x=game.player.x + 1, y=game.player.y - 1, direction=-1)
-        )
+        game.player_projectiles.append(Projectile(x=game.player.x + 1, y=game.player.y - 1, direction=-1))
         proj = game.player_projectiles[0]
         self.assertIsInstance(proj, Projectile)
         self.assertEqual(proj.direction, -1)
@@ -410,6 +397,7 @@ class TestLogging(unittest.TestCase):
     def setUp(self):
         """Reset logger state before each test."""
         import invaders
+
         self.logger = invaders.logger
         # Remove any handlers from previous tests
         self.logger.handlers.clear()
@@ -417,7 +405,9 @@ class TestLogging(unittest.TestCase):
     def test_setup_logging_debug_mode(self):
         """Verify debug mode creates a file handler at DEBUG level."""
         import tempfile
+
         import invaders
+
         old_cwd = os.getcwd()
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -425,8 +415,7 @@ class TestLogging(unittest.TestCase):
                 invaders.setup_logging(debug=True)
                 self.assertEqual(self.logger.level, logging.DEBUG)
                 # Should have a FileHandler
-                file_handlers = [h for h in self.logger.handlers
-                                 if isinstance(h, logging.FileHandler)]
+                file_handlers = [h for h in self.logger.handlers if isinstance(h, logging.FileHandler)]
                 self.assertGreater(len(file_handlers), 0)
         finally:
             os.chdir(old_cwd)
@@ -435,21 +424,23 @@ class TestLogging(unittest.TestCase):
     def test_setup_logging_default_mode(self):
         """Verify default mode sets WARNING level with NullHandler."""
         import invaders
+
         invaders.setup_logging(debug=False)
         self.assertEqual(self.logger.level, logging.WARNING)
-        null_handlers = [h for h in self.logger.handlers
-                         if isinstance(h, logging.NullHandler)]
+        null_handlers = [h for h in self.logger.handlers if isinstance(h, logging.NullHandler)]
         self.assertGreater(len(null_handlers), 0)
         self.logger.handlers.clear()
 
     def test_debug_flag_parsing(self):
         """Verify --debug is recognized in sys.argv."""
-        self.assertIn('--debug', ['--debug', '--other'])
+        self.assertIn("--debug", ["--debug", "--other"])
 
     def test_log_output_on_simulated_error(self):
         """Verify that logging captures error info at DEBUG level."""
         import tempfile
+
         import invaders
+
         old_cwd = os.getcwd()
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -460,7 +451,7 @@ class TestLogging(unittest.TestCase):
                 for h in self.logger.handlers:
                     h.flush()
                 # Check the log file was written
-                log_path = os.path.join(tmpdir, 'invaders.log')
+                log_path = os.path.join(tmpdir, "invaders.log")
                 self.assertTrue(os.path.exists(log_path))
                 with open(log_path) as f:
                     contents = f.read()
@@ -476,7 +467,7 @@ class TestScoreManager(unittest.TestCase):
     def test_score_tracking(self):
         """Verify add() accumulates points."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            sm = ScoreManager(scores_path=os.path.join(tmpdir, 'scores.json'))
+            sm = ScoreManager(scores_path=os.path.join(tmpdir, "scores.json"))
             sm.add(100)
             sm.add(50)
             self.assertEqual(sm.current_score, 150)
@@ -484,7 +475,7 @@ class TestScoreManager(unittest.TestCase):
     def test_file_persistence(self):
         """Verify scores are saved to and loaded from disk."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, 'scores.json')
+            path = os.path.join(tmpdir, "scores.json")
             sm = ScoreManager(scores_path=path)
             sm.record(500, level=3)
             sm.record(300, level=2)
@@ -497,17 +488,17 @@ class TestScoreManager(unittest.TestCase):
     def test_high_score_ranking(self):
         """Verify top 10 ranking and ordering."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, 'scores.json')
+            path = os.path.join(tmpdir, "scores.json")
             sm = ScoreManager(scores_path=path)
             for i in range(15):
                 sm.record(i * 100, level=1)
             self.assertEqual(len(sm.scores), 10)
-            self.assertEqual(sm.scores[0]['score'], 1400)
+            self.assertEqual(sm.scores[0]["score"], 1400)
 
     def test_score_reset(self):
         """Verify reset_current sets current_score to 0."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            sm = ScoreManager(scores_path=os.path.join(tmpdir, 'scores.json'))
+            sm = ScoreManager(scores_path=os.path.join(tmpdir, "scores.json"))
             sm.add(999)
             sm.reset_current()
             self.assertEqual(sm.current_score, 0)
@@ -515,7 +506,7 @@ class TestScoreManager(unittest.TestCase):
     def test_high_score_empty(self):
         """Verify high_score returns 0 when no scores exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            sm = ScoreManager(scores_path=os.path.join(tmpdir, 'scores.json'))
+            sm = ScoreManager(scores_path=os.path.join(tmpdir, "scores.json"))
             self.assertEqual(sm.high_score, 0)
 
 
@@ -526,9 +517,9 @@ class TestEventBus(unittest.TestCase):
         """Verify a subscribed handler is called when event fires."""
         bus = EventBus()
         results = []
-        bus.subscribe(GameEvent.ALIEN_KILLED, lambda **kw: results.append('killed'))
+        bus.subscribe(GameEvent.ALIEN_KILLED, lambda **kw: results.append("killed"))
         bus.publish(GameEvent.ALIEN_KILLED)
-        self.assertEqual(results, ['killed'])
+        self.assertEqual(results, ["killed"])
 
     def test_event_handler_receives_kwargs(self):
         """Verify handlers receive keyword arguments."""
@@ -536,14 +527,14 @@ class TestEventBus(unittest.TestCase):
         received = {}
         bus.subscribe(GameEvent.ALIEN_KILLED, lambda **kw: received.update(kw))
         bus.publish(GameEvent.ALIEN_KILLED, alien_type=2)
-        self.assertEqual(received['alien_type'], 2)
+        self.assertEqual(received["alien_type"], 2)
 
     def test_multi_subscriber_support(self):
         """Verify multiple subscribers all get called."""
         bus = EventBus()
         results = []
-        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append('a'))
-        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append('b'))
+        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append("a"))
+        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append("b"))
         bus.publish(GameEvent.SHOT_FIRED)
         self.assertEqual(len(results), 2)
 
@@ -551,7 +542,7 @@ class TestEventBus(unittest.TestCase):
         """Verify subscribing to one event doesn't fire on another."""
         bus = EventBus()
         results = []
-        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append('shot'))
+        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append("shot"))
         bus.publish(GameEvent.PLAYER_HIT)
         self.assertEqual(results, [])
 
@@ -559,7 +550,7 @@ class TestEventBus(unittest.TestCase):
         """Verify clear() removes all subscribers."""
         bus = EventBus()
         results = []
-        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append('x'))
+        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append("x"))
         bus.clear()
         bus.publish(GameEvent.SHOT_FIRED)
         self.assertEqual(results, [])
@@ -577,7 +568,7 @@ class TestSoundBackend(unittest.TestCase):
         """Verify NullSoundBackend.play() does nothing without error."""
         backend = NullSoundBackend()
         # Should not raise any exception
-        backend.play('/nonexistent/path.aiff', volume=0.5)
+        backend.play("/nonexistent/path.aiff", volume=0.5)
 
     def test_null_backend_stop(self):
         """Verify NullSoundBackend.stop() does nothing without error."""
@@ -596,7 +587,7 @@ class TestSoundBackend(unittest.TestCase):
 
     def test_macos_backend_path_resolution(self):
         """Verify MacOSSoundBackend is available on macOS."""
-        if sys.platform == 'darwin':
+        if sys.platform == "darwin":
             backend = MacOSSoundBackend()
             self.assertTrue(backend.is_available())
         else:
@@ -653,15 +644,13 @@ class TestMysteryShip(unittest.TestCase):
         self.assertEqual(game.mystery_score_display[2], 150)
 
 
-from hypothesis import given, strategies as st, settings as hyp_settings
-
-
 class TestCoverageBoost(unittest.TestCase):
     """Step 17: Additional tests to boost coverage above 80%."""
 
     def test_cleanup_audio_without_manager(self):
         """Test _cleanup_audio when no audio manager is set."""
         import invaders
+
         old = invaders._audio_manager
         invaders._audio_manager = None
         invaders._cleanup_audio()  # Should not raise
@@ -670,12 +659,14 @@ class TestCoverageBoost(unittest.TestCase):
     def test_audio_manager_start_no_file(self):
         """Test AudioManager.start when audio file doesn't exist."""
         from invaders import AudioManager
+
         am = AudioManager()
         am.start()  # Should silently return (no file)
 
     def test_audio_manager_stop(self):
         """Test AudioManager.stop without running process."""
         from invaders import AudioManager
+
         am = AudioManager()
         am.stop()  # Should not raise
 
@@ -688,7 +679,7 @@ class TestCoverageBoost(unittest.TestCase):
     def test_sound_effects_invalid_sound(self):
         """Test _play_async with non-existent sound name."""
         sfx = SoundEffects(backend=NullSoundBackend())
-        sfx._play_async('nonexistent')  # Should not raise
+        sfx._play_async("nonexistent")  # Should not raise
 
     def test_sound_effects_march(self):
         """Test update_march with various alien counts."""
@@ -706,7 +697,8 @@ class TestCoverageBoost(unittest.TestCase):
 
     def test_bunker_char_at_various_health(self):
         """Test Bunker.char at all health values."""
-        from invaders import Bunker, BUNKER_CHARS
+        from invaders import BUNKER_CHARS, Bunker
+
         b = Bunker(x=0, y=0, health=3)
         self.assertEqual(b.char, BUNKER_CHARS[0])
         b.health = 2
@@ -714,7 +706,7 @@ class TestCoverageBoost(unittest.TestCase):
         b.health = 1
         self.assertEqual(b.char, BUNKER_CHARS[2])
         b.health = 0
-        self.assertEqual(b.char, ' ')
+        self.assertEqual(b.char, " ")
 
     def test_game_state_transitions_menu_to_playing(self):
         """Test state transition from MENU to PLAYING."""
@@ -775,6 +767,7 @@ class TestCoverageBoost(unittest.TestCase):
         game = Game(test_mode=True)
         game.last_mystery_spawn_check = time.time() - 2.0
         import random as rng
+
         rng.seed(42)
         game._update_mystery_ship(time.time())
 
@@ -810,15 +803,17 @@ class TestCoverageBoost(unittest.TestCase):
     def test_score_manager_record_includes_date(self):
         """Verify score records contain date field."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            sm = ScoreManager(scores_path=os.path.join(tmpdir, 'scores.json'))
+            sm = ScoreManager(scores_path=os.path.join(tmpdir, "scores.json"))
             sm.record(100, level=1)
-            self.assertIn('date', sm.scores[0])
+            self.assertIn("date", sm.scores[0])
 
     def test_event_bus_handler_exception_caught(self):
         """Verify EventBus catches handler exceptions gracefully."""
         bus = EventBus()
+
         def bad_handler(**kw):
             raise ValueError("test error")
+
         bus.subscribe(GameEvent.SHOT_FIRED, bad_handler)
         bus.publish(GameEvent.SHOT_FIRED)  # Should not raise
 
@@ -848,7 +843,7 @@ class TestCoverageBoost(unittest.TestCase):
     def test_handle_input_quit(self):
         """Verify 'q' input returns False."""
         game = Game(test_mode=True)
-        result = game.handle_input(ord('q'))
+        result = game.handle_input(ord("q"))
         self.assertFalse(result)
 
     def test_render_in_test_mode_is_noop(self):
@@ -887,13 +882,13 @@ class TestPropertyBased(unittest.TestCase):
         self.assertGreaterEqual(prob, 0)
         self.assertLessEqual(prob, game.config.max_fire_probability)
 
-    @given(moves=st.lists(st.sampled_from(['left', 'right']), min_size=1, max_size=100))
+    @given(moves=st.lists(st.sampled_from(["left", "right"]), min_size=1, max_size=100))
     @hyp_settings(max_examples=30)
     def test_player_position_stays_in_bounds(self, moves):
         """Player position always stays within screen bounds after any moves."""
         game = Game(test_mode=True)
         for move in moves:
-            if move == 'left':
+            if move == "left":
                 game.player.x = max(0, game.player.x - game.config.player_speed)
             else:
                 game.player.x = min(game.width - 3, game.player.x + game.config.player_speed)
@@ -913,6 +908,7 @@ class TestPropertyBased(unittest.TestCase):
     def test_bunker_health_in_valid_range(self, hits):
         """Bunker health is always in [0, 3] after any number of hits."""
         from invaders import Bunker
+
         bunker = Bunker(x=10, y=10, health=3)
         for _ in range(hits):
             bunker.hit()
@@ -931,9 +927,7 @@ class TestGameUpdateIntegration(unittest.TestCase):
         # Place a single alien right where the projectile will be
         alien = Alien(x=game.player.x + 1, y=game.player.y - 2, alien_type=0)
         game.aliens = [alien]
-        game.player_projectiles.append(
-            Projectile(x=game.player.x + 1, y=float(game.player.y - 1), direction=-1)
-        )
+        game.player_projectiles.append(Projectile(x=game.player.x + 1, y=float(game.player.y - 1), direction=-1))
         # Run updates until collision (projectile speed=1.0, distance=1)
         for _ in range(5):
             game._update_projectiles()
@@ -983,6 +977,7 @@ class TestGameUpdateIntegration(unittest.TestCase):
         """Test alien firing over many frames produces projectiles."""
         game = Game(test_mode=True)
         import random as rng
+
         rng.seed(1)
         for _ in range(200):
             game._alien_fire()
@@ -1024,6 +1019,7 @@ class TestCollisionEdgeCases(unittest.TestCase):
     def test_bunker_destruction_at_health_1(self):
         """Bunker with health=1 should be destroyed on hit."""
         from invaders import Bunker
+
         bunker = Bunker(x=20, y=15, health=1)
         destroyed = bunker.hit()
         self.assertTrue(destroyed)
@@ -1227,6 +1223,7 @@ class TestPowerUps(unittest.TestCase):
         """Verify power-ups spawn roughly 10% of the time over many trials."""
         game = Game(test_mode=True)
         import random as rng
+
         rng.seed(42)
         count = 0
         for _ in range(1000):
@@ -1250,8 +1247,7 @@ class TestPowerUps(unittest.TestCase):
         """Verify player collects power-up when overlapping."""
         game = Game(test_mode=True)
         # Place power-up at player position
-        pu = PowerUp(x=game.player.x + 1, y=float(game.player.y),
-                     power_type=PowerUpType.SHIELD)
+        pu = PowerUp(x=game.player.x + 1, y=float(game.player.y), power_type=PowerUpType.SHIELD)
         game.power_ups.append(pu)
         game._update_power_ups(time.time())
         self.assertEqual(len(game.power_ups), 0)
@@ -1260,18 +1256,14 @@ class TestPowerUps(unittest.TestCase):
     def test_power_up_effect_expiration(self):
         """Verify timed power-ups expire after their duration."""
         game = Game(test_mode=True)
-        game.active_power_ups.append(
-            ActivePowerUp(power_type=PowerUpType.RAPID_FIRE, expires_at=time.time() - 1)
-        )
+        game.active_power_ups.append(ActivePowerUp(power_type=PowerUpType.RAPID_FIRE, expires_at=time.time() - 1))
         game._update_power_ups(time.time())
         self.assertFalse(game.has_power_up(PowerUpType.RAPID_FIRE))
 
     def test_shield_absorbs_hit(self):
         """Verify shield prevents damage and is consumed."""
         game = Game(test_mode=True)
-        game.active_power_ups.append(
-            ActivePowerUp(power_type=PowerUpType.SHIELD, expires_at=time.time() + 999)
-        )
+        game.active_power_ups.append(ActivePowerUp(power_type=PowerUpType.SHIELD, expires_at=time.time() + 999))
         initial_lives = game.player.lives
         game.handle_player_damage()
         self.assertEqual(game.player.lives, initial_lives)
@@ -1333,13 +1325,13 @@ class TestCLIArgParser(unittest.TestCase):
         self.assertFalse(args.no_sound)
         self.assertFalse(args.no_music)
         self.assertFalse(args.debug)
-        self.assertEqual(args.difficulty, 'normal')
+        self.assertEqual(args.difficulty, "normal")
         self.assertIsNone(args.fps)
 
     def test_difficulty_easy_preset_values(self):
         """Verify easy difficulty overrides are applied."""
         parser = build_argument_parser()
-        args = parser.parse_args(['--difficulty', 'easy'])
+        args = parser.parse_args(["--difficulty", "easy"])
         cfg = config_from_args(args)
         self.assertEqual(cfg.player_start_lives, 7)
         self.assertGreater(cfg.alien_move_interval, DEFAULT_CONFIG.alien_move_interval)
@@ -1347,7 +1339,7 @@ class TestCLIArgParser(unittest.TestCase):
     def test_difficulty_hard_preset_values(self):
         """Verify hard difficulty overrides are applied."""
         parser = build_argument_parser()
-        args = parser.parse_args(['--difficulty', 'hard'])
+        args = parser.parse_args(["--difficulty", "hard"])
         cfg = config_from_args(args)
         self.assertEqual(cfg.player_start_lives, 3)
         self.assertLess(cfg.alien_move_interval, DEFAULT_CONFIG.alien_move_interval)
@@ -1355,14 +1347,14 @@ class TestCLIArgParser(unittest.TestCase):
     def test_fps_override(self):
         """Verify --fps overrides target_fps in config."""
         parser = build_argument_parser()
-        args = parser.parse_args(['--fps', '30'])
+        args = parser.parse_args(["--fps", "30"])
         cfg = config_from_args(args)
         self.assertEqual(cfg.target_fps, 30)
 
     def test_config_integration(self):
         """Verify config_from_args produces valid GameConfig for Game."""
         parser = build_argument_parser()
-        args = parser.parse_args(['--difficulty', 'hard', '--fps', '45'])
+        args = parser.parse_args(["--difficulty", "hard", "--fps", "45"])
         cfg = config_from_args(args)
         game = Game(test_mode=True, config=cfg)
         self.assertEqual(game.config.target_fps, 45)
@@ -1375,32 +1367,32 @@ class TestHandleInput(unittest.TestCase):
     def test_quit_returns_false(self):
         """Pressing Q in any state should return False."""
         game = Game(test_mode=True)
-        self.assertFalse(game.handle_input(ord('q')))
+        self.assertFalse(game.handle_input(ord("q")))
 
     def test_quit_uppercase_returns_false(self):
         """Pressing Q (uppercase) should also quit."""
         game = Game(test_mode=True)
-        self.assertFalse(game.handle_input(ord('Q')))
+        self.assertFalse(game.handle_input(ord("Q")))
 
     def test_menu_space_starts_game(self):
         """Pressing SPACE on menu transitions to PLAYING."""
         game = Game(test_mode=True)
         game.state = GameState.MENU
-        game.handle_input(ord(' '))
+        game.handle_input(ord(" "))
         self.assertEqual(game.state, GameState.PLAYING)
 
     def test_menu_enter_starts_game(self):
         """Pressing ENTER on menu transitions to PLAYING."""
         game = Game(test_mode=True)
         game.state = GameState.MENU
-        game.handle_input(ord('\n'))
+        game.handle_input(ord("\n"))
         self.assertEqual(game.state, GameState.PLAYING)
 
     def test_playing_pause_with_p(self):
         """Pressing P in PLAYING state toggles pause."""
         game = Game(test_mode=True)
         game.state = GameState.PLAYING
-        game.handle_input(ord('p'))
+        game.handle_input(ord("p"))
         self.assertEqual(game.state, GameState.PAUSED)
 
     def test_playing_pause_with_escape(self):
@@ -1423,7 +1415,7 @@ class TestHandleInput(unittest.TestCase):
         game = Game(test_mode=True)
         game.state = GameState.PLAYING
         initial_x = game.player.x
-        game.handle_input(ord('a'))
+        game.handle_input(ord("a"))
         self.assertLess(game.player.x, initial_x)
 
     def test_playing_move_right(self):
@@ -1439,14 +1431,14 @@ class TestHandleInput(unittest.TestCase):
         game = Game(test_mode=True)
         game.state = GameState.PLAYING
         initial_x = game.player.x
-        game.handle_input(ord('d'))
+        game.handle_input(ord("d"))
         self.assertGreater(game.player.x, initial_x)
 
     def test_playing_fire_creates_projectile(self):
         """Pressing SPACE in PLAYING state fires a projectile."""
         game = Game(test_mode=True)
         game.state = GameState.PLAYING
-        game.handle_input(ord(' '))
+        game.handle_input(ord(" "))
         self.assertEqual(len(game.player_projectiles), 1)
 
     def test_playing_fire_limit(self):
@@ -1454,7 +1446,7 @@ class TestHandleInput(unittest.TestCase):
         game = Game(test_mode=True)
         game.state = GameState.PLAYING
         for _ in range(5):
-            game.handle_input(ord(' '))
+            game.handle_input(ord(" "))
         self.assertEqual(len(game.player_projectiles), 3)
 
     def test_paused_unpause_with_p(self):
@@ -1463,7 +1455,7 @@ class TestHandleInput(unittest.TestCase):
         game.state = GameState.PLAYING
         game._toggle_pause()
         self.assertEqual(game.state, GameState.PAUSED)
-        game.handle_input(ord('p'))
+        game.handle_input(ord("p"))
         self.assertEqual(game.state, GameState.PLAYING)
 
     def test_paused_unpause_with_escape(self):
@@ -1479,7 +1471,7 @@ class TestHandleInput(unittest.TestCase):
         game = Game(test_mode=True)
         game.state = GameState.GAME_OVER
         game.score = 500
-        game.handle_input(ord('r'))
+        game.handle_input(ord("r"))
         self.assertEqual(game.state, GameState.PLAYING)
         self.assertEqual(game.score, 0)
 
@@ -1487,14 +1479,14 @@ class TestHandleInput(unittest.TestCase):
         """Pressing SPACE at LEVEL_TRANSITION continues to PLAYING."""
         game = Game(test_mode=True)
         game.state = GameState.LEVEL_TRANSITION
-        game.handle_input(ord(' '))
+        game.handle_input(ord(" "))
         self.assertEqual(game.state, GameState.PLAYING)
 
     def test_level_transition_enter_continue(self):
         """Pressing ENTER at LEVEL_TRANSITION continues to PLAYING."""
         game = Game(test_mode=True)
         game.state = GameState.LEVEL_TRANSITION
-        game.handle_input(ord('\n'))
+        game.handle_input(ord("\n"))
         self.assertEqual(game.state, GameState.PLAYING)
 
     def test_player_left_boundary(self):
@@ -1502,7 +1494,7 @@ class TestHandleInput(unittest.TestCase):
         game = Game(test_mode=True)
         game.state = GameState.PLAYING
         game.player.x = 0
-        game.handle_input(ord('a'))
+        game.handle_input(ord("a"))
         self.assertEqual(game.player.x, 0)
 
     def test_player_right_boundary(self):
@@ -1510,7 +1502,7 @@ class TestHandleInput(unittest.TestCase):
         game = Game(test_mode=True)
         game.state = GameState.PLAYING
         game.player.x = game.width - 3
-        game.handle_input(ord('d'))
+        game.handle_input(ord("d"))
         self.assertEqual(game.player.x, game.width - 3)
 
 
@@ -1520,6 +1512,7 @@ class TestBunkerCollisions(unittest.TestCase):
     def _make_game_with_bunkers(self):
         """Create a game with bunkers initialized."""
         from invaders import Bunker
+
         game = Game(test_mode=True)
         game.bunkers = [Bunker(x=20, y=15, health=3)]
         return game
@@ -1545,6 +1538,7 @@ class TestBunkerCollisions(unittest.TestCase):
     def test_dead_bunker_not_hit(self):
         """Bunker with health=0 should not be hit."""
         from invaders import Bunker
+
         game = Game(test_mode=True)
         game.bunkers = [Bunker(x=20, y=15, health=0)]
         game.aliens = []
@@ -1679,6 +1673,7 @@ class TestAudioManagerBasic(unittest.TestCase):
     def test_audio_manager_init(self):
         """Verify AudioManager initializes with correct defaults."""
         from invaders import AudioManager
+
         am = AudioManager()
         self.assertTrue(am.game_running)
         self.assertIsNone(am.audio_thread)
@@ -1687,6 +1682,7 @@ class TestAudioManagerBasic(unittest.TestCase):
     def test_audio_manager_stop_no_process(self):
         """Verify stop() works cleanly when no process is running."""
         from invaders import AudioManager
+
         am = AudioManager()
         am.stop()
         self.assertFalse(am.game_running)
@@ -1694,6 +1690,7 @@ class TestAudioManagerBasic(unittest.TestCase):
     def test_audio_manager_start_no_file(self):
         """Verify start() returns silently when no audio file exists."""
         from invaders import AudioManager
+
         am = AudioManager()
         am.start()  # Audio file won't exist, should return silently
         am.stop()
@@ -1705,6 +1702,7 @@ class TestCleanupFunctions(unittest.TestCase):
     def test_cleanup_audio_with_no_manager(self):
         """_cleanup_audio should not raise when _audio_manager is None."""
         import invaders
+
         old = invaders._audio_manager
         invaders._audio_manager = None
         try:
@@ -1716,6 +1714,7 @@ class TestCleanupFunctions(unittest.TestCase):
         """_cleanup_audio calls stop on the audio manager."""
         import invaders
         from invaders import AudioManager
+
         old = invaders._audio_manager
         am = AudioManager()
         invaders._audio_manager = am
@@ -1728,6 +1727,7 @@ class TestCleanupFunctions(unittest.TestCase):
     def test_signal_handler(self):
         """_signal_handler calls _cleanup_audio and exits."""
         import invaders
+
         old = invaders._audio_manager
         invaders._audio_manager = None
         try:
@@ -1738,7 +1738,7 @@ class TestCleanupFunctions(unittest.TestCase):
 
     def test_score_manager_save_error(self):
         """ScoreManager._save logs warning on write failure."""
-        sm = ScoreManager(scores_path='/nonexistent/dir/scores.json')
+        sm = ScoreManager(scores_path="/nonexistent/dir/scores.json")
         sm.current_score = 100
         # record calls _save which should handle the error
         sm.record(100, 1)
@@ -1764,17 +1764,18 @@ class TestExtraCoverage(unittest.TestCase):
         """_play_async returns early when sfx is disabled."""
         sfx = SoundEffects(backend=NullSoundBackend())
         sfx.enabled = False
-        sfx._play_async('shoot')  # Should return early, no error
+        sfx._play_async("shoot")  # Should return early, no error
 
     def test_play_async_unknown_sound(self):
         """_play_async returns early for unknown sound name."""
         sfx = SoundEffects(backend=NullSoundBackend())
         sfx.enabled = True
-        sfx._play_async('nonexistent_sound')  # Should return early
+        sfx._play_async("nonexistent_sound")  # Should return early
 
     def test_mystery_ship_spawn_with_seed(self):
         """Mystery ship spawns when random conditions are met."""
         import random as rng
+
         game = Game(test_mode=True)
         game.state = GameState.PLAYING
         game.mystery_ship = None
@@ -1804,8 +1805,10 @@ class TestExtraCoverage(unittest.TestCase):
 
     def test_audio_manager_stop_with_mock_process(self):
         """AudioManager.stop handles process termination."""
-        from invaders import AudioManager
         from unittest.mock import MagicMock
+
+        from invaders import AudioManager
+
         am = AudioManager()
         mock_proc = MagicMock()
         mock_proc.terminate = MagicMock()
@@ -1823,7 +1826,7 @@ class TestExtraCoverage(unittest.TestCase):
     def test_macoss_sound_backend_play_no_file(self):
         """MacOSSoundBackend.play returns silently when file doesn't exist."""
         backend = MacOSSoundBackend()
-        backend.play('/nonexistent/sound.aiff')  # Should return early
+        backend.play("/nonexistent/sound.aiff")  # Should return early
 
     def test_macoss_sound_backend_stop(self):
         """MacOSSoundBackend.stop doesn't raise."""
@@ -1842,70 +1845,75 @@ class TestSpatialGrid(unittest.TestCase):
     def test_cell_assignment(self):
         """Verify entities are placed in the correct grid cell."""
         from invaders import SpatialGrid
+
         grid = SpatialGrid(width=80, height=40, cell_size=4)
-        grid.insert('entity_a', 10, 8)
+        grid.insert("entity_a", 10, 8)
         # Cell should be (10//4, 8//4) = (2, 2)
-        self.assertIn('entity_a', grid.grid[(2, 2)])
+        self.assertIn("entity_a", grid.grid[(2, 2)])
 
     def test_cell_assignment_origin(self):
         """Entity at (0,0) goes to cell (0,0)."""
         from invaders import SpatialGrid
+
         grid = SpatialGrid(width=80, height=40, cell_size=4)
-        grid.insert('origin', 0, 0)
-        self.assertIn('origin', grid.grid[(0, 0)])
+        grid.insert("origin", 0, 0)
+        self.assertIn("origin", grid.grid[(0, 0)])
 
     def test_query_nearby_returns_same_cell(self):
         """query_nearby returns entities in the same cell."""
         from invaders import SpatialGrid
+
         grid = SpatialGrid(width=80, height=40, cell_size=4)
-        grid.insert('a', 10, 8)
-        grid.insert('b', 11, 9)
+        grid.insert("a", 10, 8)
+        grid.insert("b", 11, 9)
         result = grid.query_nearby(10, 8)
-        self.assertIn('a', result)
-        self.assertIn('b', result)
+        self.assertIn("a", result)
+        self.assertIn("b", result)
 
     def test_query_nearby_returns_adjacent_cells(self):
         """query_nearby returns entities in adjacent cells."""
         from invaders import SpatialGrid
+
         grid = SpatialGrid(width=80, height=40, cell_size=4)
-        grid.insert('a', 4, 4)   # cell (1, 1)
-        grid.insert('b', 8, 8)   # cell (2, 2)
+        grid.insert("a", 4, 4)  # cell (1, 1)
+        grid.insert("b", 8, 8)  # cell (2, 2)
         # Query from cell (1, 1) — adjacent to (2, 2)
         result = grid.query_nearby(4, 4)
-        self.assertIn('a', result)
-        self.assertIn('b', result)
+        self.assertIn("a", result)
+        self.assertIn("b", result)
 
     def test_query_nearby_excludes_far_cells(self):
         """query_nearby does not return entities far away."""
         from invaders import SpatialGrid
+
         grid = SpatialGrid(width=80, height=40, cell_size=4)
-        grid.insert('near', 10, 10)
-        grid.insert('far', 60, 30)
+        grid.insert("near", 10, 10)
+        grid.insert("far", 60, 30)
         result = grid.query_nearby(10, 10)
-        self.assertIn('near', result)
-        self.assertNotIn('far', result)
+        self.assertIn("near", result)
+        self.assertNotIn("far", result)
 
     def test_clear_removes_all(self):
         """clear() empties the grid."""
         from invaders import SpatialGrid
+
         grid = SpatialGrid(width=80, height=40, cell_size=4)
-        grid.insert('a', 10, 10)
-        grid.insert('b', 20, 20)
+        grid.insert("a", 10, 10)
+        grid.insert("b", 20, 20)
         grid.clear()
         self.assertEqual(len(grid.grid), 0)
 
     def test_collision_results_match_brute_force(self):
         """Spatial grid collision results match brute-force for many random entities."""
         import random as rng
+
         rng.seed(42)
         game = Game(test_mode=True)
         # Create many random aliens
-        game.aliens = [Alien(x=rng.randint(5, 75), y=rng.randint(3, 20))
-                       for _ in range(50)]
+        game.aliens = [Alien(x=rng.randint(5, 75), y=rng.randint(3, 20)) for _ in range(50)]
         # Create several projectiles
         game.player_projectiles = [
-            Projectile(x=rng.randint(5, 75), y=float(rng.randint(3, 20)), direction=-1)
-            for _ in range(10)
+            Projectile(x=rng.randint(5, 75), y=float(rng.randint(3, 20)), direction=-1) for _ in range(10)
         ]
 
         # Brute-force: find which (proj, alien) pairs would collide
@@ -1927,19 +1935,17 @@ class TestSpatialGrid(unittest.TestCase):
     def test_benchmark_large_entity_count(self):
         """Verify spatial grid handles large entity counts without error."""
         import random as rng
+
         rng.seed(99)
         game = Game(test_mode=True)
         # 200 aliens
-        game.aliens = [Alien(x=rng.randint(1, 78), y=rng.randint(2, 25))
-                       for _ in range(200)]
+        game.aliens = [Alien(x=rng.randint(1, 78), y=rng.randint(2, 25)) for _ in range(200)]
         # 50 projectiles
         game.player_projectiles = [
-            Projectile(x=rng.randint(1, 78), y=float(rng.randint(2, 25)), direction=-1)
-            for _ in range(50)
+            Projectile(x=rng.randint(1, 78), y=float(rng.randint(2, 25)), direction=-1) for _ in range(50)
         ]
         game.alien_projectiles = [
-            Projectile(x=rng.randint(1, 78), y=float(rng.randint(10, 30)), direction=1)
-            for _ in range(30)
+            Projectile(x=rng.randint(1, 78), y=float(rng.randint(10, 30)), direction=1) for _ in range(30)
         ]
         # Should complete without error
         game._check_collisions()
@@ -1981,11 +1987,11 @@ class TestTerminalResize(unittest.TestCase):
         game = Game(test_mode=True)
         game.player_projectiles = [
             Projectile(x=75, y=10.0, direction=-1),  # Will be out of bounds
-            Projectile(x=20, y=10.0, direction=-1),   # Will stay
+            Projectile(x=20, y=10.0, direction=-1),  # Will stay
         ]
         game.alien_projectiles = [
             Projectile(x=10, y=30.0, direction=1),  # Will be out of bounds (height)
-            Projectile(x=10, y=10.0, direction=1),   # Will stay
+            Projectile(x=10, y=10.0, direction=1),  # Will stay
         ]
         game.handle_resize(65, 25)  # Above minimum size
         self.assertEqual(len(game.player_projectiles), 1)
@@ -2001,6 +2007,7 @@ class TestTerminalResize(unittest.TestCase):
     def test_handle_resize_key_in_input(self):
         """Verify KEY_RESIZE is handled in handle_input."""
         import curses
+
         game = Game(test_mode=True)
         # Without a screen, KEY_RESIZE should just return True
         result = game.handle_input(curses.KEY_RESIZE)
@@ -2028,6 +2035,7 @@ class TestFrameTimer(unittest.TestCase):
     def test_fps_calculation_accuracy(self):
         """Verify average FPS is calculated correctly from frame times."""
         from invaders import FrameTimer
+
         ft = FrameTimer(window_size=10)
         # Simulate 60 FPS (16.67ms per frame)
         for _ in range(10):
@@ -2037,6 +2045,7 @@ class TestFrameTimer(unittest.TestCase):
     def test_rolling_window_behavior(self):
         """Verify old frame times are evicted when window is full."""
         from invaders import FrameTimer
+
         ft = FrameTimer(window_size=5)
         # Fill with slow frames (10 FPS)
         for _ in range(5):
@@ -2051,6 +2060,7 @@ class TestFrameTimer(unittest.TestCase):
     def test_min_max_frame_time(self):
         """Verify min and max frame time tracking."""
         from invaders import FrameTimer
+
         ft = FrameTimer(window_size=10)
         ft.record(0.010)
         ft.record(0.020)
@@ -2061,6 +2071,7 @@ class TestFrameTimer(unittest.TestCase):
     def test_variance_calculation(self):
         """Verify frame time variance is calculated."""
         from invaders import FrameTimer
+
         ft = FrameTimer(window_size=10)
         # Uniform frame times should have 0 variance
         for _ in range(5):
@@ -2075,6 +2086,7 @@ class TestFrameTimer(unittest.TestCase):
     def test_empty_frame_timer(self):
         """Verify empty FrameTimer returns sensible defaults."""
         from invaders import FrameTimer
+
         ft = FrameTimer()
         self.assertEqual(ft.average_fps, 0.0)
         self.assertEqual(ft.min_frame_time, 0.0)
@@ -2084,6 +2096,7 @@ class TestFrameTimer(unittest.TestCase):
     def test_single_frame_variance(self):
         """Variance with single frame returns 0."""
         from invaders import FrameTimer
+
         ft = FrameTimer()
         ft.record(0.016)
         self.assertEqual(ft.variance, 0.0)
@@ -2091,6 +2104,7 @@ class TestFrameTimer(unittest.TestCase):
     def test_show_fps_toggle_f1(self):
         """Verify F1 key toggles show_fps flag."""
         import curses
+
         game = Game(test_mode=True)
         self.assertFalse(game.show_fps)
         game.handle_input(curses.KEY_F1)
@@ -2101,13 +2115,14 @@ class TestFrameTimer(unittest.TestCase):
     def test_show_fps_cli_flag(self):
         """Verify --show-fps flag is parsed."""
         parser = build_argument_parser()
-        args = parser.parse_args(['--show-fps'])
+        args = parser.parse_args(["--show-fps"])
         self.assertTrue(args.show_fps)
 
     def test_frame_timer_on_game(self):
         """Verify Game has a FrameTimer instance."""
         game = Game(test_mode=True)
         from invaders import FrameTimer
+
         self.assertIsInstance(game.frame_timer, FrameTimer)
 
 
@@ -2116,38 +2131,40 @@ class TestPyprojectToml(unittest.TestCase):
 
     def test_pyproject_exists(self):
         """Verify pyproject.toml exists."""
-        self.assertTrue(os.path.exists(
-            os.path.join(os.path.dirname(__file__), 'pyproject.toml')
-        ))
+        self.assertTrue(os.path.exists(os.path.join(os.path.dirname(__file__), "pyproject.toml")))
 
     def test_package_importable(self):
         """Verify invaders module is importable."""
         import invaders
-        self.assertTrue(hasattr(invaders, 'main'))
-        self.assertTrue(hasattr(invaders, 'Game'))
-        self.assertTrue(hasattr(invaders, 'GameConfig'))
+
+        self.assertTrue(hasattr(invaders, "main"))
+        self.assertTrue(hasattr(invaders, "Game"))
+        self.assertTrue(hasattr(invaders, "GameConfig"))
 
     def test_entry_point_function_exists(self):
         """Verify the main() entry point function is callable."""
         from invaders import main as entry_main
+
         self.assertTrue(callable(entry_main))
 
     def test_pyproject_has_version(self):
         """Verify pyproject.toml has a version field."""
         import tomllib
-        toml_path = os.path.join(os.path.dirname(__file__), 'pyproject.toml')
-        with open(toml_path, 'rb') as f:
+
+        toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
+        with open(toml_path, "rb") as f:
             data = tomllib.load(f)
-        self.assertIn('version', data['project'])
-        self.assertEqual(data['project']['version'], '0.1.0')
+        self.assertIn("version", data["project"])
+        self.assertEqual(data["project"]["version"], "0.1.0")
 
     def test_pyproject_has_scripts_entry(self):
         """Verify pyproject.toml has invaders entry point."""
         import tomllib
-        toml_path = os.path.join(os.path.dirname(__file__), 'pyproject.toml')
-        with open(toml_path, 'rb') as f:
+
+        toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
+        with open(toml_path, "rb") as f:
             data = tomllib.load(f)
-        self.assertIn('invaders', data['project']['scripts'])
+        self.assertIn("invaders", data["project"]["scripts"])
 
 
 class TestCIPipeline(unittest.TestCase):
@@ -2155,33 +2172,32 @@ class TestCIPipeline(unittest.TestCase):
 
     def test_ci_yaml_exists(self):
         """Verify .github/workflows/ci.yml exists."""
-        ci_path = os.path.join(os.path.dirname(__file__),
-                               '.github', 'workflows', 'ci.yml')
+        ci_path = os.path.join(os.path.dirname(__file__), ".github", "workflows", "ci.yml")
         self.assertTrue(os.path.exists(ci_path))
 
     def test_ci_yaml_well_formed(self):
         """Verify ci.yml is valid YAML."""
         import yaml
-        ci_path = os.path.join(os.path.dirname(__file__),
-                               '.github', 'workflows', 'ci.yml')
+
+        ci_path = os.path.join(os.path.dirname(__file__), ".github", "workflows", "ci.yml")
         with open(ci_path) as f:
             data = yaml.safe_load(f)
-        self.assertIn('name', data)
+        self.assertIn("name", data)
         # PyYAML parses bare 'on' as boolean True
         self.assertIn(True, data)
-        self.assertIn('jobs', data)
-        self.assertIn('test', data['jobs'])
+        self.assertIn("jobs", data)
+        self.assertIn("test", data["jobs"])
 
     def test_ci_has_matrix_strategy(self):
         """Verify CI uses matrix strategy with multiple Python versions."""
         import yaml
-        ci_path = os.path.join(os.path.dirname(__file__),
-                               '.github', 'workflows', 'ci.yml')
+
+        ci_path = os.path.join(os.path.dirname(__file__), ".github", "workflows", "ci.yml")
         with open(ci_path) as f:
             data = yaml.safe_load(f)
-        matrix = data['jobs']['test']['strategy']['matrix']
-        self.assertIn('python-version', matrix)
-        self.assertGreaterEqual(len(matrix['python-version']), 3)
+        matrix = data["jobs"]["test"]["strategy"]["matrix"]
+        self.assertIn("python-version", matrix)
+        self.assertGreaterEqual(len(matrix["python-version"]), 3)
 
     def test_pytest_passes(self):
         """Verify python3 -m pytest passes (meta-test: if we're here, it passed)."""
@@ -2194,17 +2210,16 @@ class TestMakefile(unittest.TestCase):
 
     def test_makefile_exists(self):
         """Verify Makefile exists."""
-        makefile_path = os.path.join(os.path.dirname(__file__), 'Makefile')
+        makefile_path = os.path.join(os.path.dirname(__file__), "Makefile")
         self.assertTrue(os.path.exists(makefile_path))
 
     def test_makefile_has_required_targets(self):
         """Verify Makefile has all required targets."""
-        makefile_path = os.path.join(os.path.dirname(__file__), 'Makefile')
+        makefile_path = os.path.join(os.path.dirname(__file__), "Makefile")
         with open(makefile_path) as f:
             content = f.read()
-        for target in ['test', 'test-coverage', 'lint', 'run', 'install', 'clean']:
-            self.assertIn(f'{target}:', content,
-                         f"Missing target: {target}")
+        for target in ["test", "test-coverage", "lint", "run", "install", "clean"]:
+            self.assertIn(f"{target}:", content, f"Missing target: {target}")
 
     def test_make_test_succeeds(self):
         """Verify 'make test' runs successfully (meta-test: we're running via pytest)."""
@@ -2212,6 +2227,48 @@ class TestMakefile(unittest.TestCase):
         self.assertTrue(True)
 
 
-if __name__ == '__main__':
+class TestPreCommitAndRuff(unittest.TestCase):
+    """Step 24: Tests for pre-commit hooks and ruff linting."""
+
+    def test_pre_commit_config_exists(self):
+        """Verify .pre-commit-config.yaml exists."""
+        config_path = os.path.join(os.path.dirname(__file__), ".pre-commit-config.yaml")
+        self.assertTrue(os.path.exists(config_path))
+
+    def test_ruff_passes_on_invaders(self):
+        """Verify ruff check passes cleanly on invaders.py."""
+        import subprocess
+
+        result = subprocess.run(
+            [sys.executable, "-m", "ruff", "check", "invaders.py"],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(__file__),
+        )
+        self.assertEqual(result.returncode, 0, f"ruff errors:\n{result.stdout}")
+
+    def test_ruff_passes_on_tests(self):
+        """Verify ruff check passes cleanly on test_invaders.py."""
+        import subprocess
+
+        result = subprocess.run(
+            [sys.executable, "-m", "ruff", "check", "test_invaders.py"],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(__file__),
+        )
+        self.assertEqual(result.returncode, 0, f"ruff errors:\n{result.stdout}")
+
+    def test_pyproject_has_ruff_config(self):
+        """Verify pyproject.toml has [tool.ruff] configuration."""
+        import tomllib
+
+        toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
+        with open(toml_path, "rb") as f:
+            data = tomllib.load(f)
+        self.assertIn("ruff", data.get("tool", {}))
+
+
+if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

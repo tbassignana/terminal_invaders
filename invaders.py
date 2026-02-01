@@ -16,28 +16,28 @@ License: MIT
 """
 
 import argparse
+import atexit
 import curses
 import json
 import logging
 import os
-import sys
-import time
 import random
-import threading
-import subprocess
-import atexit
 import signal
+import subprocess
+import sys
+import threading
+import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # ============================================================================
 # LOGGING
 # ============================================================================
 
-logger = logging.getLogger('invaders')
+logger = logging.getLogger("invaders")
 
 
 def setup_logging(debug: bool = False) -> None:
@@ -47,18 +47,17 @@ def setup_logging(debug: bool = False) -> None:
         debug: If True, enable DEBUG-level logging to invaders.log.
     """
     if debug:
-        handler = logging.FileHandler('invaders.log', mode='w')
-        handler.setFormatter(logging.Formatter(
-            '%(asctime)s %(levelname)s %(name)s: %(message)s'
-        ))
+        handler = logging.FileHandler("invaders.log", mode="w")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
     else:
         logger.addHandler(logging.NullHandler())
         logger.setLevel(logging.WARNING)
 
+
 # Global audio manager reference for cleanup on crash/exit
-_audio_manager: Optional['AudioManager'] = None
+_audio_manager: Optional["AudioManager"] = None
 
 
 def _cleanup_audio():
@@ -68,9 +67,7 @@ def _cleanup_audio():
         _audio_manager.stop()
     # Also kill any stray afplay processes as a safety net
     try:
-        subprocess.run(['pkill', '-9', 'afplay'],
-                      stdout=subprocess.DEVNULL,
-                      stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-9", "afplay"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         logger.debug("Failed to kill stray afplay processes during cleanup", exc_info=True)
 
@@ -90,9 +87,11 @@ signal.signal(signal.SIGTERM, _signal_handler)
 # CONFIGURATION
 # ============================================================================
 
+
 @dataclass(frozen=True)
 class GameConfig:
     """Frozen configuration dataclass holding all game constants."""
+
     # Player
     player_start_lives: int = 5
     max_lives: int = 9
@@ -137,36 +136,37 @@ DEFAULT_CONFIG = GameConfig()
 
 # Difficulty presets — each overrides specific GameConfig fields
 DIFFICULTY_PRESETS = {
-    'easy': {
-        'player_start_lives': 7,
-        'alien_move_interval': 0.7,
-        'base_fire_probability': 0.001,
-        'max_fire_probability': 0.01,
-        'player_projectile_speed': 1.2,
-        'alien_projectile_speed': 0.3,
+    "easy": {
+        "player_start_lives": 7,
+        "alien_move_interval": 0.7,
+        "base_fire_probability": 0.001,
+        "max_fire_probability": 0.01,
+        "player_projectile_speed": 1.2,
+        "alien_projectile_speed": 0.3,
     },
-    'normal': {},  # Use all defaults
-    'hard': {
-        'player_start_lives': 3,
-        'alien_move_interval': 0.35,
-        'base_fire_probability': 0.002,
-        'max_fire_probability': 0.02,
-        'player_projectile_speed': 0.8,
-        'alien_projectile_speed': 0.6,
+    "normal": {},  # Use all defaults
+    "hard": {
+        "player_start_lives": 3,
+        "alien_move_interval": 0.35,
+        "base_fire_probability": 0.002,
+        "max_fire_probability": 0.02,
+        "player_projectile_speed": 0.8,
+        "alien_projectile_speed": 0.6,
     },
 }
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser."""
-    parser = argparse.ArgumentParser(description='Terminal Invaders — Space Invaders in your terminal')
-    parser.add_argument('--no-sound', action='store_true', help='Disable sound effects')
-    parser.add_argument('--no-music', action='store_true', help='Disable background music')
-    parser.add_argument('--debug', action='store_true', help='Enable debug logging to invaders.log')
-    parser.add_argument('--difficulty', choices=['easy', 'normal', 'hard'], default='normal',
-                        help='Difficulty preset (default: normal)')
-    parser.add_argument('--fps', type=int, default=None, help='Target FPS (default: 60)')
-    parser.add_argument('--show-fps', action='store_true', help='Display FPS counter during gameplay')
+    parser = argparse.ArgumentParser(description="Terminal Invaders — Space Invaders in your terminal")
+    parser.add_argument("--no-sound", action="store_true", help="Disable sound effects")
+    parser.add_argument("--no-music", action="store_true", help="Disable background music")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging to invaders.log")
+    parser.add_argument(
+        "--difficulty", choices=["easy", "normal", "hard"], default="normal", help="Difficulty preset (default: normal)"
+    )
+    parser.add_argument("--fps", type=int, default=None, help="Target FPS (default: 60)")
+    parser.add_argument("--show-fps", action="store_true", help="Display FPS counter during gameplay")
     return parser
 
 
@@ -174,8 +174,9 @@ def config_from_args(args: argparse.Namespace) -> GameConfig:
     """Build a GameConfig from parsed CLI arguments."""
     overrides = dict(DIFFICULTY_PRESETS.get(args.difficulty, {}))
     if args.fps is not None:
-        overrides['target_fps'] = args.fps
+        overrides["target_fps"] = args.fps
     return GameConfig(**overrides)
+
 
 # Legacy module-level constants (kept for backward compatibility)
 PLAYER_START_LIVES = DEFAULT_CONFIG.player_start_lives
@@ -203,10 +204,10 @@ PROJECTILE_ALIEN = DEFAULT_CONFIG.projectile_alien
 # Characters not in config (lists/tuples can't be in frozen dataclass easily)
 ALIEN_CHARS = [
     ["/-\\", "\\-/"],  # Type 1 animation frames
-    ["<O>", "<o>"],    # Type 2 animation frames
+    ["<O>", "<o>"],  # Type 2 animation frames
     ["/M\\", "\\W/"],  # Type 3 animation frames
 ]
-BUNKER_CHARS = ['O', 'o', '.']  # Erosion states: full, damaged, nearly destroyed
+BUNKER_CHARS = ["O", "o", "."]  # Erosion states: full, damaged, nearly destroyed
 
 # Color pairs
 COLOR_PLAYER = 1
@@ -221,8 +222,10 @@ COLOR_GAME_OVER = 6
 # ENUMS
 # ============================================================================
 
+
 class GameState(Enum):
     """Game state machine states."""
+
     MENU = auto()
     PLAYING = auto()
     PAUSED = auto()
@@ -232,6 +235,7 @@ class GameState(Enum):
 
 class GameEvent(Enum):
     """Events published via the EventBus."""
+
     ALIEN_KILLED = auto()
     PLAYER_HIT = auto()
     LEVEL_COMPLETE = auto()
@@ -268,6 +272,7 @@ class EventBus:
 # HELPER FUNCTIONS
 # ============================================================================
 
+
 def resolve_audio_path() -> str:
     """
     Resolve the audio file path using os.path.expanduser.
@@ -275,16 +280,18 @@ def resolve_audio_path() -> str:
     Returns:
         Absolute path to ~/soundtrack.mp3
     """
-    return os.path.expanduser('~/soundtrack.mp3')
+    return os.path.expanduser("~/soundtrack.mp3")
 
 
 # ============================================================================
 # DATA CLASSES
 # ============================================================================
 
+
 @dataclass
 class Player:
     """Player ship with position and lives."""
+
     x: int = 0
     y: int = 0
     lives: int = PLAYER_START_LIVES
@@ -304,6 +311,7 @@ class Player:
 @dataclass
 class Alien:
     """Individual alien with position and type."""
+
     x: int
     y: int
     alien_type: int = 0
@@ -317,6 +325,7 @@ class Alien:
 @dataclass
 class Bunker:
     """Defensive bunker that erodes on hits."""
+
     x: int
     y: int
     health: int = 3  # 3=full, 2=damaged, 1=critical, 0=destroyed
@@ -325,7 +334,7 @@ class Bunker:
     def char(self) -> str:
         """Get display character based on health."""
         if self.health <= 0:
-            return ' '
+            return " "
         return BUNKER_CHARS[3 - self.health]
 
     def hit(self) -> bool:
@@ -340,6 +349,7 @@ class Bunker:
 @dataclass
 class Projectile:
     """Projectile fired by player or alien."""
+
     x: int
     y: float
     direction: int  # -1 for up (player), 1 for down (alien)
@@ -348,6 +358,7 @@ class Projectile:
 @dataclass
 class MysteryShip:
     """UFO that crosses the top of the screen for bonus points."""
+
     x: float
     y: int = 1
     speed: float = 0.5
@@ -357,6 +368,7 @@ class MysteryShip:
 
 class PowerUpType(Enum):
     """Types of power-ups."""
+
     RAPID_FIRE = auto()
     SHIELD = auto()
     WIDE_SHOT = auto()
@@ -365,6 +377,7 @@ class PowerUpType(Enum):
 @dataclass
 class PowerUp:
     """A falling power-up pickup."""
+
     x: int
     y: float
     power_type: PowerUpType
@@ -374,6 +387,7 @@ class PowerUp:
 @dataclass
 class ActivePowerUp:
     """An active power-up effect on the player."""
+
     power_type: PowerUpType
     expires_at: float
 
@@ -382,7 +396,7 @@ class ActivePowerUp:
 # SCORE MANAGER
 # ============================================================================
 
-DEFAULT_SCORES_PATH = os.path.expanduser('~/.invaders_scores.json')
+DEFAULT_SCORES_PATH = os.path.expanduser("~/.invaders_scores.json")
 
 
 class ScoreManager:
@@ -397,7 +411,7 @@ class ScoreManager:
     def _load(self) -> None:
         """Load scores from disk."""
         try:
-            with open(self.scores_path, 'r') as f:
+            with open(self.scores_path, "r") as f:
                 self.scores = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             self.scores = []
@@ -405,7 +419,7 @@ class ScoreManager:
     def _save(self) -> None:
         """Persist scores to disk."""
         try:
-            with open(self.scores_path, 'w') as f:
+            with open(self.scores_path, "w") as f:
                 json.dump(self.scores, f, indent=2)
         except OSError:
             logger.warning("Failed to save scores to %s", self.scores_path, exc_info=True)
@@ -415,18 +429,18 @@ class ScoreManager:
         """Return the highest recorded score, or 0."""
         if not self.scores:
             return 0
-        return max(entry['score'] for entry in self.scores)
+        return max(entry["score"] for entry in self.scores)
 
     def record(self, score: int, level: int) -> None:
         """Record a finished game score and persist."""
         entry = {
-            'score': score,
-            'level': level,
-            'date': datetime.now().isoformat(),
+            "score": score,
+            "level": level,
+            "date": datetime.now().isoformat(),
         }
         self.scores.append(entry)
         # Keep only top 10
-        self.scores.sort(key=lambda e: e['score'], reverse=True)
+        self.scores.sort(key=lambda e: e["score"], reverse=True)
         self.scores = self.scores[:10]
         self._save()
 
@@ -442,6 +456,7 @@ class ScoreManager:
 # ============================================================================
 # AUDIO SYSTEM
 # ============================================================================
+
 
 class AbstractSoundBackend(ABC):
     """Abstract interface for sound playback backends."""
@@ -469,10 +484,7 @@ class MacOSSoundBackend(AbstractSoundBackend):
         def _play():
             try:
                 subprocess.run(
-                    ['afplay', '-v', str(volume), path],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=2
+                    ["afplay", "-v", str(volume), path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2
                 )
             except Exception:
                 logger.debug("MacOSSoundBackend: failed to play '%s'", path, exc_info=True)
@@ -482,19 +494,13 @@ class MacOSSoundBackend(AbstractSoundBackend):
 
     def stop(self) -> None:
         try:
-            subprocess.run(['pkill', '-9', 'afplay'],
-                          stdout=subprocess.DEVNULL,
-                          stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "afplay"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             logger.debug("MacOSSoundBackend: failed to stop sounds", exc_info=True)
 
     def is_available(self) -> bool:
         try:
-            result = subprocess.run(
-                ['which', 'afplay'],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
+            result = subprocess.run(["which", "afplay"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return result.returncode == 0
         except Exception:
             return False
@@ -515,7 +521,7 @@ class NullSoundBackend(AbstractSoundBackend):
 
 def get_sound_backend() -> AbstractSoundBackend:
     """Select the best available sound backend for the current platform."""
-    if sys.platform == 'darwin':
+    if sys.platform == "darwin":
         backend = MacOSSoundBackend()
         if backend.is_available():
             return backend
@@ -552,9 +558,7 @@ class AudioManager:
                 # Using subprocess.call blocks until playback completes
                 # Then loop restarts immediately
                 self.current_process = subprocess.Popen(
-                    ['afplay', audio_path],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
+                    ["afplay", audio_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
                 self.current_process.wait()
             except Exception:
@@ -579,9 +583,7 @@ class AudioManager:
 
         # Also kill any stray afplay processes
         try:
-            subprocess.run(['pkill', '-9', 'afplay'],
-                          stdout=subprocess.DEVNULL,
-                          stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "afplay"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             logger.debug("Failed to kill stray afplay processes", exc_info=True)
 
@@ -601,13 +603,13 @@ class SoundEffects:
 
     # macOS system sound paths
     SOUNDS = {
-        'shoot': '/System/Library/Sounds/Pop.aiff',
-        'alien_die': '/System/Library/Sounds/Bottle.aiff',
-        'player_die': '/System/Library/Sounds/Basso.aiff',
-        'level_complete': '/System/Library/Sounds/Glass.aiff',
-        'march1': '/System/Library/Sounds/Tink.aiff',
-        'march2': '/System/Library/Sounds/Pop.aiff',
-        'life_bonus': '/System/Library/Sounds/Hero.aiff',
+        "shoot": "/System/Library/Sounds/Pop.aiff",
+        "alien_die": "/System/Library/Sounds/Bottle.aiff",
+        "player_die": "/System/Library/Sounds/Basso.aiff",
+        "level_complete": "/System/Library/Sounds/Glass.aiff",
+        "march1": "/System/Library/Sounds/Tink.aiff",
+        "march2": "/System/Library/Sounds/Pop.aiff",
+        "life_bonus": "/System/Library/Sounds/Hero.aiff",
     }
 
     def __init__(self, backend: Optional[AbstractSoundBackend] = None):
@@ -634,7 +636,7 @@ class SoundEffects:
             return
         self.backend.play(self.SOUNDS[sound_name], volume)
 
-    def subscribe_to_events(self, event_bus: 'EventBus') -> None:
+    def subscribe_to_events(self, event_bus: "EventBus") -> None:
         """Subscribe sound effects to game events via the EventBus."""
         event_bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: self.play_shoot())
         event_bus.subscribe(GameEvent.ALIEN_KILLED, lambda **kw: self.play_alien_die())
@@ -643,23 +645,23 @@ class SoundEffects:
 
     def play_shoot(self):
         """Player shooting sound."""
-        self._play_async('shoot', 0.3)
+        self._play_async("shoot", 0.3)
 
     def play_alien_die(self):
         """Alien explosion sound."""
-        self._play_async('alien_die', 0.4)
+        self._play_async("alien_die", 0.4)
 
     def play_player_die(self):
         """Player death sound."""
-        self._play_async('player_die', 0.6)
+        self._play_async("player_die", 0.6)
 
     def play_level_complete(self):
         """Level completion fanfare."""
-        self._play_async('level_complete', 0.5)
+        self._play_async("level_complete", 0.5)
 
     def play_life_bonus(self):
         """Extra life awarded sound."""
-        self._play_async('life_bonus', 0.5)
+        self._play_async("life_bonus", 0.5)
 
     def update_march(self, alien_count: int, total_aliens: int):
         """
@@ -680,9 +682,9 @@ class SoundEffects:
         if current_time - self.last_march_time >= self.march_interval:
             # Alternate between two beat sounds
             if self.march_beat == 0:
-                self._play_async('march1', 0.2)
+                self._play_async("march1", 0.2)
             else:
-                self._play_async('march2', 0.2)
+                self._play_async("march2", 0.2)
 
             self.march_beat = 1 - self.march_beat
             self.last_march_time = current_time
@@ -691,6 +693,7 @@ class SoundEffects:
 # ============================================================================
 # FRAME TIMER / PERFORMANCE METRICS
 # ============================================================================
+
 
 class FrameTimer:
     """Rolling-window frame time tracker for performance metrics.
@@ -740,6 +743,7 @@ class FrameTimer:
 # SPATIAL PARTITIONING
 # ============================================================================
 
+
 class SpatialGrid:
     """Grid-based spatial index for efficient collision detection.
 
@@ -783,6 +787,7 @@ class SpatialGrid:
 # ============================================================================
 # MAIN GAME CLASS
 # ============================================================================
+
 
 class Game:
     """
@@ -1141,9 +1146,7 @@ class Game:
                     direction = random.choice([-1, 1])
                     start_x = -3.0 if direction == 1 else float(self.width + 3)
                     points = random.choice([50, 100, 150, 200, 250, 300])
-                    self.mystery_ship = MysteryShip(
-                        x=start_x, y=1, speed=0.5 * direction, points=points
-                    )
+                    self.mystery_ship = MysteryShip(x=start_x, y=1, speed=0.5 * direction, points=points)
 
     def _spawn_power_up(self, x: int, y: int) -> None:
         """Possibly spawn a power-up at the given position (10% chance)."""
@@ -1160,15 +1163,12 @@ class Game:
                 self.power_ups.remove(pu)
                 continue
             # Check player collection
-            if (abs(pu.x - self.player.x - 1) <= 1 and
-                abs(pu.y - self.player.y) <= 1):
+            if abs(pu.x - self.player.x - 1) <= 1 and abs(pu.y - self.player.y) <= 1:
                 self.power_ups.remove(pu)
                 self._activate_power_up(pu.power_type, current_time)
 
         # Expire active power-ups
-        self.active_power_ups = [
-            ap for ap in self.active_power_ups if ap.expires_at > current_time
-        ]
+        self.active_power_ups = [ap for ap in self.active_power_ups if ap.expires_at > current_time]
 
     def _activate_power_up(self, power_type: PowerUpType, current_time: float) -> None:
         """Activate a collected power-up."""
@@ -1185,9 +1185,7 @@ class Game:
 
     def _consume_shield(self) -> None:
         """Remove the shield power-up (used on hit)."""
-        self.active_power_ups = [
-            ap for ap in self.active_power_ups if ap.power_type != PowerUpType.SHIELD
-        ]
+        self.active_power_ups = [ap for ap in self.active_power_ups if ap.power_type != PowerUpType.SHIELD]
 
     def get_combo_multiplier(self) -> int:
         """Return the current combo multiplier (1x to 5x)."""
@@ -1227,9 +1225,7 @@ class Game:
 
         for alien in self.aliens:
             if random.random() < fire_prob:
-                self.alien_projectiles.append(
-                    Projectile(x=alien.x + 1, y=alien.y + 1, direction=1)
-                )
+                self.alien_projectiles.append(Projectile(x=alien.x + 1, y=alien.y + 1, direction=1))
 
     def _check_collisions(self) -> None:
         """Check all collision types using spatial partitioning.
@@ -1256,8 +1252,7 @@ class Game:
             for alien in nearby_aliens:
                 if alien not in self.aliens:
                     continue
-                if (abs(proj.x - alien.x) <= 1 and
-                    abs(proj.y - alien.y) <= 1):
+                if abs(proj.x - alien.x) <= 1 and abs(proj.y - alien.y) <= 1:
                     self.aliens.remove(alien)
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
@@ -1269,8 +1264,7 @@ class Game:
 
         # Alien projectiles vs player (single entity, no grid needed)
         for proj in self.alien_projectiles[:]:
-            if (abs(proj.x - self.player.x - 1) <= 1 and
-                proj.y >= self.player.y):
+            if abs(proj.x - self.player.x - 1) <= 1 and proj.y >= self.player.y:
                 self.alien_projectiles.remove(proj)
                 self.handle_player_damage()
                 break
@@ -1298,14 +1292,10 @@ class Game:
         # Player projectiles vs mystery ship (single entity, no grid needed)
         if self.mystery_ship and self.mystery_ship.active:
             for proj in self.player_projectiles[:]:
-                if (abs(proj.x - self.mystery_ship.x) <= 2 and
-                    abs(proj.y - self.mystery_ship.y) <= 1):
+                if abs(proj.x - self.mystery_ship.x) <= 2 and abs(proj.y - self.mystery_ship.y) <= 1:
                     pts = self.mystery_ship.points
                     self.score += pts
-                    self.mystery_score_display = (
-                        int(self.mystery_ship.x), self.mystery_ship.y, pts,
-                        time.time() + 1.0
-                    )
+                    self.mystery_score_display = (int(self.mystery_ship.x), self.mystery_ship.y, pts, time.time() + 1.0)
                     self.mystery_ship = None
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
@@ -1372,10 +1362,7 @@ class Game:
         self.height = new_height
 
         # Check minimum size
-        self.too_small = (
-            new_width < self.config.min_width or
-            new_height < self.config.min_height
-        )
+        self.too_small = new_width < self.config.min_width or new_height < self.config.min_height
 
         if self.too_small:
             return
@@ -1387,13 +1374,9 @@ class Game:
 
         # Remove projectiles that are now outside bounds
         self.player_projectiles = [
-            p for p in self.player_projectiles
-            if 0 <= p.x < self.width and 0 <= p.y < self.height
+            p for p in self.player_projectiles if 0 <= p.x < self.width and 0 <= p.y < self.height
         ]
-        self.alien_projectiles = [
-            p for p in self.alien_projectiles
-            if 0 <= p.x < self.width and 0 <= p.y < self.height
-        ]
+        self.alien_projectiles = [p for p in self.alien_projectiles if 0 <= p.x < self.width and 0 <= p.y < self.height]
 
         # Clamp alien positions
         for alien in self.aliens:
@@ -1407,7 +1390,7 @@ class Game:
         Returns:
             False if game should quit, True otherwise.
         """
-        if key == ord('q') or key == ord('Q'):
+        if key == ord("q") or key == ord("Q"):
             return False
 
         # Handle terminal resize
@@ -1423,36 +1406,34 @@ class Game:
             return True
 
         if self.state == GameState.MENU:
-            if key == ord(' ') or key == ord('\n'):
+            if key == ord(" ") or key == ord("\n"):
                 self.state = GameState.PLAYING
                 if self.audio:
                     self.audio.start()
 
         elif self.state == GameState.PLAYING:
-            if key == ord('p') or key == ord('P') or key == 27:  # P or Escape
+            if key == ord("p") or key == ord("P") or key == 27:  # P or Escape
                 self._toggle_pause()
-            elif key == curses.KEY_LEFT or key == ord('a'):
+            elif key == curses.KEY_LEFT or key == ord("a"):
                 self.player.x = max(0, self.player.x - self.config.player_speed)
-            elif key == curses.KEY_RIGHT or key == ord('d'):
+            elif key == curses.KEY_RIGHT or key == ord("d"):
                 self.player.x = min(self.width - 3, self.player.x + self.config.player_speed)
-            elif key == ord(' '):
+            elif key == ord(" "):
                 # Fire projectile
                 if len(self.player_projectiles) < 3:  # Limit active projectiles
-                    self.player_projectiles.append(
-                        Projectile(x=self.player.x + 1, y=self.player.y - 1, direction=-1)
-                    )
+                    self.player_projectiles.append(Projectile(x=self.player.x + 1, y=self.player.y - 1, direction=-1))
                     self.event_bus.publish(GameEvent.SHOT_FIRED)
 
         elif self.state == GameState.PAUSED:
-            if key == ord('p') or key == ord('P') or key == 27:  # P or Escape
+            if key == ord("p") or key == ord("P") or key == 27:  # P or Escape
                 self._toggle_pause()
 
         elif self.state == GameState.GAME_OVER:
-            if key == ord('r') or key == ord('R'):
+            if key == ord("r") or key == ord("R"):
                 self.reset_game()
 
         elif self.state == GameState.LEVEL_TRANSITION:
-            if key == ord(' ') or key == ord('\n'):
+            if key == ord(" ") or key == ord("\n"):
                 self.state = GameState.PLAYING
 
         return True
@@ -1468,7 +1449,7 @@ class Game:
         if self.too_small:
             warning = f"Terminal too small! Need {self.config.min_width}x{self.config.min_height}"
             try:
-                self.screen.addstr(0, 0, warning[:self.width - 1])
+                self.screen.addstr(0, 0, warning[: self.width - 1])
             except curses.error:
                 pass
             self.screen.refresh()
@@ -1476,9 +1457,9 @@ class Game:
 
         # Handle flash effect
         if self.flash_active:
-            self.screen.bkgd(' ', curses.color_pair(COLOR_GAME_OVER))
+            self.screen.bkgd(" ", curses.color_pair(COLOR_GAME_OVER))
         else:
-            self.screen.bkgd(' ')
+            self.screen.bkgd(" ")
 
         if self.state == GameState.MENU:
             self._render_menu()
@@ -1501,12 +1482,11 @@ class Game:
         controls = "Controls: A/D or Arrow Keys to Move, SPACE to Fire, Q to Quit"
 
         center_y = self.height // 2
-        self._safe_addstr(center_y - 2, (self.width - len(title)) // 2,
-                         title, curses.color_pair(COLOR_TEXT) | curses.A_BOLD)
-        self._safe_addstr(center_y, (self.width - len(subtitle)) // 2,
-                         subtitle, curses.color_pair(COLOR_TEXT))
-        self._safe_addstr(center_y + 2, (self.width - len(controls)) // 2,
-                         controls, curses.color_pair(COLOR_TEXT))
+        self._safe_addstr(
+            center_y - 2, (self.width - len(title)) // 2, title, curses.color_pair(COLOR_TEXT) | curses.A_BOLD
+        )
+        self._safe_addstr(center_y, (self.width - len(subtitle)) // 2, subtitle, curses.color_pair(COLOR_TEXT))
+        self._safe_addstr(center_y + 2, (self.width - len(controls)) // 2, controls, curses.color_pair(COLOR_TEXT))
 
     def _render_game(self) -> None:
         """Render the main gameplay."""
@@ -1516,10 +1496,8 @@ class Game:
         level_text = f"Level: {self.level}"
 
         self._safe_addstr(0, 2, score_text, curses.color_pair(COLOR_TEXT))
-        self._safe_addstr(0, self.width // 2 - len(level_text) // 2,
-                         level_text, curses.color_pair(COLOR_TEXT))
-        self._safe_addstr(0, self.width - len(lives_display) - 2,
-                         lives_display, curses.color_pair(COLOR_TEXT))
+        self._safe_addstr(0, self.width // 2 - len(level_text) // 2, level_text, curses.color_pair(COLOR_TEXT))
+        self._safe_addstr(0, self.width - len(lives_display) - 2, lives_display, curses.color_pair(COLOR_TEXT))
 
         # Render aliens
         for alien in self.aliens:
@@ -1529,37 +1507,34 @@ class Game:
         # Render bunkers
         for bunker in self.bunkers:
             if bunker.health > 0:
-                self._safe_addstr(bunker.y, bunker.x, bunker.char,
-                                 curses.color_pair(COLOR_BUNKER))
+                self._safe_addstr(bunker.y, bunker.x, bunker.char, curses.color_pair(COLOR_BUNKER))
 
         # Render player
-        self._safe_addstr(self.player.y, self.player.x, self.config.player_char,
-                         curses.color_pair(COLOR_PLAYER))
+        self._safe_addstr(self.player.y, self.player.x, self.config.player_char, curses.color_pair(COLOR_PLAYER))
 
         # Render projectiles
         for proj in self.player_projectiles:
-            self._safe_addstr(proj.y, proj.x, self.config.projectile_player,
-                             curses.color_pair(COLOR_PROJECTILE))
+            self._safe_addstr(proj.y, proj.x, self.config.projectile_player, curses.color_pair(COLOR_PROJECTILE))
 
         for proj in self.alien_projectiles:
-            self._safe_addstr(proj.y, proj.x, self.config.projectile_alien,
-                             curses.color_pair(COLOR_GAME_OVER))
+            self._safe_addstr(proj.y, proj.x, self.config.projectile_alien, curses.color_pair(COLOR_GAME_OVER))
 
         # FPS counter (when enabled via F1 or --show-fps)
         if self.show_fps:
             fps_text = f"FPS: {self.frame_timer.average_fps:.0f}"
-            self._safe_addstr(self.height - 1, 2, fps_text,
-                             curses.color_pair(COLOR_TEXT))
+            self._safe_addstr(self.height - 1, 2, fps_text, curses.color_pair(COLOR_TEXT))
 
     def _render_pause_overlay(self) -> None:
         """Render pause overlay on top of the game."""
         pause_text = "PAUSED"
         resume_text = "Press P or Escape to Resume"
         center_y = self.height // 2
-        self._safe_addstr(center_y, (self.width - len(pause_text)) // 2,
-                         pause_text, curses.color_pair(COLOR_TEXT) | curses.A_BOLD)
-        self._safe_addstr(center_y + 2, (self.width - len(resume_text)) // 2,
-                         resume_text, curses.color_pair(COLOR_TEXT))
+        self._safe_addstr(
+            center_y, (self.width - len(pause_text)) // 2, pause_text, curses.color_pair(COLOR_TEXT) | curses.A_BOLD
+        )
+        self._safe_addstr(
+            center_y + 2, (self.width - len(resume_text)) // 2, resume_text, curses.color_pair(COLOR_TEXT)
+        )
 
     def _render_game_over(self) -> None:
         """Render the game over screen."""
@@ -1569,11 +1544,15 @@ class Game:
         restart_text = "Press 'R' to Restart or 'Q' to Quit"
 
         center_y = self.height // 2
-        self._safe_addstr(center_y, (self.width - len(game_over_text)) // 2,
-                         game_over_text,
-                         curses.color_pair(COLOR_GAME_OVER) | curses.A_BOLD)
-        self._safe_addstr(center_y + 2, (self.width - len(restart_text)) // 2,
-                         restart_text, curses.color_pair(COLOR_TEXT))
+        self._safe_addstr(
+            center_y,
+            (self.width - len(game_over_text)) // 2,
+            game_over_text,
+            curses.color_pair(COLOR_GAME_OVER) | curses.A_BOLD,
+        )
+        self._safe_addstr(
+            center_y + 2, (self.width - len(restart_text)) // 2, restart_text, curses.color_pair(COLOR_TEXT)
+        )
 
     def _render_level_transition(self) -> None:
         """Render level transition screen with bonus lives info."""
@@ -1583,16 +1562,16 @@ class Game:
         continue_text = "Press SPACE to Continue"
 
         center_y = self.height // 2
-        self._safe_addstr(center_y - 2, (self.width - len(level_text)) // 2,
-                         level_text,
-                         curses.color_pair(COLOR_TEXT) | curses.A_BOLD)
-        self._safe_addstr(center_y, (self.width - len(bonus_text)) // 2,
-                         bonus_text,
-                         curses.color_pair(COLOR_PLAYER) | curses.A_BOLD)
-        self._safe_addstr(center_y + 1, (self.width - len(lives_text)) // 2,
-                         lives_text, curses.color_pair(COLOR_TEXT))
-        self._safe_addstr(center_y + 3, (self.width - len(continue_text)) // 2,
-                         continue_text, curses.color_pair(COLOR_TEXT))
+        self._safe_addstr(
+            center_y - 2, (self.width - len(level_text)) // 2, level_text, curses.color_pair(COLOR_TEXT) | curses.A_BOLD
+        )
+        self._safe_addstr(
+            center_y, (self.width - len(bonus_text)) // 2, bonus_text, curses.color_pair(COLOR_PLAYER) | curses.A_BOLD
+        )
+        self._safe_addstr(center_y + 1, (self.width - len(lives_text)) // 2, lives_text, curses.color_pair(COLOR_TEXT))
+        self._safe_addstr(
+            center_y + 3, (self.width - len(continue_text)) // 2, continue_text, curses.color_pair(COLOR_TEXT)
+        )
 
     def _safe_addstr(self, y, x, text: str, attr: int = 0) -> None:
         """Safely add string to screen, handling boundary issues and shake offset."""
@@ -1610,6 +1589,7 @@ class Game:
 
     def run(self) -> None:
         """Main game loop with curses."""
+
         def main(stdscr):
             # Setup curses
             self.screen = stdscr
@@ -1685,6 +1665,7 @@ class Game:
 # ENTRY POINT
 # ============================================================================
 
+
 def main():
     """Main entry point for the game."""
     parser = build_argument_parser()
@@ -1706,5 +1687,5 @@ def main():
     game.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
