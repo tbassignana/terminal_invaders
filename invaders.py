@@ -580,6 +580,27 @@ class DyingAlien:
         self.frame += 1
 
 
+# Dive-bomb attack constants
+DIVE_BOMB_CHANCE = 0.003  # Per-frame chance of a dive-bomb attack (per alien check cycle)
+DIVE_BOMB_SPEED = 0.6  # Vertical speed of diving alien (cells per frame)
+DIVE_BOMB_MIN_LEVEL = 3  # Dive-bombs start from level 3
+
+
+@dataclass
+class DivingAlien:
+    """An alien that has broken formation to dive toward the player."""
+
+    alien: Alien  # Reference to the actual alien
+    dx: float = 0.0  # Horizontal speed per frame (toward player)
+    dy: float = DIVE_BOMB_SPEED  # Vertical speed per frame (always downward)
+    float_x: float = 0.0  # Precise float x position
+    float_y: float = 0.0  # Precise float y position
+
+    def __post_init__(self):
+        self.float_x = float(self.alien.x)
+        self.float_y = float(self.alien.y)
+
+
 @dataclass
 class ScorePopup:
     """Floating score text that drifts upward on alien kill."""
@@ -1414,6 +1435,7 @@ class Game:
         self.alien_projectiles: List[Projectile] = []
         self.bunkers: List[Bunker] = []
         self.dying_aliens: List[DyingAlien] = []
+        self.diving_aliens: List[DivingAlien] = []
         self.score_popups: List[ScorePopup] = []
         self.ripple_effects: List[RippleEffect] = []
 
@@ -1713,8 +1735,9 @@ class Game:
         self.bomb_flash_until = 0
         self.bomb_clear_count = 0
 
-        # Clear dying aliens, score popups, and ripple effects
+        # Clear dying aliens, diving aliens, score popups, and ripple effects
         self.dying_aliens.clear()
+        self.diving_aliens.clear()
         self.score_popups.clear()
         self.ripple_effects.clear()
 
@@ -1797,6 +1820,10 @@ class Game:
 
         # Alien firing
         self._alien_fire()
+
+        # Dive-bomb attacks (aliens break formation)
+        self._trigger_dive_bomb()
+        self._update_diving_aliens()
 
         # Update mystery ship
         self._update_mystery_ship(current_time)
@@ -2100,6 +2127,36 @@ class Game:
                     Projectile(x=alien.x + 1, y=alien.y + 1, direction=1, proj_type=pt)
                 )
 
+    def _trigger_dive_bomb(self) -> None:
+        """Possibly start a dive-bomb attack from a random alien."""
+        if self.level < DIVE_BOMB_MIN_LEVEL or not self.aliens:
+            return
+        # Only one dive-bomb at a time
+        if self.diving_aliens:
+            return
+        if random.random() < DIVE_BOMB_CHANCE:
+            alien = random.choice(self.aliens)
+            # Calculate horizontal direction toward player
+            dx = 0.3 if self.player.x > alien.x else -0.3
+            self.diving_aliens.append(DivingAlien(alien=alien, dx=dx))
+            # Remove from formation so it moves independently
+            self.aliens.remove(alien)
+
+    def _update_diving_aliens(self) -> None:
+        """Move diving aliens diagonally toward the player."""
+        for diver in self.diving_aliens[:]:
+            diver.float_x += diver.dx
+            diver.float_y += diver.dy
+            diver.alien.x = int(diver.float_x)
+            diver.alien.y = int(diver.float_y)
+            # Off screen: remove
+            if diver.float_y >= self.height or diver.float_x < 0 or diver.float_x >= self.width:
+                self.diving_aliens.remove(diver)
+
+    def get_diving_aliens_info(self) -> list:
+        """Return diving alien positions for display/testing."""
+        return [{"x": d.alien.x, "y": d.alien.y, "dx": d.dx, "dy": d.dy} for d in self.diving_aliens]
+
     def _update_boss(self, current_time: float) -> None:
         """Update boss alien movement and firing."""
         if not self.boss or not self.boss.is_alive():
@@ -2191,6 +2248,28 @@ class Game:
                 self.alien_projectiles.remove(proj)
                 self.handle_player_damage()
                 break
+
+        # Diving aliens vs player (body collision)
+        for diver in self.diving_aliens[:]:
+            if abs(diver.alien.x - self.player.x - 1) <= 1 and abs(diver.alien.y - self.player.y) <= 1:
+                self.diving_aliens.remove(diver)
+                self.handle_player_damage()
+                break
+
+        # Player projectiles vs diving aliens
+        for proj in self.player_projectiles[:]:
+            for diver in self.diving_aliens[:]:
+                if abs(proj.x - diver.alien.x) <= 1 and abs(proj.y - diver.alien.y) <= 1:
+                    pts = (diver.alien.alien_type + 1) * 10
+                    self.score += pts
+                    self.total_kills += 1
+                    self.score_popups.append(
+                        ScorePopup(x=float(diver.alien.x), y=float(diver.alien.y), text=f"+{pts}")
+                    )
+                    self.diving_aliens.remove(diver)
+                    if proj in self.player_projectiles:
+                        self.player_projectiles.remove(proj)
+                    break
 
         # Player projectiles vs bunkers (spatial lookup)
         for proj in self.player_projectiles[:]:
@@ -2984,6 +3063,12 @@ class Game:
             if frenzy:
                 attr |= curses.A_BOLD
             self._safe_addstr(alien.y, alien.x, char, attr)
+
+        # Render diving aliens (bold, blinking to stand out from formation)
+        for diver in self.diving_aliens:
+            char = ALIEN_CHARS[diver.alien.alien_type][self.alien_animation_frame]
+            attr = curses.color_pair(COLOR_GAME_OVER) | curses.A_BOLD
+            self._safe_addstr(diver.alien.y, diver.alien.x, char, attr)
 
         # Render ripple effects (~ line fading bold→dim on alien descent)
         for ripple in self.ripple_effects:

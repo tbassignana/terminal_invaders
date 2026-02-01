@@ -64,6 +64,8 @@ from invaders import (
     DEATH_ANIM_CHARS,
     DEFAULT_CONFIG,
     DEFAULT_EXPLOSION_CONFIG,
+    DIVE_BOMB_MIN_LEVEL,
+    DIVE_BOMB_SPEED,
     FORMATION_FUNCS,
     FORMATION_NAMES,
     LAST_STAND_FIRE_SLOT_MULT,
@@ -86,6 +88,7 @@ from invaders import (
     Bunker,
     Collectible,
     ComboText,
+    DivingAlien,
     DyingAlien,
     EventBus,
     Game,
@@ -5514,6 +5517,114 @@ class TestAlienProjectileVariety(unittest.TestCase):
         game._check_collisions()
         # Heavy does 3 damage to a 3-HP bunker → destroyed
         self.assertEqual(bunker.health, 0)
+
+
+class TestAlienDiveBomb(unittest.TestCase):
+    """Tests for the alien dive-bomb attack mechanic."""
+
+    def _make_game(self, level=5):
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.level = level
+        game.width = 80
+        game.height = 30
+        game.player.x = 40
+        game.player.y = 25
+        return game
+
+    def test_dive_bomb_min_level(self):
+        """Dive-bombs don't trigger below minimum level."""
+        game = self._make_game(level=1)
+        game.aliens = [Alien(x=20, y=5, alien_type=0)]
+        random.seed(42)
+        for _ in range(100):
+            game._trigger_dive_bomb()
+        self.assertEqual(len(game.diving_aliens), 0)
+
+    def test_dive_bomb_triggers_at_level(self):
+        """Dive-bombs can trigger at minimum level with forced random."""
+        game = self._make_game(level=DIVE_BOMB_MIN_LEVEL)
+        game.aliens = [Alien(x=20, y=5, alien_type=0)]
+        with unittest.mock.patch("invaders.random.random", return_value=0.001):
+            game._trigger_dive_bomb()
+        self.assertEqual(len(game.diving_aliens), 1)
+
+    def test_dive_bomb_removes_from_formation(self):
+        """Triggering dive-bomb removes alien from formation."""
+        game = self._make_game()
+        alien = Alien(x=20, y=5, alien_type=0)
+        game.aliens = [alien]
+        with unittest.mock.patch("invaders.random.random", return_value=0.001):
+            with unittest.mock.patch("invaders.random.choice", return_value=alien):
+                game._trigger_dive_bomb()
+        self.assertEqual(len(game.aliens), 0)
+        self.assertEqual(len(game.diving_aliens), 1)
+
+    def test_one_dive_at_a_time(self):
+        """Only one dive-bomb attack at a time."""
+        game = self._make_game()
+        game.aliens = [Alien(x=20, y=5, alien_type=0), Alien(x=30, y=5, alien_type=1)]
+        game.diving_aliens = [DivingAlien(alien=Alien(x=10, y=10, alien_type=0))]
+        with unittest.mock.patch("invaders.random.random", return_value=0.001):
+            game._trigger_dive_bomb()
+        self.assertEqual(len(game.diving_aliens), 1)
+
+    def test_diving_alien_moves_down(self):
+        """Diving alien moves downward each update (float tracking)."""
+        game = self._make_game()
+        alien = Alien(x=20, y=5, alien_type=0)
+        diver = DivingAlien(alien=alien)
+        game.diving_aliens = [diver]
+        start_float_y = diver.float_y
+        game._update_diving_aliens()
+        self.assertGreater(diver.float_y, start_float_y)
+
+    def test_diving_alien_removed_off_screen(self):
+        """Diving alien is removed when it goes off screen."""
+        game = self._make_game()
+        alien = Alien(x=20, y=29, alien_type=0)
+        diver = DivingAlien(alien=alien, dy=1.0)  # Speed of 1.0 to go past height=30
+        game.diving_aliens = [diver]
+        game._update_diving_aliens()
+        self.assertEqual(len(game.diving_aliens), 0)
+
+    def test_diving_alien_damages_player(self):
+        """Diving alien hitting player causes damage."""
+        game = self._make_game()
+        initial_lives = game.player.lives
+        alien = Alien(x=game.player.x + 1, y=game.player.y, alien_type=0)
+        game.diving_aliens = [DivingAlien(alien=alien)]
+        game._check_collisions()
+        self.assertLess(game.player.lives, initial_lives)
+
+    def test_player_can_shoot_diving_alien(self):
+        """Player projectile can hit a diving alien for score."""
+        game = self._make_game()
+        alien = Alien(x=20, y=10, alien_type=1)
+        game.diving_aliens = [DivingAlien(alien=alien)]
+        game.player_projectiles = [Projectile(x=20, y=10, direction=-1)]
+        initial_score = game.score
+        game._check_collisions()
+        self.assertEqual(len(game.diving_aliens), 0)
+        self.assertGreater(game.score, initial_score)
+
+    def test_get_diving_aliens_info(self):
+        """get_diving_aliens_info returns position data."""
+        game = self._make_game()
+        alien = Alien(x=20, y=10, alien_type=0)
+        diver = DivingAlien(alien=alien, dx=0.3, dy=DIVE_BOMB_SPEED)
+        game.diving_aliens = [diver]
+        info = game.get_diving_aliens_info()
+        self.assertEqual(len(info), 1)
+        self.assertEqual(info[0]["x"], 20)
+        self.assertEqual(info[0]["y"], 10)
+
+    def test_diving_aliens_reset_on_game_reset(self):
+        """Diving aliens are cleared on game reset."""
+        game = self._make_game()
+        game.diving_aliens = [DivingAlien(alien=Alien(x=10, y=10, alien_type=0))]
+        game.reset_game()
+        self.assertEqual(len(game.diving_aliens), 0)
 
 
 if __name__ == "__main__":
