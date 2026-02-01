@@ -16,6 +16,7 @@ License: MIT
 """
 
 import curses
+import json
 import logging
 import os
 import sys
@@ -26,6 +27,7 @@ import subprocess
 import atexit
 import signal
 from abc import ABC, abstractmethod
+from datetime import datetime
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
@@ -263,6 +265,67 @@ class Projectile:
     x: int
     y: float
     direction: int  # -1 for up (player), 1 for down (alien)
+
+
+# ============================================================================
+# SCORE MANAGER
+# ============================================================================
+
+DEFAULT_SCORES_PATH = os.path.expanduser('~/.invaders_scores.json')
+
+
+class ScoreManager:
+    """Tracks current score, high score, and persists top 10 scores."""
+
+    def __init__(self, scores_path: str = DEFAULT_SCORES_PATH):
+        self.scores_path = scores_path
+        self.current_score = 0
+        self.scores: List[Dict] = []
+        self._load()
+
+    def _load(self) -> None:
+        """Load scores from disk."""
+        try:
+            with open(self.scores_path, 'r') as f:
+                self.scores = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.scores = []
+
+    def _save(self) -> None:
+        """Persist scores to disk."""
+        try:
+            with open(self.scores_path, 'w') as f:
+                json.dump(self.scores, f, indent=2)
+        except OSError:
+            logger.warning("Failed to save scores to %s", self.scores_path, exc_info=True)
+
+    @property
+    def high_score(self) -> int:
+        """Return the highest recorded score, or 0."""
+        if not self.scores:
+            return 0
+        return max(entry['score'] for entry in self.scores)
+
+    def record(self, score: int, level: int) -> None:
+        """Record a finished game score and persist."""
+        entry = {
+            'score': score,
+            'level': level,
+            'date': datetime.now().isoformat(),
+        }
+        self.scores.append(entry)
+        # Keep only top 10
+        self.scores.sort(key=lambda e: e['score'], reverse=True)
+        self.scores = self.scores[:10]
+        self._save()
+
+    def reset_current(self) -> None:
+        """Reset current score (for a new game)."""
+        self.current_score = 0
+
+    def add(self, points: int) -> None:
+        """Add points to the current score."""
+        self.current_score += points
 
 
 # ============================================================================

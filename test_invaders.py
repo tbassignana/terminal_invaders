@@ -16,6 +16,7 @@ import os
 import sys
 
 # Import the game module (will be created next)
+import tempfile
 from invaders import (
     GameState,
     GameConfig,
@@ -23,6 +24,7 @@ from invaders import (
     Player,
     Alien,
     Projectile,
+    ScoreManager,
     Game,
     AbstractSoundBackend,
     MacOSSoundBackend,
@@ -456,6 +458,55 @@ class TestLogging(unittest.TestCase):
         finally:
             os.chdir(old_cwd)
             self.logger.handlers.clear()
+
+
+class TestScoreManager(unittest.TestCase):
+    """Step 5: Tests for ScoreManager with high-score persistence."""
+
+    def test_score_tracking(self):
+        """Verify add() accumulates points."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sm = ScoreManager(scores_path=os.path.join(tmpdir, 'scores.json'))
+            sm.add(100)
+            sm.add(50)
+            self.assertEqual(sm.current_score, 150)
+
+    def test_file_persistence(self):
+        """Verify scores are saved to and loaded from disk."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, 'scores.json')
+            sm = ScoreManager(scores_path=path)
+            sm.record(500, level=3)
+            sm.record(300, level=2)
+
+            # Load fresh instance
+            sm2 = ScoreManager(scores_path=path)
+            self.assertEqual(len(sm2.scores), 2)
+            self.assertEqual(sm2.high_score, 500)
+
+    def test_high_score_ranking(self):
+        """Verify top 10 ranking and ordering."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, 'scores.json')
+            sm = ScoreManager(scores_path=path)
+            for i in range(15):
+                sm.record(i * 100, level=1)
+            self.assertEqual(len(sm.scores), 10)
+            self.assertEqual(sm.scores[0]['score'], 1400)
+
+    def test_score_reset(self):
+        """Verify reset_current sets current_score to 0."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sm = ScoreManager(scores_path=os.path.join(tmpdir, 'scores.json'))
+            sm.add(999)
+            sm.reset_current()
+            self.assertEqual(sm.current_score, 0)
+
+    def test_high_score_empty(self):
+        """Verify high_score returns 0 when no scores exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sm = ScoreManager(scores_path=os.path.join(tmpdir, 'scores.json'))
+            self.assertEqual(sm.high_score, 0)
 
 
 class TestSoundBackend(unittest.TestCase):
