@@ -1114,6 +1114,10 @@ class Game:
         self.shake_offset_x: int = 0
         self.shake_offset_y: int = 0
 
+        # Invincibility (i-frames after taking damage)
+        self.invincible_until: float = 0
+        self.invincibility_duration: float = 2.0  # seconds of blink + i-frames
+
         # Power-ups
         self.power_ups: List[PowerUp] = []
         self.active_power_ups: List[ActivePowerUp] = []
@@ -1221,15 +1225,24 @@ class Game:
 
         return min(probability, cfg.max_fire_probability)
 
+    def is_invincible(self) -> bool:
+        """Return True if the player is currently in i-frames (invincible after damage)."""
+        return time.time() < self.invincible_until
+
     def handle_player_damage(self) -> None:
         """
         Handle player taking damage from alien projectile.
+        - Respects i-frames (invincibility window after previous hit)
         - Decrements life
-        - Triggers flash effect
+        - Triggers flash effect and invincibility blink
         - Clears projectiles
         - Resets position
         - Checks for game over
         """
+        # I-frames: ignore damage while invincible
+        if self.is_invincible():
+            return
+
         # Shield absorbs one hit
         if self.has_power_up(PowerUpType.SHIELD):
             self._consume_shield()
@@ -1248,6 +1261,9 @@ class Game:
             self.flash_active = True
             self.flash_color = COLOR_GAME_OVER  # Red
             self.flash_end_time = time.time() + 0.2
+
+            # Activate invincibility blink (2s i-frames)
+            self.invincible_until = time.time() + self.invincibility_duration
 
             # Screen shake (not in test_mode)
             if not self.test_mode:
@@ -1311,6 +1327,9 @@ class Game:
         self.dying_aliens.clear()
         self.score_popups.clear()
         self.ripple_effects.clear()
+
+        # Reset invincibility
+        self.invincible_until = 0
 
         # Reset combo
         self.combo_count = 0
@@ -2004,8 +2023,13 @@ class Game:
         for i, label in enumerate(hud_info):
             self._safe_addstr(0, self.width - 30 - i * 8, label, curses.color_pair(COLOR_POWERUP) | curses.A_BOLD)
 
-        # Render player
-        self._safe_addstr(self.player.y, self.player.x, self.config.player_char, curses.color_pair(COLOR_PLAYER))
+        # Render player (blink during invincibility i-frames)
+        player_visible = True
+        if self.is_invincible():
+            # Blink at ~4 Hz: visible every other 1/8s cycle
+            player_visible = int(time.time() * 8) % 2 == 0
+        if player_visible:
+            self._safe_addstr(self.player.y, self.player.x, self.config.player_char, curses.color_pair(COLOR_PLAYER))
 
         # Render player thrust/engine animation
         thrust_y = self.player.y + 1

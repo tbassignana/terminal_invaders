@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 
 try:
     import tomllib
@@ -3314,6 +3315,106 @@ class TestRippleEffect(unittest.TestCase):
         game.test_mode = False  # Enable bunker init path
         game.reset_game()
         self.assertGreater(len(game.bunkers), 0, "Bunkers should be initialized")
+
+
+class TestPlayerInvincibilityBlink(unittest.TestCase):
+    """Step 41: Player invincibility blink after taking damage (2s blink + i-frames)."""
+
+    def test_is_invincible_false_by_default(self):
+        """Player is not invincible at game start."""
+        game = Game(test_mode=True)
+        self.assertFalse(game.is_invincible())
+
+    def test_invincibility_activated_on_damage(self):
+        """Taking damage (with lives remaining) activates invincibility."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.player.lives = 3
+        game.handle_player_damage()
+        self.assertTrue(game.is_invincible())
+        self.assertEqual(game.player.lives, 2)
+
+    def test_invincibility_duration_is_2_seconds(self):
+        """Invincibility lasts 2 seconds by default."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.invincibility_duration, 2.0)
+
+    def test_iframes_block_second_hit(self):
+        """During invincibility, a second hit is ignored (i-frames)."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.player.lives = 3
+        game.handle_player_damage()  # First hit: 3 → 2
+        game.handle_player_damage()  # Second hit: blocked by i-frames
+        self.assertEqual(game.player.lives, 2, "Second hit should be blocked by i-frames")
+
+    def test_invincibility_expires(self):
+        """After invincibility expires, player can be hit again."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.player.lives = 3
+        game.handle_player_damage()  # First hit
+        # Manually expire invincibility
+        game.invincible_until = 0
+        self.assertFalse(game.is_invincible())
+        game.handle_player_damage()  # Should connect
+        self.assertEqual(game.player.lives, 1)
+
+    def test_invincibility_cleared_on_reset(self):
+        """reset_game() clears invincibility."""
+        game = Game(test_mode=True)
+        game.invincible_until = time.time() + 10  # Force invincible
+        game.reset_game()
+        self.assertFalse(game.is_invincible())
+
+    def test_no_invincibility_on_game_over(self):
+        """Invincibility is not set when player dies (lives reach 0)."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.player.lives = 1
+        game.handle_player_damage()
+        self.assertEqual(game.state, GameState.GAME_OVER)
+        self.assertEqual(game.invincible_until, 0, "No invincibility on death")
+
+    def test_scaled_bunker_health_decreases_with_level(self):
+        """Bunker health reduces every 5 levels, minimum 1."""
+        game = Game(test_mode=True)
+        game.level = 1
+        self.assertEqual(game.get_scaled_bunker_health(), 3)
+        game.level = 6
+        self.assertEqual(game.get_scaled_bunker_health(), 2)
+        game.level = 11
+        self.assertEqual(game.get_scaled_bunker_health(), 1)
+        game.level = 20
+        self.assertEqual(game.get_scaled_bunker_health(), 1)
+
+    def test_menu_start_triggers_audio(self):
+        """Pressing SPACE in MENU starts audio when audio manager is set."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        mock_audio = unittest.mock.MagicMock()
+        game.audio = mock_audio
+        game.handle_input(ord(" "))
+        mock_audio.start.assert_called_once()
+
+    def test_menu_start_no_audio_when_none(self):
+        """Pressing SPACE in MENU works without audio manager."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.audio = None
+        game.handle_input(ord(" "))
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_sound_effects_unavailable_sound_skips_play(self):
+        """SoundEffects skips playing when sound file is marked unavailable."""
+        backend = NullSoundBackend()
+        sfx = SoundEffects(backend=backend)
+        sfx.enabled = True
+        # Mark all sounds as unavailable
+        for key in sfx.available_sounds:
+            sfx.available_sounds[key] = False
+        # Should return early at the available_sounds check (line 873)
+        sfx._play_async("shoot")  # Known sound name, but marked unavailable
 
 
 if __name__ == "__main__":
