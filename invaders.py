@@ -426,6 +426,24 @@ class ScorePopup:
 
 
 @dataclass
+class RippleEffect:
+    """A horizontal wave/ripple line triggered when aliens descend."""
+
+    y: int  # Row where the ripple appears
+    age: float = 0.0
+    lifetime: float = 0.4  # Fades over 0.4 seconds
+
+    @property
+    def finished(self) -> bool:
+        """Return True when the ripple has fully faded."""
+        return self.age >= self.lifetime
+
+    def update(self, dt: float) -> None:
+        """Age the ripple effect."""
+        self.age += dt
+
+
+@dataclass
 class Bunker:
     """Defensive bunker that erodes on hits."""
 
@@ -1057,6 +1075,7 @@ class Game:
         self.bunkers: List[Bunker] = []
         self.dying_aliens: List[DyingAlien] = []
         self.score_popups: List[ScorePopup] = []
+        self.ripple_effects: List[RippleEffect] = []
 
         # Animation state
         self.alien_animation_frame = 0
@@ -1288,9 +1307,10 @@ class Game:
         self.power_ups.clear()
         self.active_power_ups.clear()
 
-        # Clear dying aliens and score popups
+        # Clear dying aliens, score popups, and ripple effects
         self.dying_aliens.clear()
         self.score_popups.clear()
+        self.ripple_effects.clear()
 
         # Reset combo
         self.combo_count = 0
@@ -1387,6 +1407,12 @@ class Game:
             if popup.finished:
                 self.score_popups.remove(popup)
 
+        # Update ripple effects (fade and cull)
+        for ripple in self.ripple_effects[:]:
+            ripple.update(dt)
+            if ripple.finished:
+                self.ripple_effects.remove(ripple)
+
         # Check invasion
         self.check_invasion()
 
@@ -1411,12 +1437,17 @@ class Game:
         # Change direction at edges
         if max_x >= self.width - 4 and self.alien_direction > 0:
             self.alien_direction = -1
+            max_y = max(a.y for a in self.aliens)
             for alien in self.aliens:
                 alien.y += 1
+            # Trigger ripple at the formation's new lowest row
+            self.ripple_effects.append(RippleEffect(y=max_y + 1))
         elif min_x <= 2 and self.alien_direction < 0:
             self.alien_direction = 1
+            max_y = max(a.y for a in self.aliens)
             for alien in self.aliens:
                 alien.y += 1
+            self.ripple_effects.append(RippleEffect(y=max_y + 1))
         else:
             for alien in self.aliens:
                 alien.x += self.alien_direction
@@ -1918,6 +1949,18 @@ class Game:
             if frenzy:
                 attr |= curses.A_BOLD
             self._safe_addstr(alien.y, alien.x, char, attr)
+
+        # Render ripple effects (~ line fading bold→dim on alien descent)
+        for ripple in self.ripple_effects:
+            progress = ripple.age / ripple.lifetime if ripple.lifetime > 0 else 1.0
+            if progress < 0.33:
+                attr = curses.color_pair(COLOR_ALIEN) | curses.A_BOLD
+            elif progress < 0.66:
+                attr = curses.color_pair(COLOR_ALIEN)
+            else:
+                attr = curses.color_pair(COLOR_ALIEN) | curses.A_DIM
+            ripple_line = "~" * min(self.width - 3, self.width)
+            self._safe_addstr(ripple.y, 1, ripple_line, attr)
 
         # Render mystery ship (wider sprite with blink effect)
         if self.mystery_ship and self.mystery_ship.active:

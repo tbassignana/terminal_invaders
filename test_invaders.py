@@ -69,6 +69,7 @@ from invaders import (
     PowerUp,
     PowerUpType,
     Projectile,
+    RippleEffect,
     ScoreManager,
     ScorePopup,
     SoundEffects,
@@ -3223,6 +3224,96 @@ class TestScreenFlashOnLevelComplete(unittest.TestCase):
         game.flash_end_time = time.time() - 1  # Already expired
         game.update()
         self.assertFalse(game.flash_active)
+
+
+class TestRippleEffect(unittest.TestCase):
+    """Tests for wave/ripple effect on alien formation descent (Step 40)."""
+
+    def test_ripple_created_on_alien_descent(self):
+        """Verify ripple effect is created when aliens descend (change direction)."""
+        game = Game(test_mode=True)
+        # Place aliens at right edge to trigger descent
+        game.aliens = [Alien(x=game.width - 3, y=5, alien_type=0)]
+        game.alien_direction = 1
+        game._move_aliens()
+        self.assertEqual(len(game.ripple_effects), 1)
+
+    def test_ripple_at_correct_row(self):
+        """Verify ripple appears at the formation's lowest row + 1."""
+        game = Game(test_mode=True)
+        game.aliens = [
+            Alien(x=game.width - 3, y=5, alien_type=0),
+            Alien(x=game.width - 5, y=8, alien_type=1),
+        ]
+        game.alien_direction = 1
+        game._move_aliens()
+        # Ripple should be at max_y (8) + 1 = 9
+        self.assertEqual(game.ripple_effects[0].y, 9)
+
+    def test_ripple_ages_and_expires(self):
+        """Verify RippleEffect ages and reports finished after lifetime."""
+        ripple = RippleEffect(y=5)
+        self.assertFalse(ripple.finished)
+        ripple.update(0.4)
+        self.assertTrue(ripple.finished)
+
+    def test_ripple_culled_in_update(self):
+        """Verify expired ripples are removed during game update."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.ripple_effects = [RippleEffect(y=5, age=0.5, lifetime=0.4)]
+        game.update()
+        self.assertEqual(len(game.ripple_effects), 0)
+
+    def test_ripple_created_on_left_edge_descent(self):
+        """Verify ripple when aliens hit left edge too."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=1, y=5, alien_type=0)]
+        game.alien_direction = -1
+        game._move_aliens()
+        self.assertEqual(len(game.ripple_effects), 1)
+
+    def test_ripple_cleared_on_reset(self):
+        """Verify reset_game clears ripple effects."""
+        game = Game(test_mode=True)
+        game.ripple_effects.append(RippleEffect(y=10))
+        game.reset_game()
+        self.assertEqual(len(game.ripple_effects), 0)
+
+    def test_non_expired_ripple_persists_through_update(self):
+        """Verify a fresh ripple survives a single update cycle."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        fresh = RippleEffect(y=5, age=0.0, lifetime=0.4)
+        game.ripple_effects = [fresh]
+        game.update()
+        self.assertEqual(len(game.ripple_effects), 1, "Non-expired ripple should persist")
+        self.assertGreater(game.ripple_effects[0].age, 0, "Ripple should have aged")
+
+    def test_menu_to_playing_via_handle_input(self):
+        """Verify pressing SPACE in MENU transitions to PLAYING state."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        result = game.handle_input(ord(" "))
+        self.assertTrue(result)
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_handle_player_damage_sets_shake_when_not_test_mode(self):
+        """Screen shake is enabled when test_mode is False."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.player.lives = 3
+        game.test_mode = False  # Enable shake path
+        game.handle_player_damage()
+        self.assertGreater(game.shake_end_time, 0, "Shake should be activated")
+
+    def test_reset_game_inits_bunkers_when_not_test_mode(self):
+        """reset_game() initializes bunkers when test_mode is False."""
+        game = Game(test_mode=True)
+        game.bunkers = []
+        game.test_mode = False  # Enable bunker init path
+        game.reset_game()
+        self.assertGreater(len(game.bunkers), 0, "Bunkers should be initialized")
 
 
 if __name__ == "__main__":
