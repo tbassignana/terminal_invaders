@@ -1765,8 +1765,9 @@ class Game:
             self.alien_animation_frame = 1 - self.alien_animation_frame
             self.last_animation_time = current_time
 
-        # Move aliens
-        if current_time - self.last_alien_move_time >= self.alien_move_interval:
+        # Move aliens (speed increases as more aliens die — classic SI acceleration)
+        effective_interval = self.get_effective_move_interval()
+        if current_time - self.last_alien_move_time >= effective_interval:
             self._move_aliens()
             self.last_alien_move_time = current_time
 
@@ -2276,6 +2277,20 @@ class Game:
             "sprite": self.boss.get_display(),
             "alive": self.boss.is_alive(),
         }
+
+    def get_effective_move_interval(self) -> float:
+        """Return the current alien move interval with SI-style acceleration.
+
+        As aliens are destroyed, remaining aliens move faster.
+        At full count: base interval. At 1 alien: 20% of base interval.
+        """
+        total = self.initial_alien_count or 1
+        remaining = max(len(self.aliens), 1)
+        # Linear interpolation: ratio goes from 1.0 (all alive) to ~0.0 (all dead)
+        ratio = remaining / total
+        # Scale factor: 1.0 at full → 0.2 at nearly empty
+        speed_factor = 0.2 + 0.8 * ratio
+        return max(0.05, self.alien_move_interval * speed_factor)
 
     def get_wave_info(self) -> dict:
         """Return current wave state for display/testing."""

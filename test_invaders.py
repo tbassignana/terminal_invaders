@@ -5190,6 +5190,55 @@ class TestCollectibleCoins(unittest.TestCase):
         self.assertLess(COLLECTIBLE_DROP_CHANCE, 1)
 
 
+class TestProgressiveAlienSpeed(unittest.TestCase):
+    """Step 63: Progressive alien speed increase within a level."""
+
+    def test_effective_interval_at_full_count(self):
+        """At full alien count, effective interval equals base interval."""
+        game = Game(test_mode=True)
+        interval = game.get_effective_move_interval()
+        self.assertAlmostEqual(interval, game.alien_move_interval, delta=0.01)
+
+    def test_effective_interval_decreases_with_fewer_aliens(self):
+        """Effective interval decreases as aliens are killed."""
+        game = Game(test_mode=True)
+        full_interval = game.get_effective_move_interval()
+        game.aliens = game.aliens[:len(game.aliens) // 2]
+        half_interval = game.get_effective_move_interval()
+        self.assertLess(half_interval, full_interval)
+
+    def test_effective_interval_fastest_at_one_alien(self):
+        """With one alien left, interval is at minimum (20% of base)."""
+        game = Game(test_mode=True)
+        game.aliens = game.aliens[:1]
+        interval = game.get_effective_move_interval()
+        # Should be close to 20% of base (with small margin from the +1 remaining)
+        self.assertLess(interval, game.alien_move_interval * 0.4)
+        self.assertGreaterEqual(interval, 0.05)  # Never below absolute minimum
+
+    def test_effective_interval_has_minimum(self):
+        """Effective interval never goes below 0.05."""
+        game = Game(test_mode=True)
+        game.alien_move_interval = 0.01  # Very fast base
+        game.aliens = game.aliens[:1]
+        interval = game.get_effective_move_interval()
+        self.assertGreaterEqual(interval, 0.05)
+
+    def test_speed_scales_linearly(self):
+        """Speed scales linearly between full and near-empty."""
+        game = Game(test_mode=True)
+        total = len(game.aliens)
+        intervals = []
+        for frac in [1.0, 0.75, 0.5, 0.25]:
+            count = max(1, int(total * frac))
+            game.aliens = game.aliens[:count]
+            intervals.append(game.get_effective_move_interval())
+            game._init_aliens()  # Reset for next iteration
+        # Each should be less than the previous
+        for i in range(1, len(intervals)):
+            self.assertLessEqual(intervals[i], intervals[i - 1])
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)
