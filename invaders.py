@@ -1339,6 +1339,17 @@ class Game:
                     multiplier = self._register_kill(current_time)
                     self.score += 10 * (3 - alien.alien_type) * multiplier
                     self._spawn_power_up(alien.x, alien.y)
+                    # Spawn explosion particles at alien death position
+                    if not self.test_mode:
+                        self.particle_system.spawn(
+                            x=float(alien.x),
+                            y=float(alien.y),
+                            count=random.randint(5, 8),
+                            chars="*+.'`",
+                            color_pair=COLOR_ALIEN,
+                            speed_range=(2.0, 6.0),
+                            lifetime_range=(0.3, 0.5),
+                        )
                     self.event_bus.publish(GameEvent.ALIEN_KILLED, alien_type=alien.alien_type)
                     break
 

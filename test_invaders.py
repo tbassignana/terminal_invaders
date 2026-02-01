@@ -27,6 +27,7 @@ from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
 
 from invaders import (
+    COLOR_ALIEN,
     DEFAULT_CONFIG,
     PLAYER_START_LIVES,
     AbstractSoundBackend,
@@ -2436,6 +2437,74 @@ class TestParticleSystem(unittest.TestCase):
         self.assertEqual(len(game.particle_system.particles), 5)
         game.reset_game()
         self.assertEqual(len(game.particle_system.particles), 0)
+
+
+class TestExplosionParticlesOnAlienDeath(unittest.TestCase):
+    """Tests for explosion particles spawned when aliens are killed (Step 27)."""
+
+    def _kill_alien_with_particles(self):
+        """Helper: set up a game and kill an alien, returning the game object.
+
+        Uses test_mode=False-like behavior for particles by temporarily
+        unsetting test_mode during collision check.
+        """
+        game = Game(test_mode=True)
+        # Place an alien and a player projectile at the same position
+        game.aliens = [Alien(x=10, y=5, alien_type=1)]
+        game.player_projectiles = [Projectile(x=10, y=5, direction=-1)]
+        # Temporarily disable test_mode so particles spawn during collision
+        game.test_mode = False
+        game._check_collisions()
+        game.test_mode = True
+        return game
+
+    def test_particles_spawn_on_alien_kill(self):
+        """Verify particle burst is created when an alien is destroyed."""
+        game = self._kill_alien_with_particles()
+        self.assertGreater(
+            len(game.particle_system.particles), 0,
+            "Particles should spawn when an alien is killed",
+        )
+
+    def test_particle_count_in_range(self):
+        """Verify 5-8 particles spawn per alien kill."""
+        # Run multiple times to check the range (randomized)
+        counts = set()
+        for _ in range(50):
+            game = self._kill_alien_with_particles()
+            counts.add(len(game.particle_system.particles))
+        self.assertTrue(all(5 <= c <= 8 for c in counts), f"Particle counts {counts} should all be in [5,8]")
+
+    def test_particles_inherit_alien_color(self):
+        """Verify explosion particles use the alien's color pair."""
+        game = self._kill_alien_with_particles()
+        for p in game.particle_system.particles:
+            self.assertEqual(
+                p.color_pair, COLOR_ALIEN,
+                "Particle color_pair should match COLOR_ALIEN",
+            )
+
+    def test_particles_use_explosion_characters(self):
+        """Verify explosion particle chars come from the expected character set."""
+        game = self._kill_alien_with_particles()
+        expected_chars = set("*+.'`")
+        for p in game.particle_system.particles:
+            self.assertIn(p.char, expected_chars, f"Particle char '{p.char}' not in explosion set")
+
+    def test_particles_have_short_lifetime(self):
+        """Verify explosion particles have lifetimes in the 0.3-0.5s range."""
+        game = self._kill_alien_with_particles()
+        for p in game.particle_system.particles:
+            self.assertGreaterEqual(p.lifetime, 0.3)
+            self.assertLessEqual(p.lifetime, 0.5)
+
+    def test_no_particles_in_test_mode(self):
+        """Verify that in normal test_mode, no particles spawn on alien kill."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=5, alien_type=0)]
+        game.player_projectiles = [Projectile(x=10, y=5, direction=-1)]
+        game._check_collisions()
+        self.assertEqual(len(game.particle_system.particles), 0, "test_mode should skip particle spawning")
 
 
 if __name__ == "__main__":
