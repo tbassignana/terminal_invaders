@@ -5350,6 +5350,78 @@ class TestLastStandMechanic(unittest.TestCase):
         self.assertFalse(game.is_last_stand())
 
 
+class TestBombPowerUp(unittest.TestCase):
+    """Tests for the screen-clearing bomb power-up."""
+
+    def _make_game(self):
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        return game
+
+    def test_bomb_in_powerup_type(self):
+        """BOMB is a valid PowerUpType enum member."""
+        self.assertIsNotNone(PowerUpType.BOMB)
+
+    def test_bomb_char(self):
+        """Bomb power-up has 'B' display character."""
+        self.assertEqual(POWERUP_CHARS[PowerUpType.BOMB], "B")
+
+    def test_bomb_label(self):
+        """Bomb power-up has 'B' HUD label."""
+        self.assertEqual(POWERUP_LABELS[PowerUpType.BOMB], "B")
+
+    def test_bomb_clears_all_alien_projectiles(self):
+        """Activating bomb clears all alien projectiles."""
+        game = self._make_game()
+        game.alien_projectiles = [
+            Projectile(x=5, y=10, direction=1),
+            Projectile(x=15, y=8, direction=1),
+            Projectile(x=25, y=12, direction=1),
+        ]
+        game._activate_power_up(PowerUpType.BOMB, time.time())
+        self.assertEqual(len(game.alien_projectiles), 0)
+
+    def test_bomb_records_clear_count(self):
+        """Bomb records how many projectiles were cleared."""
+        game = self._make_game()
+        game.alien_projectiles = [
+            Projectile(x=5, y=10, direction=1),
+            Projectile(x=15, y=8, direction=1),
+        ]
+        game._activate_power_up(PowerUpType.BOMB, time.time())
+        self.assertEqual(game.bomb_clear_count, 2)
+
+    def test_bomb_sets_flash(self):
+        """Bomb activates a brief screen flash."""
+        game = self._make_game()
+        now = time.time()
+        game._activate_power_up(PowerUpType.BOMB, now)
+        self.assertGreater(game.bomb_flash_until, now)
+
+    def test_bomb_does_not_add_to_active_powerups(self):
+        """Bomb is instant-use, doesn't appear in active power-ups list."""
+        game = self._make_game()
+        game._activate_power_up(PowerUpType.BOMB, time.time())
+        bomb_active = [ap for ap in game.active_power_ups if ap.power_type == PowerUpType.BOMB]
+        self.assertEqual(len(bomb_active), 0)
+
+    def test_bomb_with_no_projectiles(self):
+        """Bomb works gracefully with no alien projectiles."""
+        game = self._make_game()
+        game.alien_projectiles = []
+        game._activate_power_up(PowerUpType.BOMB, time.time())
+        self.assertEqual(game.bomb_clear_count, 0)
+
+    def test_bomb_resets_on_game_reset(self):
+        """Bomb state resets when game is reset."""
+        game = self._make_game()
+        game.bomb_flash_until = time.time() + 10
+        game.bomb_clear_count = 5
+        game.reset_game()
+        self.assertEqual(game.bomb_flash_until, 0)
+        self.assertEqual(game.bomb_clear_count, 0)
+
+
 class TestAlienProjectileVariety(unittest.TestCase):
     """Tests for alien projectile types (normal, fast, heavy)."""
 

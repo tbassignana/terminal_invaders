@@ -811,6 +811,7 @@ class PowerUpType(Enum):
     RAPID_FIRE = auto()
     SHIELD = auto()
     WIDE_SHOT = auto()
+    BOMB = auto()
 
 
 # Distinct display characters for each power-up type
@@ -818,6 +819,7 @@ POWERUP_CHARS = {
     PowerUpType.RAPID_FIRE: "R",
     PowerUpType.SHIELD: "S",
     PowerUpType.WIDE_SHOT: "W",
+    PowerUpType.BOMB: "B",
 }
 
 # Short labels for HUD timer display
@@ -825,6 +827,7 @@ POWERUP_LABELS = {
     PowerUpType.RAPID_FIRE: "R",
     PowerUpType.SHIELD: "S",
     PowerUpType.WIDE_SHOT: "W",
+    PowerUpType.BOMB: "B",
 }
 
 
@@ -1461,6 +1464,8 @@ class Game:
         # Power-ups
         self.power_ups: List[PowerUp] = []
         self.active_power_ups: List[ActivePowerUp] = []
+        self.bomb_flash_until: float = 0  # Screen flash on bomb use
+        self.bomb_clear_count: int = 0  # Projectiles cleared by last bomb
 
         # Collectibles (coins/gems)
         self.collectibles: List[Collectible] = []
@@ -1705,6 +1710,8 @@ class Game:
         # Clear power-ups
         self.power_ups.clear()
         self.active_power_ups.clear()
+        self.bomb_flash_until = 0
+        self.bomb_clear_count = 0
 
         # Clear dying aliens, score popups, and ripple effects
         self.dying_aliens.clear()
@@ -1981,7 +1988,13 @@ class Game:
 
     def _activate_power_up(self, power_type: PowerUpType, current_time: float) -> None:
         """Activate a collected power-up."""
-        if power_type == PowerUpType.SHIELD:
+        if power_type == PowerUpType.BOMB:
+            # Instant use: clear all alien projectiles
+            cleared = len(self.alien_projectiles)
+            self.alien_projectiles.clear()
+            self.bomb_clear_count = cleared
+            self.bomb_flash_until = current_time + 0.2  # Brief screen flash
+        elif power_type == PowerUpType.SHIELD:
             # Shield is a one-time use, set a long expiry
             self.active_power_ups.append(ActivePowerUp(power_type=power_type, expires_at=current_time + 999))
         else:
