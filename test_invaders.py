@@ -19,6 +19,8 @@ import sys
 import tempfile
 from invaders import (
     GameState,
+    GameEvent,
+    EventBus,
     GameConfig,
     DEFAULT_CONFIG,
     Player,
@@ -507,6 +509,57 @@ class TestScoreManager(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             sm = ScoreManager(scores_path=os.path.join(tmpdir, 'scores.json'))
             self.assertEqual(sm.high_score, 0)
+
+
+class TestEventBus(unittest.TestCase):
+    """Step 6: Tests for the EventBus publish/subscribe system."""
+
+    def test_event_subscription_and_firing(self):
+        """Verify a subscribed handler is called when event fires."""
+        bus = EventBus()
+        results = []
+        bus.subscribe(GameEvent.ALIEN_KILLED, lambda **kw: results.append('killed'))
+        bus.publish(GameEvent.ALIEN_KILLED)
+        self.assertEqual(results, ['killed'])
+
+    def test_event_handler_receives_kwargs(self):
+        """Verify handlers receive keyword arguments."""
+        bus = EventBus()
+        received = {}
+        bus.subscribe(GameEvent.ALIEN_KILLED, lambda **kw: received.update(kw))
+        bus.publish(GameEvent.ALIEN_KILLED, alien_type=2)
+        self.assertEqual(received['alien_type'], 2)
+
+    def test_multi_subscriber_support(self):
+        """Verify multiple subscribers all get called."""
+        bus = EventBus()
+        results = []
+        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append('a'))
+        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append('b'))
+        bus.publish(GameEvent.SHOT_FIRED)
+        self.assertEqual(len(results), 2)
+
+    def test_no_cross_event_firing(self):
+        """Verify subscribing to one event doesn't fire on another."""
+        bus = EventBus()
+        results = []
+        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append('shot'))
+        bus.publish(GameEvent.PLAYER_HIT)
+        self.assertEqual(results, [])
+
+    def test_clear_removes_all(self):
+        """Verify clear() removes all subscribers."""
+        bus = EventBus()
+        results = []
+        bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: results.append('x'))
+        bus.clear()
+        bus.publish(GameEvent.SHOT_FIRED)
+        self.assertEqual(results, [])
+
+    def test_game_event_bus_exists(self):
+        """Verify Game creates an event_bus attribute."""
+        game = Game(test_mode=True)
+        self.assertIsInstance(game.event_bus, EventBus)
 
 
 class TestSoundBackend(unittest.TestCase):

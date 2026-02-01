@@ -186,6 +186,40 @@ class GameState(Enum):
     GAME_OVER = auto()
 
 
+class GameEvent(Enum):
+    """Events published via the EventBus."""
+    ALIEN_KILLED = auto()
+    PLAYER_HIT = auto()
+    LEVEL_COMPLETE = auto()
+    GAME_OVER = auto()
+    SHOT_FIRED = auto()
+
+
+class EventBus:
+    """Simple publish/subscribe event system."""
+
+    def __init__(self):
+        self._subscribers: Dict[GameEvent, List] = {}
+
+    def subscribe(self, event: GameEvent, handler) -> None:
+        """Register a handler for an event."""
+        if event not in self._subscribers:
+            self._subscribers[event] = []
+        self._subscribers[event].append(handler)
+
+    def publish(self, event: GameEvent, **kwargs) -> None:
+        """Fire an event and call all registered handlers."""
+        for handler in self._subscribers.get(event, []):
+            try:
+                handler(**kwargs)
+            except Exception:
+                logger.debug("EventBus handler error for %s", event, exc_info=True)
+
+    def clear(self) -> None:
+        """Remove all subscribers."""
+        self._subscribers.clear()
+
+
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
@@ -523,6 +557,13 @@ class SoundEffects:
             return
         self.backend.play(self.SOUNDS[sound_name], volume)
 
+    def subscribe_to_events(self, event_bus: 'EventBus') -> None:
+        """Subscribe sound effects to game events via the EventBus."""
+        event_bus.subscribe(GameEvent.SHOT_FIRED, lambda **kw: self.play_shoot())
+        event_bus.subscribe(GameEvent.ALIEN_KILLED, lambda **kw: self.play_alien_die())
+        event_bus.subscribe(GameEvent.PLAYER_HIT, lambda **kw: self.play_player_die())
+        event_bus.subscribe(GameEvent.LEVEL_COMPLETE, lambda **kw: self.play_level_complete())
+
     def play_shoot(self):
         """Player shooting sound."""
         self._play_async('shoot', 0.3)
@@ -627,6 +668,9 @@ class Game:
         self.flash_active = False
         self.flash_end_time = 0
 
+        # Event bus
+        self.event_bus = EventBus()
+
         # Audio
         self.audio: Optional[AudioManager] = None
 
@@ -634,6 +678,7 @@ class Game:
         self.sfx: Optional[SoundEffects] = None
         if not test_mode:
             self.sfx = SoundEffects()
+            self.sfx.subscribe_to_events(self.event_bus)
 
         # Curses screen
         self.screen = None
@@ -714,12 +759,12 @@ class Game:
         """
         self.player.take_damage()
 
-        # Play death sound
-        if self.sfx:
-            self.sfx.play_player_die()
+        # Notify subscribers
+        self.event_bus.publish(GameEvent.PLAYER_HIT)
 
         if self.player.lives <= 0:
             self.state = GameState.GAME_OVER
+            self.event_bus.publish(GameEvent.GAME_OVER)
         else:
             # Flash effect
             self.flash_active = True
@@ -876,8 +921,7 @@ class Game:
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
                     self.score += 10 * (3 - alien.alien_type)
-                    if self.sfx:
-                        self.sfx.play_alien_die()
+                    self.event_bus.publish(GameEvent.ALIEN_KILLED, alien_type=alien.alien_type)
                     break
 
         # Alien projectiles vs player
@@ -913,11 +957,10 @@ class Game:
         lives_to_add = min(completed_level, self.config.max_lives - self.player.lives)
         self.player.lives = min(self.player.lives + lives_to_add, self.config.max_lives)
 
-        # Play sound effects
-        if self.sfx:
-            self.sfx.play_level_complete()
-            if lives_to_add > 0:
-                self.sfx.play_life_bonus()
+        # Notify subscribers
+        self.event_bus.publish(GameEvent.LEVEL_COMPLETE)
+        if self.sfx and lives_to_add > 0:
+            self.sfx.play_life_bonus()
 
         self.level += 1
         self.state = GameState.LEVEL_TRANSITION
@@ -954,8 +997,7 @@ class Game:
                     self.player_projectiles.append(
                         Projectile(x=self.player.x + 1, y=self.player.y - 1, direction=-1)
                     )
-                    if self.sfx:
-                        self.sfx.play_shoot()
+                    self.event_bus.publish(GameEvent.SHOT_FIRED)
 
         elif self.state == GameState.GAME_OVER:
             if key == ord('r') or key == ord('R'):
