@@ -28,6 +28,7 @@ from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
 
 from invaders import (
+    ALIEN_EXPLOSION_CONFIGS,
     ALIEN_TYPE_COLORS,
     BORDER_BL,
     BORDER_BR,
@@ -47,6 +48,7 @@ from invaders import (
     COLOR_TEXT,
     DEATH_ANIM_CHARS,
     DEFAULT_CONFIG,
+    DEFAULT_EXPLOSION_CONFIG,
     MYSTERY_SHIP_CHAR,
     PLAYER_START_LIVES,
     POWERUP_CHARS,
@@ -79,6 +81,7 @@ from invaders import (
     SoundEffects,
     build_argument_parser,
     config_from_args,
+    get_explosion_config,
     get_sound_backend,
     resolve_audio_path,
 )
@@ -3798,6 +3801,92 @@ class TestShieldVisualAura(unittest.TestCase):
         backend = MacOSSoundBackend()
         with unittest.mock.patch("subprocess.run", side_effect=OSError("mocked")):
             self.assertFalse(backend.is_available())
+
+
+class TestAlienTypeSpecificDeathExplosions(unittest.TestCase):
+    """Tests for alien type-specific death explosions (Step 48)."""
+
+    def _kill_alien_of_type(self, alien_type: int):
+        """Kill an alien of the given type with test_mode=False for particles."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=5, alien_type=alien_type)]
+        game.player_projectiles = [Projectile(x=10, y=5, direction=-1)]
+        game.test_mode = False
+        game._check_collisions()
+        game.test_mode = True
+        return game
+
+    def test_get_explosion_config_type_0(self):
+        """Type 0 aliens (top rows) return big explosion config."""
+        cfg = get_explosion_config(0)
+        self.assertEqual(cfg["count"], (8, 12))
+        self.assertIn("#", cfg["chars"])
+        self.assertIn("X", cfg["chars"])
+
+    def test_get_explosion_config_type_1(self):
+        """Type 1 aliens (middle rows) return medium explosion config."""
+        cfg = get_explosion_config(1)
+        self.assertEqual(cfg["count"], (5, 8))
+        self.assertEqual(cfg["chars"], "*+.'`")
+
+    def test_get_explosion_config_type_2(self):
+        """Type 2 aliens (bottom rows) return small explosion config."""
+        cfg = get_explosion_config(2)
+        self.assertEqual(cfg["count"], (3, 5))
+        self.assertEqual(cfg["chars"], "+'.")
+
+    def test_get_explosion_config_unknown_returns_default(self):
+        """Unknown alien type returns the default explosion config."""
+        cfg = get_explosion_config(99)
+        self.assertEqual(cfg, DEFAULT_EXPLOSION_CONFIG)
+
+    def test_type_0_more_particles_than_type_2(self):
+        """Type 0 should produce more particles than type 2 on average."""
+        type_0_counts = []
+        type_2_counts = []
+        for _ in range(30):
+            g0 = self._kill_alien_of_type(0)
+            g2 = self._kill_alien_of_type(2)
+            type_0_counts.append(len(g0.particle_system.particles))
+            type_2_counts.append(len(g2.particle_system.particles))
+        avg_0 = sum(type_0_counts) / len(type_0_counts)
+        avg_2 = sum(type_2_counts) / len(type_2_counts)
+        self.assertGreater(avg_0, avg_2, "Type 0 should average more particles than type 2")
+
+    def test_type_0_particles_in_count_range(self):
+        """Type 0 explosion spawns 8-12 particles."""
+        counts = set()
+        for _ in range(50):
+            game = self._kill_alien_of_type(0)
+            counts.add(len(game.particle_system.particles))
+        self.assertTrue(all(8 <= c <= 12 for c in counts), f"Type 0 counts {counts} should be in [8,12]")
+
+    def test_type_2_particles_in_count_range(self):
+        """Type 2 explosion spawns 3-5 particles."""
+        counts = set()
+        for _ in range(50):
+            game = self._kill_alien_of_type(2)
+            counts.add(len(game.particle_system.particles))
+        self.assertTrue(all(3 <= c <= 5 for c in counts), f"Type 2 counts {counts} should be in [3,5]")
+
+    def test_type_0_uses_type_specific_chars(self):
+        """Type 0 explosion particles use the heavier character set including # and X."""
+        all_chars = set()
+        for _ in range(50):
+            game = self._kill_alien_of_type(0)
+            for p in game.particle_system.particles:
+                all_chars.add(p.char)
+        expected = set(ALIEN_EXPLOSION_CONFIGS[0]["chars"])
+        self.assertTrue(all_chars.issubset(expected), f"Type 0 chars {all_chars} not subset of {expected}")
+
+    def test_all_configs_present(self):
+        """Ensure configs exist for all three alien types."""
+        for t in range(3):
+            cfg = get_explosion_config(t)
+            self.assertIn("count", cfg)
+            self.assertIn("chars", cfg)
+            self.assertIn("speed", cfg)
+            self.assertIn("lifetime", cfg)
 
 
 if __name__ == "__main__":

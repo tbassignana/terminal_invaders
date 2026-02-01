@@ -80,7 +80,7 @@
 - [x] **Step 45:** Add game over screen with death animation and stats (curtain fall + stats)
 - [x] **Step 46:** Add level transition countdown animation (3... 2... 1... GO! auto-advance)
 - [x] **Step 47:** Add shield visual aura around player (pulsing `(^A^)` brackets in cyan)
-- [ ] **Step 48:** Add alien type-specific death explosions (varying particle count/chars per type)
+- [x] **Step 48:** Add alien type-specific death explosions (varying particle count/chars per type)
 - [ ] **Step 49:** Add progressive background color shift as aliens descend (black→dim red→deep red)
 - [ ] **Step 50:** Add victory celebration animation when clearing a level (particle burst + "WAVE CLEAR!")
 

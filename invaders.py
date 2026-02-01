@@ -245,6 +245,29 @@ ALIEN_TYPE_COLORS = {
     2: COLOR_ALIEN_TYPE_2,
 }
 
+# Type-specific explosion configs: (count_min, count_max, chars, speed_range, lifetime_range)
+# Type 0 (top rows, rare) = big dramatic explosion
+# Type 1 (middle rows) = medium explosion
+# Type 2 (bottom rows, common) = small quick explosion
+ALIEN_EXPLOSION_CONFIGS = {
+    0: {"count": (8, 12), "chars": "#*+X'`", "speed": (3.0, 8.0), "lifetime": (0.4, 0.7)},
+    1: {"count": (5, 8), "chars": "*+.'`", "speed": (2.0, 6.0), "lifetime": (0.3, 0.5)},
+    2: {"count": (3, 5), "chars": "+'.", "speed": (1.5, 4.0), "lifetime": (0.2, 0.4)},
+}
+
+DEFAULT_EXPLOSION_CONFIG = {
+    "count": (5, 8),
+    "chars": "*+.'`",
+    "speed": (2.0, 6.0),
+    "lifetime": (0.3, 0.5),
+}
+
+
+def get_explosion_config(alien_type: int) -> dict:
+    """Return the explosion particle config for a given alien type."""
+    return ALIEN_EXPLOSION_CONFIGS.get(alien_type, DEFAULT_EXPLOSION_CONFIG)
+
+
 # ASCII art title for animated title screen (each line is one row)
 TITLE_ART = [
     " ███ ████  ██  ██ ██ █████",
@@ -1726,16 +1749,17 @@ class Game:
                     self._spawn_power_up(alien.x, alien.y)
                     # Add dying alien animation
                     self.dying_aliens.append(DyingAlien(x=alien.x, y=alien.y))
-                    # Spawn explosion particles at alien death position
+                    # Spawn type-specific explosion particles at alien death position
                     if not self.test_mode:
+                        ecfg = get_explosion_config(alien.alien_type)
                         self.particle_system.spawn(
                             x=float(alien.x),
                             y=float(alien.y),
-                            count=random.randint(5, 8),
-                            chars="*+.'`",
+                            count=random.randint(*ecfg["count"]),
+                            chars=ecfg["chars"],
                             color_pair=ALIEN_TYPE_COLORS.get(alien.alien_type, COLOR_ALIEN),
-                            speed_range=(2.0, 6.0),
-                            lifetime_range=(0.3, 0.5),
+                            speed_range=ecfg["speed"],
+                            lifetime_range=ecfg["lifetime"],
                         )
                     self.event_bus.publish(GameEvent.ALIEN_KILLED, alien_type=alien.alien_type)
                     break
