@@ -61,7 +61,7 @@
 - [x] **Step 32:** Add starfield background (dim scrolling parallax stars)
 - [x] **Step 33:** Add color-per-alien-type rendering (cyan/magenta/yellow + bold in frenzy mode)
 - [x] **Step 34:** Add HUD separator line and decorative border (box-drawing characters)
-- [ ] **Step 35:** Add animated title screen with ASCII art (large block letters + color cycling)
+- [x] **Step 35:** Add animated title screen with ASCII art (large block letters + color cycling)
 
 ### In-Game Visual Feedback
 

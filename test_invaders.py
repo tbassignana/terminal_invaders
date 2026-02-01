@@ -43,6 +43,8 @@ from invaders import (
     DEATH_ANIM_CHARS,
     DEFAULT_CONFIG,
     PLAYER_START_LIVES,
+    TITLE_ART,
+    TITLE_COLOR_CYCLE,
     AbstractSoundBackend,
     ActivePowerUp,
     Alien,
@@ -2893,6 +2895,50 @@ class TestHUDBorder(unittest.TestCase):
         # Bottom row: 1 BL + (w-3) H chars + 1 BR = w-1
         expected = (w - 1) + 2 * (h - 3) + (w - 1)
         self.assertEqual(len(layout), expected, f"Expected {expected} border elements for {w}x{h}")
+
+
+class TestAnimatedTitleScreen(unittest.TestCase):
+    """Tests for animated title screen with ASCII art and color cycling (Step 35)."""
+
+    def test_title_art_is_defined(self):
+        """Verify TITLE_ART constant contains multiple non-empty lines."""
+        non_empty = [line for line in TITLE_ART if line.strip()]
+        self.assertGreaterEqual(len(non_empty), 8, "Title art should have at least 8 non-empty lines")
+
+    def test_title_layout_contains_art_lines(self):
+        """Verify get_title_layout() returns art lines positioned on screen."""
+        game = Game(test_mode=True)
+        layout = game.get_title_layout()
+        self.assertIn("art_lines", layout)
+        non_empty_art = [line for line in TITLE_ART if line.strip()]
+        self.assertEqual(len(layout["art_lines"]), len(non_empty_art))
+
+    def test_title_color_cycle_increments_on_update(self):
+        """Verify title_color_frame advances during MENU state update."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        initial = game.title_color_frame
+        game.update()
+        self.assertEqual(game.title_color_frame, initial + 1)
+
+    def test_title_color_index_cycles_through_palette(self):
+        """Verify color_index wraps around the TITLE_COLOR_CYCLE length."""
+        game = Game(test_mode=True)
+        cycle_len = len(TITLE_COLOR_CYCLE)
+        game.title_color_frame = cycle_len + 2
+        layout = game.get_title_layout()
+        self.assertEqual(layout["color_index"], 2)
+
+    def test_title_layout_has_subtitle_and_controls(self):
+        """Verify layout includes subtitle and controls text."""
+        game = Game(test_mode=True)
+        layout = game.get_title_layout()
+        self.assertIn("subtitle", layout)
+        self.assertIn("controls", layout)
+        _, _, sub_text = layout["subtitle"]
+        self.assertIn("SPACE", sub_text)
+        _, _, ctrl_text = layout["controls"]
+        self.assertIn("Fire", ctrl_text)
 
 
 if __name__ == "__main__":

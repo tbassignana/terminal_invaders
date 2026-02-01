@@ -242,6 +242,31 @@ ALIEN_TYPE_COLORS = {
     2: COLOR_ALIEN_TYPE_2,
 }
 
+# ASCII art title for animated title screen (each line is one row)
+TITLE_ART = [
+    " ███ ████  ██  ██ ██ █████",
+    " █   █  █ █  █ █  █  █    ",
+    " ███ ████ ████ █  █  ███  ",
+    "   █ █    █  █ █  █  █    ",
+    " ███ █    █  █  ██   █████",
+    "",
+    " █ █  █ █  █ ██  ███ ████ ███ ",
+    " █ █  █ █  █ █ █ █ █ █  █ █  █",
+    " █ █  █ █  █ █ █ █ █ █  █ ███ ",
+    " █ █  ██ ████ █ █ █ █ ████ █ █",
+    " █ █  █   █ █ ██  ███ █  █ █ █",
+]
+
+# Color pairs to cycle through for title animation
+TITLE_COLOR_CYCLE = [
+    COLOR_ALIEN_TYPE_0,   # Cyan
+    COLOR_ALIEN_TYPE_1,   # Magenta
+    COLOR_ALIEN_TYPE_2,   # Yellow
+    COLOR_PLAYER,         # Green
+    COLOR_PROJECTILE,     # White
+    COLOR_GAME_OVER,      # Red
+]
+
 
 # ============================================================================
 # ENUMS
@@ -990,6 +1015,9 @@ class Game:
         self.thrust_frame = 0  # Alternates 0/1 each frame for flicker
         self.player_move_direction = 0  # -1=left, 0=stationary, 1=right
 
+        # Title screen animation
+        self.title_color_frame = 0  # Color cycle counter for title screen
+
         # Starfield background
         self.stars: List[Tuple[float, float, str]] = []  # [(x, y, char), ...]
         self.star_scroll_speed = 1.0  # pixels per second
@@ -1220,6 +1248,11 @@ class Game:
 
     def update(self) -> None:
         """Main game update loop."""
+        # Title screen color cycling runs in MENU state
+        if self.state == GameState.MENU:
+            self.title_color_frame += 1
+            return
+
         if self.state not in (GameState.PLAYING,):
             return
 
@@ -1711,18 +1744,59 @@ class Game:
 
         self.screen.refresh()
 
-    def _render_menu(self) -> None:
-        """Render the main menu."""
-        title = "SPACE INVADERS"
-        subtitle = "Press SPACE to Start"
-        controls = "Controls: A/D or Arrow Keys to Move, SPACE to Fire, Q to Quit"
+    def get_title_layout(self) -> dict:
+        """Return title screen layout data (testable without curses).
 
-        center_y = self.height // 2
-        self._safe_addstr(
-            center_y - 2, (self.width - len(title)) // 2, title, curses.color_pair(COLOR_TEXT) | curses.A_BOLD
-        )
-        self._safe_addstr(center_y, (self.width - len(subtitle)) // 2, subtitle, curses.color_pair(COLOR_TEXT))
-        self._safe_addstr(center_y + 2, (self.width - len(controls)) // 2, controls, curses.color_pair(COLOR_TEXT))
+        Returns dict with keys:
+            art_lines: list of (row, col, text) for each ASCII art line
+            subtitle: (row, col, text)
+            controls: (row, col, text)
+            color_index: current color cycle index
+        """
+        art = TITLE_ART
+        art_height = len(art)
+        # Center the art block vertically, with subtitle and controls below
+        art_top = self.height // 2 - art_height // 2 - 2
+
+        art_lines = []
+        for i, line in enumerate(art):
+            if line:
+                col = (self.width - len(line)) // 2
+                art_lines.append((art_top + i, col, line))
+
+        subtitle = "Press SPACE to Start"
+        controls = "A/D or Arrows = Move | SPACE = Fire | Q = Quit"
+
+        sub_row = art_top + art_height + 1
+        ctrl_row = sub_row + 2
+
+        color_idx = self.title_color_frame % len(TITLE_COLOR_CYCLE)
+
+        return {
+            "art_lines": art_lines,
+            "subtitle": (sub_row, (self.width - len(subtitle)) // 2, subtitle),
+            "controls": (ctrl_row, (self.width - len(controls)) // 2, controls),
+            "color_index": color_idx,
+        }
+
+    def _render_menu(self) -> None:
+        """Render the animated title screen with ASCII art and color cycling."""
+        layout = self.get_title_layout()
+        cycle_len = len(TITLE_COLOR_CYCLE)
+
+        # Render each art line with color cycling (offset per line for rainbow)
+        for i, (row, col, text) in enumerate(layout["art_lines"]):
+            color_pair = TITLE_COLOR_CYCLE[(layout["color_index"] + i) % cycle_len]
+            self._safe_addstr(row, col, text, curses.color_pair(color_pair) | curses.A_BOLD)
+
+        # Subtitle (blink effect using frame counter)
+        sub_r, sub_c, sub_text = layout["subtitle"]
+        if (self.title_color_frame // 15) % 2 == 0:  # Blink every ~15 frames
+            self._safe_addstr(sub_r, sub_c, sub_text, curses.color_pair(COLOR_TEXT))
+
+        # Controls
+        ctrl_r, ctrl_c, ctrl_text = layout["controls"]
+        self._safe_addstr(ctrl_r, ctrl_c, ctrl_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM)
 
     def _render_game(self) -> None:
         """Render the main gameplay."""
