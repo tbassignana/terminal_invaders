@@ -55,6 +55,7 @@ from invaders import (
     ActivePowerUp,
     Alien,
     Bunker,
+    ComboText,
     DyingAlien,
     EventBus,
     Game,
@@ -3415,6 +3416,78 @@ class TestPlayerInvincibilityBlink(unittest.TestCase):
             sfx.available_sounds[key] = False
         # Should return early at the available_sounds check (line 873)
         sfx._play_async("shoot")  # Known sound name, but marked unavailable
+
+    def test_handle_input_resize_with_screen(self):
+        """KEY_RESIZE with screen calls handle_resize."""
+        import curses
+
+        game = Game(test_mode=True)
+        mock_screen = unittest.mock.MagicMock()
+        mock_screen.getmaxyx.return_value = (30, 80)
+        game.screen = mock_screen
+        result = game.handle_input(curses.KEY_RESIZE)
+        self.assertTrue(result)
+        mock_screen.getmaxyx.assert_called_once()
+
+
+class TestComboTextEffect(unittest.TestCase):
+    """Step 42: Combo text effect with scaling emphasis at center screen."""
+
+    def test_combo_text_spawned_on_multiplier_2(self):
+        """A ComboText is created when multiplier reaches 2x."""
+        game = Game(test_mode=True)
+        t = time.time()
+        game._register_kill(t)       # combo_count=1, multiplier=1
+        self.assertIsNone(game.combo_text)
+        game._register_kill(t + 0.5)  # combo_count=2, multiplier=2
+        self.assertIsNotNone(game.combo_text)
+        self.assertEqual(game.combo_text.text, "COMBO x2!")
+
+    def test_combo_text_updates_on_higher_multiplier(self):
+        """ComboText updates to show higher multiplier."""
+        game = Game(test_mode=True)
+        t = time.time()
+        game._register_kill(t)
+        game._register_kill(t + 0.5)
+        game._register_kill(t + 1.0)
+        self.assertEqual(game.combo_text.text, "COMBO x3!")
+
+    def test_combo_text_ages_and_expires(self):
+        """ComboText ages with update() and is culled when finished."""
+        ct = ComboText(text="COMBO x2!")
+        self.assertFalse(ct.finished)
+        ct.update(1.6)
+        self.assertTrue(ct.finished)
+
+    def test_combo_text_culled_in_update(self):
+        """Game.update() removes expired combo text."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.combo_text = ComboText(text="COMBO x2!", age=2.0)  # Already expired
+        game.update()
+        self.assertIsNone(game.combo_text)
+
+    def test_get_combo_display_returns_none_when_inactive(self):
+        """get_combo_display() returns None when no combo text is active."""
+        game = Game(test_mode=True)
+        self.assertIsNone(game.get_combo_display())
+
+    def test_get_combo_display_returns_info(self):
+        """get_combo_display() returns text, progress, and position info."""
+        game = Game(test_mode=True)
+        game.combo_text = ComboText(text="COMBO x3!")
+        info = game.get_combo_display()
+        self.assertIsNotNone(info)
+        self.assertEqual(info["text"], "COMBO x3!")
+        self.assertAlmostEqual(info["progress"], 0.0)
+        self.assertEqual(info["center_y"], game.height // 2)
+
+    def test_combo_text_cleared_on_reset(self):
+        """reset_game() clears combo text."""
+        game = Game(test_mode=True)
+        game.combo_text = ComboText(text="COMBO x4!")
+        game.reset_game()
+        self.assertIsNone(game.combo_text)
 
 
 if __name__ == "__main__":

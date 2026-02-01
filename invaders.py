@@ -444,6 +444,24 @@ class RippleEffect:
 
 
 @dataclass
+class ComboText:
+    """Center-screen combo notification (e.g. 'COMBO x3!')."""
+
+    text: str
+    age: float = 0.0
+    lifetime: float = 1.5  # Display duration in seconds
+
+    @property
+    def finished(self) -> bool:
+        """Return True when the combo text has fully faded."""
+        return self.age >= self.lifetime
+
+    def update(self, dt: float) -> None:
+        """Age the combo text."""
+        self.age += dt
+
+
+@dataclass
 class Bunker:
     """Defensive bunker that erodes on hits."""
 
@@ -1127,6 +1145,7 @@ class Game:
         self.combo_last_kill_time: float = 0
         self.combo_window: float = 2.0  # seconds
         self.combo_max: int = 5
+        self.combo_text: Optional[ComboText] = None
 
         # Particle system (visual-only, skipped in test_mode)
         self.particle_system = ParticleSystem()
@@ -1334,6 +1353,7 @@ class Game:
         # Reset combo
         self.combo_count = 0
         self.combo_last_kill_time = 0
+        self.combo_text = None
 
         # Clear particles
         self.particle_system.clear()
@@ -1431,6 +1451,12 @@ class Game:
             ripple.update(dt)
             if ripple.finished:
                 self.ripple_effects.remove(ripple)
+
+        # Update combo text (age and cull when expired)
+        if self.combo_text:
+            self.combo_text.update(dt)
+            if self.combo_text.finished:
+                self.combo_text = None
 
         # Check invasion
         self.check_invasion()
@@ -1540,6 +1566,25 @@ class Game:
             return 1
         return min(self.combo_count, self.combo_max)
 
+    def get_combo_display(self) -> Optional[dict]:
+        """Return combo text display info (testable without curses).
+
+        Returns None if no combo text is active, otherwise a dict:
+            text: The combo string (e.g. "COMBO x3!")
+            progress: Float 0.0 to 1.0 (age / lifetime)
+            center_x: Column for centering on screen
+            center_y: Row at screen center
+        """
+        if not self.combo_text:
+            return None
+        progress = self.combo_text.age / self.combo_text.lifetime if self.combo_text.lifetime > 0 else 1.0
+        return {
+            "text": self.combo_text.text,
+            "progress": progress,
+            "center_x": (self.width - len(self.combo_text.text)) // 2,
+            "center_y": self.height // 2,
+        }
+
     def _register_kill(self, current_time: float) -> int:
         """Register an alien kill for combo tracking. Returns the multiplier."""
         if current_time - self.combo_last_kill_time <= self.combo_window:
@@ -1547,7 +1592,11 @@ class Game:
         else:
             self.combo_count = 1
         self.combo_last_kill_time = current_time
-        return self.get_combo_multiplier()
+        multiplier = self.get_combo_multiplier()
+        # Spawn center-screen combo text for multipliers >= 2
+        if multiplier >= 2:
+            self.combo_text = ComboText(text=f"COMBO x{multiplier}!")
+        return multiplier
 
     def _update_projectiles(self) -> None:
         """Update all projectile positions."""
@@ -2076,6 +2125,16 @@ class Game:
             elif progress > 0.33:
                 attr = curses.color_pair(COLOR_TEXT)
             self._safe_addstr(int(popup.y), int(popup.x), popup.text, attr)
+
+        # Render combo text at center screen with emphasis
+        combo_info = self.get_combo_display()
+        if combo_info:
+            attr = curses.color_pair(COLOR_TEXT) | curses.A_BOLD
+            if combo_info["progress"] > 0.66:
+                attr = curses.color_pair(COLOR_TEXT) | curses.A_DIM
+            elif combo_info["progress"] < 0.33:
+                attr |= curses.A_REVERSE
+            self._safe_addstr(combo_info["center_y"], combo_info["center_x"], combo_info["text"], attr)
 
         # FPS counter (when enabled via F1 or --show-fps)
         if self.show_fps:

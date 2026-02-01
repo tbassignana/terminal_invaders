@@ -71,7 +71,7 @@
 - [x] **Step 39:** Add screen flash effect on level complete (green flash 0.15s)
 - [x] **Step 40:** Add wave/ripple effect on alien formation descent (`~` line fading bold→dim)
 - [x] **Step 41:** Add player invincibility blink after taking damage (2s blink + i-frames)
-- [ ] **Step 42:** Add combo text effect with scaling emphasis ("COMBO x3!" center display)
+- [x] **Step 42:** Add combo text effect with scaling emphasis ("COMBO x3!" center display)
 - [ ] **Step 43:** Add smooth color transitions for bunker health (green→yellow→red color pairs)
 
 ### HUD & Screen Polish
