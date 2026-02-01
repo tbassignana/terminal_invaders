@@ -1430,6 +1430,12 @@ class Game:
             elapsed = time.time() - self.level_transition_time
             if elapsed >= self.level_countdown_duration:
                 self.state = GameState.PLAYING
+            # Update celebration particles during transition
+            if not self.test_mode:
+                now = time.time()
+                dt = now - self._last_update_time
+                self._last_update_time = now
+                self.particle_system.update(dt)
             return
 
         if self.state not in (GameState.PLAYING,):
@@ -1868,6 +1874,17 @@ class Game:
         self.flash_active = True
         self.flash_color = COLOR_PLAYER  # Green
         self.flash_end_time = time.time() + 0.15
+
+        # Victory celebration particle burst
+        if not self.test_mode:
+            cx = float(self.width // 2)
+            cy = float(self.height // 2)
+            for color in [COLOR_PLAYER, COLOR_TEXT, COLOR_ALIEN_TYPE_0]:
+                self.particle_system.spawn(
+                    x=cx, y=cy, count=8, chars="*+.~!",
+                    color_pair=color, speed_range=(3.0, 10.0),
+                    lifetime_range=(0.5, 1.2),
+                )
 
         self._init_aliens()
         self._init_bunkers()
@@ -2322,6 +2339,7 @@ class Game:
             lives_awarded: lives gained
             countdown_text: "3", "2", "1", or "GO!"
             elapsed: seconds since transition started
+            wave_clear: "WAVE CLEAR!" shown in first 1.5s, else ""
         """
         elapsed = time.time() - self.level_transition_time if self.level_transition_time > 0 else 0
         if elapsed < 1.0:
@@ -2332,11 +2350,13 @@ class Game:
             countdown_text = "1"
         else:
             countdown_text = "GO!"
+        wave_clear = "WAVE CLEAR!" if elapsed < 1.5 else ""
         return {
             "level": self.level,
             "lives_awarded": self.lives_awarded,
             "countdown_text": countdown_text,
             "elapsed": elapsed,
+            "wave_clear": wave_clear,
         }
 
     def get_game_over_stats(self) -> dict:
@@ -2462,6 +2482,15 @@ class Game:
         countdown = info["countdown_text"]
 
         center_y = self.height // 2
+
+        # "WAVE CLEAR!" celebration text (shown in first 1.5s)
+        wave_clear = info["wave_clear"]
+        if wave_clear:
+            wc_attr = curses.color_pair(COLOR_PLAYER) | curses.A_BOLD | curses.A_REVERSE
+            self._safe_addstr(
+                center_y - 5, (self.width - len(wave_clear)) // 2, wave_clear, wc_attr
+            )
+
         self._safe_addstr(
             center_y - 3, (self.width - len(level_text)) // 2, level_text, curses.color_pair(COLOR_TEXT) | curses.A_BOLD
         )
@@ -2480,6 +2509,13 @@ class Game:
         self._safe_addstr(
             center_y + 4, (self.width - len(skip_text)) // 2, skip_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM
         )
+
+        # Render celebration particles
+        for p in self.particle_system.particles:
+            attr = curses.color_pair(p.color_pair)
+            if p.age > p.lifetime * 0.5:
+                attr |= curses.A_DIM
+            self._safe_addstr(int(p.y), int(p.x), p.char, attr)
 
     def _safe_addstr(self, y, x, text: str, attr: int = 0) -> None:
         """Safely add string to screen, handling boundary issues and shake offset."""

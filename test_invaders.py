@@ -3966,6 +3966,15 @@ class TestProgressiveBackgroundColorShift(unittest.TestCase):
             _time.sleep(0.1)  # Give thread time to execute
             mock_run.assert_called_once()
 
+    def test_macoss_play_exception_in_thread(self):
+        """MacOSSoundBackend.play handles subprocess failure in thread (covers except path)."""
+        backend = MacOSSoundBackend()
+        with unittest.mock.patch("os.path.exists", return_value=True), \
+             unittest.mock.patch("subprocess.run", side_effect=OSError("mocked afplay")):
+            backend.play("/fake/sound.aiff", volume=0.5)
+            import time as _time
+            _time.sleep(0.1)  # Give thread time to hit exception
+
     def test_cleanup_audio_exception_handling(self):
         """_cleanup_audio handles pkill failure gracefully (covers exception path)."""
         import invaders
@@ -3977,6 +3986,74 @@ class TestProgressiveBackgroundColorShift(unittest.TestCase):
                 invaders._cleanup_audio()  # Should not raise
         finally:
             invaders._audio_manager = old
+
+
+class TestVictoryCelebrationAnimation(unittest.TestCase):
+    """Tests for victory celebration animation on level clear (Step 50)."""
+
+    def test_wave_clear_text_in_transition_info(self):
+        """Level transition info includes 'WAVE CLEAR!' in first 1.5s."""
+        game = Game(test_mode=True)
+        game.level_transition_time = time.time()
+        info = game.get_level_transition_info()
+        self.assertEqual(info["wave_clear"], "WAVE CLEAR!")
+
+    def test_wave_clear_text_disappears_after_delay(self):
+        """'WAVE CLEAR!' text disappears after 1.5 seconds."""
+        game = Game(test_mode=True)
+        game.level_transition_time = time.time() - 2.0  # 2s ago
+        info = game.get_level_transition_info()
+        self.assertEqual(info["wave_clear"], "")
+
+    def test_celebration_particles_spawned_on_next_level(self):
+        """Victory particles spawn when _next_level is called (test_mode=False)."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.aliens = []  # Clear level
+        game.test_mode = False
+        game._next_level()
+        game.test_mode = True
+        # 3 colors × 8 particles = 24 total
+        self.assertEqual(len(game.particle_system.particles), 24)
+
+    def test_no_particles_in_test_mode(self):
+        """No celebration particles in test_mode=True."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.aliens = []
+        game._next_level()
+        self.assertEqual(len(game.particle_system.particles), 0)
+
+    def test_celebration_particle_chars(self):
+        """Celebration particles use celebration character set."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game._next_level()
+        game.test_mode = True
+        chars = {p.char for p in game.particle_system.particles}
+        expected = set("*+.~!")
+        self.assertTrue(chars.issubset(expected), f"Chars {chars} not in celebration set {expected}")
+
+    def test_particle_update_during_transition(self):
+        """Particles are updated during LEVEL_TRANSITION state (test_mode=False)."""
+        game = Game(test_mode=True)
+        game.state = GameState.LEVEL_TRANSITION
+        game.level_transition_time = time.time()
+        # Manually add a particle to check it gets updated
+        game.particle_system.spawn(x=10.0, y=10.0, count=1, lifetime_range=(0.01, 0.02))
+        game.test_mode = False
+        time.sleep(0.05)
+        game.update()
+        game.test_mode = True
+        # Particle should have been culled (expired)
+        self.assertEqual(len(game.particle_system.particles), 0)
+
+    def test_wave_clear_at_boundary(self):
+        """At exactly 1.5s, wave_clear should be empty (< 1.5 check)."""
+        game = Game(test_mode=True)
+        game.level_transition_time = time.time() - 1.5
+        info = game.get_level_transition_info()
+        self.assertEqual(info["wave_clear"], "")
 
 
 if __name__ == "__main__":
