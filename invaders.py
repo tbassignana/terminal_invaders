@@ -220,6 +220,8 @@ COLOR_BUNKER = 3
 COLOR_TEXT = 4
 COLOR_PROJECTILE = 5
 COLOR_GAME_OVER = 6
+COLOR_BUNKER_DAMAGED = 7   # Yellow for damaged bunkers
+COLOR_BUNKER_CRITICAL = 8  # Red for critical bunkers
 
 
 # ============================================================================
@@ -363,6 +365,7 @@ class Bunker:
     x: int
     y: int
     health: int = 3  # 3=full, 2=damaged, 1=critical, 0=destroyed
+    flash_frames: int = 0  # Frames remaining for white flash on hit
 
     @property
     def char(self) -> str:
@@ -371,12 +374,24 @@ class Bunker:
             return " "
         return BUNKER_CHARS[3 - self.health]
 
+    @property
+    def color_pair(self) -> int:
+        """Return color pair based on health: green(3) → yellow(2) → red(1)."""
+        if self.flash_frames > 0:
+            return COLOR_TEXT  # White flash
+        if self.health >= 3:
+            return COLOR_BUNKER  # Green (full)
+        if self.health == 2:
+            return COLOR_BUNKER_DAMAGED  # Yellow (damaged)
+        return COLOR_BUNKER_CRITICAL  # Red (critical)
+
     def hit(self) -> bool:
         """
         Process a hit on the bunker.
         Returns True if bunker is destroyed.
         """
         self.health -= 1
+        self.flash_frames = 2  # Flash white for 2 frames
         return self.health <= 0
 
 
@@ -1216,6 +1231,11 @@ class Game:
         if not self.test_mode:
             self.particle_system.update(dt)
 
+        # Update bunker flash effects
+        for bunker in self.bunkers:
+            if bunker.flash_frames > 0:
+                bunker.flash_frames -= 1
+
         # Update dying alien animations
         for da in self.dying_aliens[:]:
             da.advance()
@@ -1420,6 +1440,14 @@ class Game:
             for bunker in nearby_bunkers:
                 if bunker.health > 0 and proj.x == bunker.x and proj.y == bunker.y:
                     bunker.hit()
+                    # Spawn debris particles falling downward
+                    if not self.test_mode:
+                        self.particle_system.spawn(
+                            x=float(bunker.x), y=float(bunker.y),
+                            count=random.randint(1, 2), chars=".,",
+                            color_pair=bunker.color_pair,
+                            speed_range=(0.5, 2.0), lifetime_range=(0.3, 0.5),
+                        )
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
                     break
@@ -1430,6 +1458,14 @@ class Game:
             for bunker in nearby_bunkers:
                 if bunker.health > 0 and proj.x == bunker.x and proj.y == bunker.y:
                     bunker.hit()
+                    # Spawn debris particles falling downward
+                    if not self.test_mode:
+                        self.particle_system.spawn(
+                            x=float(bunker.x), y=float(bunker.y),
+                            count=random.randint(1, 2), chars=".,",
+                            color_pair=bunker.color_pair,
+                            speed_range=(0.5, 2.0), lifetime_range=(0.3, 0.5),
+                        )
                     if proj in self.alien_projectiles:
                         self.alien_projectiles.remove(proj)
                     break
@@ -1653,10 +1689,13 @@ class Game:
         for da in self.dying_aliens:
             self._safe_addstr(da.y, da.x, da.char, curses.color_pair(COLOR_TEXT) | curses.A_BOLD)
 
-        # Render bunkers
+        # Render bunkers (color shifts green → yellow → red based on health)
         for bunker in self.bunkers:
             if bunker.health > 0:
-                self._safe_addstr(bunker.y, bunker.x, bunker.char, curses.color_pair(COLOR_BUNKER))
+                attr = curses.color_pair(bunker.color_pair)
+                if bunker.flash_frames > 0:
+                    attr |= curses.A_REVERSE  # White flash effect
+                self._safe_addstr(bunker.y, bunker.x, bunker.char, attr)
 
         # Render player
         self._safe_addstr(self.player.y, self.player.x, self.config.player_char, curses.color_pair(COLOR_PLAYER))
@@ -1768,6 +1807,8 @@ class Game:
             curses.init_pair(COLOR_TEXT, curses.COLOR_YELLOW, -1)
             curses.init_pair(COLOR_PROJECTILE, curses.COLOR_WHITE, -1)
             curses.init_pair(COLOR_GAME_OVER, curses.COLOR_RED, -1)
+            curses.init_pair(COLOR_BUNKER_DAMAGED, curses.COLOR_YELLOW, -1)
+            curses.init_pair(COLOR_BUNKER_CRITICAL, curses.COLOR_RED, -1)
 
             # Get screen dimensions
             self.height, self.width = stdscr.getmaxyx()

@@ -28,12 +28,17 @@ from hypothesis import strategies as st
 
 from invaders import (
     COLOR_ALIEN,
+    COLOR_BUNKER,
+    COLOR_BUNKER_CRITICAL,
+    COLOR_BUNKER_DAMAGED,
+    COLOR_TEXT,
     DEATH_ANIM_CHARS,
     DEFAULT_CONFIG,
     PLAYER_START_LIVES,
     AbstractSoundBackend,
     ActivePowerUp,
     Alien,
+    Bunker,
     DyingAlien,
     EventBus,
     Game,
@@ -2624,6 +2629,49 @@ class TestAlienDeathAnimation(unittest.TestCase):
     def test_death_anim_chars_sequence(self):
         """Verify the death animation character sequence is correct."""
         self.assertEqual(DEATH_ANIM_CHARS, ["#", "*", "+"])
+
+
+class TestBunkerDamageVisualEffects(unittest.TestCase):
+    """Tests for bunker damage visual effects (Step 30)."""
+
+    def test_bunker_flash_on_hit(self):
+        """Verify bunker sets flash_frames when hit."""
+        bunker = Bunker(x=10, y=20, health=3)
+        self.assertEqual(bunker.flash_frames, 0)
+        bunker.hit()
+        self.assertEqual(bunker.flash_frames, 2, "Flash should last 2 frames after hit")
+
+    def test_bunker_color_full_health(self):
+        """Verify bunker uses green color at full health (3)."""
+        bunker = Bunker(x=10, y=20, health=3)
+        self.assertEqual(bunker.color_pair, COLOR_BUNKER)
+
+    def test_bunker_color_damaged(self):
+        """Verify bunker uses yellow color when damaged (health=2)."""
+        bunker = Bunker(x=10, y=20, health=2)
+        self.assertEqual(bunker.color_pair, COLOR_BUNKER_DAMAGED)
+
+    def test_bunker_color_critical(self):
+        """Verify bunker uses red color when critical (health=1)."""
+        bunker = Bunker(x=10, y=20, health=1)
+        self.assertEqual(bunker.color_pair, COLOR_BUNKER_CRITICAL)
+
+    def test_bunker_flash_overrides_color(self):
+        """Verify flash state returns white (COLOR_TEXT) regardless of health."""
+        bunker = Bunker(x=10, y=20, health=2, flash_frames=1)
+        self.assertEqual(bunker.color_pair, COLOR_TEXT, "Flash should override health color")
+
+    def test_debris_particles_spawn_on_bunker_hit(self):
+        """Verify debris particles spawn when a bunker is hit."""
+        game = Game(test_mode=True)
+        bunker = Bunker(x=10, y=18, health=3)
+        game.bunkers = [bunker]
+        game.player_projectiles = [Projectile(x=10, y=18, direction=-1)]
+        # Enable particles for this test
+        game.test_mode = False
+        game._check_collisions()
+        game.test_mode = True
+        self.assertGreater(len(game.particle_system.particles), 0, "Debris particles should spawn")
 
 
 if __name__ == "__main__":
