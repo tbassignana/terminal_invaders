@@ -2245,7 +2245,7 @@ class TestPreCommitAndRuff(unittest.TestCase):
             text=True,
             cwd=os.path.dirname(__file__),
         )
-        self.assertEqual(result.returncode, 0, f"ruff errors:\n{result.stdout}")
+        self.assertEqual(result.returncode, 0, f"ruff errors:\n{result.stdout}\n{result.stderr}")
 
     def test_ruff_passes_on_tests(self):
         """Verify ruff check passes cleanly on test_invaders.py."""
@@ -2257,7 +2257,7 @@ class TestPreCommitAndRuff(unittest.TestCase):
             text=True,
             cwd=os.path.dirname(__file__),
         )
-        self.assertEqual(result.returncode, 0, f"ruff errors:\n{result.stdout}")
+        self.assertEqual(result.returncode, 0, f"ruff errors:\n{result.stdout}\n{result.stderr}")
 
     def test_pyproject_has_ruff_config(self):
         """Verify pyproject.toml has [tool.ruff] configuration."""
