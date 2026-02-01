@@ -33,7 +33,7 @@
 
 - [x] **Step 18:** Optimize collision detection with spatial partitioning
 - [x] **Step 19:** Add terminal resize handling
-- [ ] **Step 20:** Add frame time smoothing and performance metrics with FPS counter
+- [x] **Step 20:** Add frame time smoothing and performance metrics with FPS counter
 
 ## Infrastructure & DevOps
 

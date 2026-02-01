@@ -166,6 +166,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument('--difficulty', choices=['easy', 'normal', 'hard'], default='normal',
                         help='Difficulty preset (default: normal)')
     parser.add_argument('--fps', type=int, default=None, help='Target FPS (default: 60)')
+    parser.add_argument('--show-fps', action='store_true', help='Display FPS counter during gameplay')
     return parser
 
 
@@ -688,6 +689,54 @@ class SoundEffects:
 
 
 # ============================================================================
+# FRAME TIMER / PERFORMANCE METRICS
+# ============================================================================
+
+class FrameTimer:
+    """Rolling-window frame time tracker for performance metrics.
+
+    Tracks the last N frame times and provides average FPS, min/max
+    frame time, and frame time variance.
+    """
+
+    def __init__(self, window_size: int = 60):
+        self.window_size = window_size
+        self.frame_times: List[float] = []
+
+    def record(self, frame_time: float) -> None:
+        """Record a frame time (in seconds)."""
+        self.frame_times.append(frame_time)
+        if len(self.frame_times) > self.window_size:
+            self.frame_times.pop(0)
+
+    @property
+    def average_fps(self) -> float:
+        """Return average FPS over the rolling window."""
+        if not self.frame_times:
+            return 0.0
+        avg_time = sum(self.frame_times) / len(self.frame_times)
+        return 1.0 / avg_time if avg_time > 0 else 0.0
+
+    @property
+    def min_frame_time(self) -> float:
+        """Return the minimum frame time in the window."""
+        return min(self.frame_times) if self.frame_times else 0.0
+
+    @property
+    def max_frame_time(self) -> float:
+        """Return the maximum frame time in the window."""
+        return max(self.frame_times) if self.frame_times else 0.0
+
+    @property
+    def variance(self) -> float:
+        """Return the variance of frame times in the window."""
+        if len(self.frame_times) < 2:
+            return 0.0
+        avg = sum(self.frame_times) / len(self.frame_times)
+        return sum((t - avg) ** 2 for t in self.frame_times) / len(self.frame_times)
+
+
+# ============================================================================
 # SPATIAL PARTITIONING
 # ============================================================================
 
@@ -768,6 +817,10 @@ class Game:
         self.width = 80
         self.height = 24
         self.too_small = False  # True when terminal is below minimum size
+
+        # Frame timer for performance metrics
+        self.frame_timer = FrameTimer()
+        self.show_fps = False  # Toggled by F1 or --show-fps
 
         # Initialize player at center-bottom
         self.player = Player(lives=self.config.player_start_lives)
@@ -1364,6 +1417,11 @@ class Game:
                 self.handle_resize(new_w, new_h)
             return True
 
+        # Toggle FPS display with F1
+        if key == curses.KEY_F1:
+            self.show_fps = not self.show_fps
+            return True
+
         if self.state == GameState.MENU:
             if key == ord(' ') or key == ord('\n'):
                 self.state = GameState.PLAYING
@@ -1487,6 +1545,12 @@ class Game:
             self._safe_addstr(proj.y, proj.x, self.config.projectile_alien,
                              curses.color_pair(COLOR_GAME_OVER))
 
+        # FPS counter (when enabled via F1 or --show-fps)
+        if self.show_fps:
+            fps_text = f"FPS: {self.frame_timer.average_fps:.0f}"
+            self._safe_addstr(self.height - 1, 2, fps_text,
+                             curses.color_pair(COLOR_TEXT))
+
     def _render_pause_overlay(self) -> None:
         """Render pause overlay on top of the game."""
         pause_text = "PAUSED"
@@ -1602,8 +1666,9 @@ class Game:
                     # Render
                     self.render()
 
-                    # Frame rate limiting
+                    # Frame rate limiting and metrics
                     elapsed = time.time() - frame_start
+                    self.frame_timer.record(elapsed)
                     sleep_time = self.config.frame_time - elapsed
                     if sleep_time > 0:
                         time.sleep(sleep_time)
@@ -1635,6 +1700,8 @@ def main():
         game.sfx.enabled = False
     if args.no_music:
         game.audio = None  # Prevent audio manager from starting
+    if args.show_fps:
+        game.show_fps = True
 
     game.run()
 

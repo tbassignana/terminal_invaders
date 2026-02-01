@@ -2022,6 +2022,95 @@ class TestTerminalResize(unittest.TestCase):
         self.assertEqual(game.player.x, old_player_x)
 
 
+class TestFrameTimer(unittest.TestCase):
+    """Step 20: Tests for frame time smoothing and FPS metrics."""
+
+    def test_fps_calculation_accuracy(self):
+        """Verify average FPS is calculated correctly from frame times."""
+        from invaders import FrameTimer
+        ft = FrameTimer(window_size=10)
+        # Simulate 60 FPS (16.67ms per frame)
+        for _ in range(10):
+            ft.record(1.0 / 60.0)
+        self.assertAlmostEqual(ft.average_fps, 60.0, delta=0.5)
+
+    def test_rolling_window_behavior(self):
+        """Verify old frame times are evicted when window is full."""
+        from invaders import FrameTimer
+        ft = FrameTimer(window_size=5)
+        # Fill with slow frames (10 FPS)
+        for _ in range(5):
+            ft.record(0.1)
+        self.assertAlmostEqual(ft.average_fps, 10.0, delta=0.5)
+        # Now add fast frames (100 FPS)
+        for _ in range(5):
+            ft.record(0.01)
+        # Window should now only contain fast frames
+        self.assertAlmostEqual(ft.average_fps, 100.0, delta=1.0)
+
+    def test_min_max_frame_time(self):
+        """Verify min and max frame time tracking."""
+        from invaders import FrameTimer
+        ft = FrameTimer(window_size=10)
+        ft.record(0.010)
+        ft.record(0.020)
+        ft.record(0.015)
+        self.assertAlmostEqual(ft.min_frame_time, 0.010)
+        self.assertAlmostEqual(ft.max_frame_time, 0.020)
+
+    def test_variance_calculation(self):
+        """Verify frame time variance is calculated."""
+        from invaders import FrameTimer
+        ft = FrameTimer(window_size=10)
+        # Uniform frame times should have 0 variance
+        for _ in range(5):
+            ft.record(0.016)
+        self.assertAlmostEqual(ft.variance, 0.0, places=6)
+        # Mixed times should have positive variance
+        ft2 = FrameTimer(window_size=10)
+        ft2.record(0.010)
+        ft2.record(0.030)
+        self.assertGreater(ft2.variance, 0)
+
+    def test_empty_frame_timer(self):
+        """Verify empty FrameTimer returns sensible defaults."""
+        from invaders import FrameTimer
+        ft = FrameTimer()
+        self.assertEqual(ft.average_fps, 0.0)
+        self.assertEqual(ft.min_frame_time, 0.0)
+        self.assertEqual(ft.max_frame_time, 0.0)
+        self.assertEqual(ft.variance, 0.0)
+
+    def test_single_frame_variance(self):
+        """Variance with single frame returns 0."""
+        from invaders import FrameTimer
+        ft = FrameTimer()
+        ft.record(0.016)
+        self.assertEqual(ft.variance, 0.0)
+
+    def test_show_fps_toggle_f1(self):
+        """Verify F1 key toggles show_fps flag."""
+        import curses
+        game = Game(test_mode=True)
+        self.assertFalse(game.show_fps)
+        game.handle_input(curses.KEY_F1)
+        self.assertTrue(game.show_fps)
+        game.handle_input(curses.KEY_F1)
+        self.assertFalse(game.show_fps)
+
+    def test_show_fps_cli_flag(self):
+        """Verify --show-fps flag is parsed."""
+        parser = build_argument_parser()
+        args = parser.parse_args(['--show-fps'])
+        self.assertTrue(args.show_fps)
+
+    def test_frame_timer_on_game(self):
+        """Verify Game has a FrameTimer instance."""
+        game = Game(test_mode=True)
+        from invaders import FrameTimer
+        self.assertIsInstance(game.frame_timer, FrameTimer)
+
+
 if __name__ == '__main__':
     # Run tests with verbosity
     unittest.main(verbosity=2)
