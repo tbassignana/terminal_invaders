@@ -988,10 +988,12 @@ class TestGameUpdateIntegration(unittest.TestCase):
         self.assertGreater(game.score, 0)
 
     def test_level_transition_on_all_aliens_killed(self):
-        """Test kill all aliens → level increments and aliens respawn."""
+        """Test kill all aliens through all waves → level increments and aliens respawn."""
         game = Game(test_mode=True)
-        game.aliens = []
-        game.update()
+        # Clear all 3 waves to trigger level transition
+        for wave in range(game.max_waves):
+            game.aliens = []
+            game.update()
         self.assertEqual(game.state, GameState.LEVEL_TRANSITION)
         self.assertEqual(game.level, 2)
         self.assertGreater(len(game.aliens), 0)
@@ -4859,6 +4861,92 @@ class TestBossAlien(unittest.TestCase):
         initial_proj_count = len(game.alien_projectiles)
         game._update_boss(time.time())
         self.assertEqual(len(game.alien_projectiles), initial_proj_count + 3)
+
+
+class TestWaveSubLevels(unittest.TestCase):
+    """Step 59: Wave-based sub-levels (3 waves per level)."""
+
+    def test_initial_wave_is_1(self):
+        """Game starts on wave 1."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.current_wave, 1)
+        self.assertEqual(game.max_waves, 3)
+
+    def test_get_wave_info(self):
+        """get_wave_info returns current wave state."""
+        game = Game(test_mode=True)
+        info = game.get_wave_info()
+        self.assertEqual(info["current_wave"], 1)
+        self.assertEqual(info["max_waves"], 3)
+        self.assertFalse(info["is_final_wave"])
+
+    def test_wave_3_is_final(self):
+        """Wave 3 is the final wave."""
+        game = Game(test_mode=True)
+        game.current_wave = 3
+        info = game.get_wave_info()
+        self.assertTrue(info["is_final_wave"])
+
+    def test_clearing_wave_1_advances_to_wave_2(self):
+        """Clearing aliens on wave 1 advances to wave 2, not next level."""
+        game = Game(test_mode=True)
+        game.current_wave = 1
+        old_level = game.level
+        game.aliens = []  # Clear all aliens
+        game.update()
+        self.assertEqual(game.current_wave, 2)
+        self.assertEqual(game.level, old_level)  # Level unchanged
+        self.assertGreater(len(game.aliens), 0)  # New aliens spawned
+
+    def test_clearing_wave_2_advances_to_wave_3(self):
+        """Clearing aliens on wave 2 advances to wave 3."""
+        game = Game(test_mode=True)
+        game.current_wave = 2
+        game.aliens = []
+        game.update()
+        self.assertEqual(game.current_wave, 3)
+
+    def test_clearing_final_wave_advances_level(self):
+        """Clearing aliens on wave 3 triggers _next_level."""
+        game = Game(test_mode=True)
+        game.current_wave = 3
+        old_level = game.level
+        game.aliens = []
+        game.update()
+        self.assertEqual(game.level, old_level + 1)
+        self.assertEqual(game.current_wave, 1)  # Reset for new level
+
+    def test_wave_advance_gives_score_bonus(self):
+        """Advancing a wave awards a score bonus."""
+        game = Game(test_mode=True)
+        old_score = game.score
+        game.aliens = []
+        game.update()
+        self.assertGreater(game.score, old_score)
+
+    def test_wave_advance_creates_score_popup(self):
+        """Advancing a wave creates a WAVE popup."""
+        game = Game(test_mode=True)
+        game.aliens = []
+        game.update()
+        self.assertTrue(any("WAVE" in p.text for p in game.score_popups))
+
+    def test_wave_escalates_alien_speed(self):
+        """Each wave within a level makes aliens slightly faster."""
+        game = Game(test_mode=True)
+        speed1 = game.alien_move_interval
+        game.aliens = []
+        game.update()  # Wave 1 → 2
+        speed2 = game.alien_move_interval
+        self.assertLessEqual(speed2, speed1)
+
+    def test_next_level_resets_wave(self):
+        """_next_level resets current_wave to 1."""
+        game = Game(test_mode=True)
+        game.current_wave = 3
+        game.aliens = []
+        game.update()  # Should trigger _next_level
+        self.assertEqual(game.current_wave, 1)
 
 
 if __name__ == "__main__":

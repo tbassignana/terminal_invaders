@@ -1292,6 +1292,8 @@ class Game:
         self.score = 0
         self.level = 1
         self.initial_alien_count: int = 0  # Set by _init_aliens()
+        self.current_wave: int = 1  # Sub-wave within a level (1-3)
+        self.max_waves: int = 3  # Waves per level
 
         # Game stats tracking (for game over screen)
         self.total_shots: int = 0
@@ -1746,10 +1748,13 @@ class Game:
         if self.sfx and self.aliens:
             self.sfx.update_march(len(self.aliens), self.initial_alien_count or 1)
 
-        # Check level complete (all aliens dead AND boss dead if boss level)
+        # Check wave/level complete (all aliens dead AND boss dead if boss level)
         boss_alive = self.boss and self.boss.is_alive()
         if not self.aliens and not boss_alive:
-            self._next_level()
+            if self.current_wave < self.max_waves:
+                self._next_wave()
+            else:
+                self._next_level()
 
     def _move_aliens(self) -> None:
         """Move alien formation."""
@@ -2131,10 +2136,40 @@ class Game:
             "alive": self.boss.is_alive(),
         }
 
+    def get_wave_info(self) -> dict:
+        """Return current wave state for display/testing."""
+        return {
+            "current_wave": self.current_wave,
+            "max_waves": self.max_waves,
+            "is_final_wave": self.current_wave >= self.max_waves,
+        }
+
     def get_scaled_bunker_health(self) -> int:
         """Return starting bunker health for the current level (reduced every 5 levels, min 1)."""
         reduction = (self.level - 1) // 5
         return max(1, 3 - reduction)
+
+    def _next_wave(self) -> None:
+        """Advance to the next wave within the current level.
+
+        Respawns aliens with slightly increased speed, keeps bunkers and score.
+        """
+        self.current_wave += 1
+        # Escalate difficulty: 5% speed increase per wave
+        wave_scale = 0.95 ** (self.current_wave - 1)
+        self.alien_move_interval = max(0.1, self.alien_move_interval * wave_scale)
+        # Respawn aliens (keeps bunkers intact)
+        self._init_aliens()
+        # Small score bonus for clearing a wave
+        wave_bonus = 50 * self.current_wave
+        self.score += wave_bonus
+        self.score_popups.append(
+            ScorePopup(
+                x=float(self.width // 2),
+                y=float(self.height // 2),
+                text=f"WAVE {self.current_wave}! +{wave_bonus}",
+            )
+        )
 
     def _next_level(self) -> None:
         """Advance to next level and award bonus lives."""
@@ -2150,6 +2185,7 @@ class Game:
             self.sfx.play_life_bonus()
 
         self.level += 1
+        self.current_wave = 1  # Reset wave counter for new level
         self.state = GameState.LEVEL_TRANSITION
         self.level_transition_time = time.time()
 
