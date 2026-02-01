@@ -2230,6 +2230,35 @@ class Game:
         elif index == 2:
             self.show_fps = not self.show_fps
 
+    def get_controls_display(self) -> dict:
+        """Return controls help screen data (testable without curses).
+
+        Returns dict with:
+            title: "CONTROLS"
+            keybindings: list of (key, action) tuples
+            alien_points: list of (type_name, sprite, points) tuples
+        """
+        keybindings = [
+            ("A / LEFT", "Move Left"),
+            ("D / RIGHT", "Move Right"),
+            ("SPACE", "Fire"),
+            ("P / ESC", "Pause"),
+            ("F1", "Toggle FPS"),
+            ("Q", "Quit"),
+            ("R", "Restart (Game Over)"),
+        ]
+        alien_points = [
+            ("Top Row", ALIEN_CHARS[0][0], "30 pts"),
+            ("Middle Row", ALIEN_CHARS[1][0], "20 pts"),
+            ("Bottom Row", ALIEN_CHARS[2][0], "10 pts"),
+            ("Mystery Ship", MYSTERY_SHIP_CHAR, "50-200 pts"),
+        ]
+        return {
+            "title": "CONTROLS",
+            "keybindings": keybindings,
+            "alien_points": alien_points,
+        }
+
     def _render_menu(self) -> None:
         """Render the animated title screen with ASCII art and color cycling."""
         layout = self.get_title_layout()
@@ -2259,8 +2288,10 @@ class Game:
                 self._render_high_scores_screen()
             elif self.menu_screen == MenuScreen.OPTIONS:
                 self._render_options_screen()
+            elif self.menu_screen == MenuScreen.CONTROLS:
+                self._render_controls_screen()
             else:
-                # Sub-screen placeholder (implemented in steps 54-55)
+                # Sub-screen placeholder (implemented in step 55)
                 screen_name = self.menu_screen.name.replace("_", " ").title()
                 text = f"[ {screen_name} ]"
                 self._safe_addstr(self.height // 2, (self.width - len(text)) // 2, text, curses.color_pair(COLOR_TEXT))
@@ -2268,8 +2299,8 @@ class Game:
             back_y = self.height // 2 + 2
             if self.menu_screen == MenuScreen.HIGH_SCORES:
                 back_y += 11
-            elif self.menu_screen == MenuScreen.OPTIONS:
-                back_y += 6
+            elif self.menu_screen in (MenuScreen.OPTIONS, MenuScreen.CONTROLS):
+                back_y += 8
             self._safe_addstr(
                 back_y, (self.width - len(back_text)) // 2,
                 back_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM
@@ -2309,6 +2340,26 @@ class Game:
             row = center_y + 2 + i
             attr = curses.color_pair(COLOR_TEXT) | curses.A_BOLD if item["selected"] else curses.color_pair(COLOR_TEXT)
             self._safe_addstr(row, (self.width - len(line)) // 2, line, attr)
+
+    def _render_controls_screen(self) -> None:
+        """Render the controls help screen with keybindings and alien point values."""
+        ctrl = self.get_controls_display()
+        center_y = self.height // 2 - 7
+        title = ctrl["title"]
+        self._safe_addstr(center_y, (self.width - len(title)) // 2, title, curses.color_pair(COLOR_TEXT) | curses.A_BOLD)
+
+        # Keybindings table
+        for i, (key, action) in enumerate(ctrl["keybindings"]):
+            line = f"  {key:<12} {action}"
+            self._safe_addstr(center_y + 2 + i, (self.width - 30) // 2, line, curses.color_pair(COLOR_TEXT))
+
+        # Alien point values
+        pts_y = center_y + 2 + len(ctrl["keybindings"]) + 1
+        pts_title = "ALIEN POINTS"
+        self._safe_addstr(pts_y, (self.width - len(pts_title)) // 2, pts_title, curses.color_pair(COLOR_TEXT) | curses.A_BOLD)
+        for i, (name, sprite, pts) in enumerate(ctrl["alien_points"]):
+            line = f"  {sprite}  {name:<12} {pts}"
+            self._safe_addstr(pts_y + 1 + i, (self.width - 30) // 2, line, curses.color_pair(COLOR_TEXT))
 
     def _render_game(self) -> None:
         """Render the main gameplay."""

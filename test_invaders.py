@@ -4417,6 +4417,65 @@ class TestOptionsMenuScreen(unittest.TestCase):
         mock_screen.clear.assert_called()
 
 
+class TestControlsHelpScreen(unittest.TestCase):
+    """Tests for controls help screen (Step 54)."""
+
+    def test_get_controls_display_structure(self):
+        """get_controls_display returns expected structure."""
+        game = Game(test_mode=True)
+        ctrl = game.get_controls_display()
+        self.assertEqual(ctrl["title"], "CONTROLS")
+        self.assertIsInstance(ctrl["keybindings"], list)
+        self.assertIsInstance(ctrl["alien_points"], list)
+
+    def test_keybindings_include_essential_keys(self):
+        """Keybindings list includes essential game controls."""
+        game = Game(test_mode=True)
+        ctrl = game.get_controls_display()
+        keys = [k for k, _ in ctrl["keybindings"]]
+        self.assertIn("SPACE", keys)
+        self.assertIn("Q", keys)
+        self.assertIn("P / ESC", keys)
+
+    def test_alien_points_include_all_types(self):
+        """Alien points list includes all alien types and mystery ship."""
+        game = Game(test_mode=True)
+        ctrl = game.get_controls_display()
+        names = [name for name, _, _ in ctrl["alien_points"]]
+        self.assertIn("Top Row", names)
+        self.assertIn("Middle Row", names)
+        self.assertIn("Bottom Row", names)
+        self.assertIn("Mystery Ship", names)
+
+    def test_alien_points_sprites_are_strings(self):
+        """Alien point sprites are non-empty strings."""
+        game = Game(test_mode=True)
+        ctrl = game.get_controls_display()
+        for name, sprite, pts in ctrl["alien_points"]:
+            self.assertIsInstance(sprite, str)
+            self.assertGreater(len(sprite), 0)
+
+    def test_alien_points_values_format(self):
+        """Point values are formatted as 'N pts' strings."""
+        game = Game(test_mode=True)
+        ctrl = game.get_controls_display()
+        for _, _, pts in ctrl["alien_points"]:
+            self.assertIn("pts", pts)
+
+    def test_render_controls_with_mock_screen(self):
+        """_render_controls_screen renders with mock screen."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.CONTROLS
+        mock_screen = unittest.mock.MagicMock()
+        mock_screen.getmaxyx.return_value = (30, 80)
+        game.screen = mock_screen
+        with unittest.mock.patch("curses.color_pair", return_value=0):
+            game.render()
+        mock_screen.clear.assert_called()
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

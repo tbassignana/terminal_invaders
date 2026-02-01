@@ -93,7 +93,7 @@
 - [x] **Step 51:** Add main menu state machine with multiple screens (Play, High Scores, Options, Controls, Credits, Quit)
 - [x] **Step 52:** Add high scores display screen (top 10 table with rank, score, level, date)
 - [x] **Step 53:** Add options/settings menu screen (sound, music, difficulty, FPS toggles)
-- [ ] **Step 54:** Add controls help screen (keybindings table, alien point values)
+- [x] **Step 54:** Add controls help screen (keybindings table, alien point values)
 - [ ] **Step 55:** Add credits screen (scrolling text animation with version and repo link)
 - [ ] **Step 56:** Add menu cursor animation and selection effects (bobbing `>`, flash on select)
 
