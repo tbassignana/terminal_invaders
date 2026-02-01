@@ -14,6 +14,7 @@ import unittest
 import logging
 import os
 import sys
+import time
 
 # Import the game module (will be created next)
 import tempfile
@@ -29,6 +30,7 @@ from invaders import (
     Player,
     Alien,
     Projectile,
+    MysteryShip,
     ScoreManager,
     Game,
     AbstractSoundBackend,
@@ -602,6 +604,50 @@ class TestSoundBackend(unittest.TestCase):
         backend = NullSoundBackend()
         sfx = SoundEffects(backend=backend)
         self.assertIs(sfx.backend, backend)
+
+
+class TestMysteryShip(unittest.TestCase):
+    """Step 8: Tests for the Mystery Ship (UFO) feature."""
+
+    def test_mystery_ship_creation(self):
+        """Verify MysteryShip dataclass stores all fields."""
+        ufo = MysteryShip(x=0.0, y=1, speed=0.5, points=200)
+        self.assertEqual(ufo.x, 0.0)
+        self.assertEqual(ufo.points, 200)
+        self.assertTrue(ufo.active)
+
+    def test_mystery_ship_movement(self):
+        """Verify the ship moves when update is called."""
+        game = Game(test_mode=True)
+        game.mystery_ship = MysteryShip(x=10.0, y=1, speed=0.5, points=100)
+        game._update_mystery_ship(time.time())
+        self.assertAlmostEqual(game.mystery_ship.x, 10.5)
+
+    def test_mystery_ship_despawn_at_edge(self):
+        """Verify ship is removed when it exits the screen."""
+        game = Game(test_mode=True)
+        game.mystery_ship = MysteryShip(x=float(game.width + 4), y=1, speed=0.5, points=100)
+        game._update_mystery_ship(time.time())
+        self.assertIsNone(game.mystery_ship)
+
+    def test_mystery_ship_collision_awards_points(self):
+        """Verify shooting the UFO awards its point value."""
+        game = Game(test_mode=True)
+        game.mystery_ship = MysteryShip(x=20.0, y=1, speed=0.5, points=250)
+        game.player_projectiles.append(Projectile(x=20, y=1, direction=-1))
+        initial_score = game.score
+        game._check_collisions()
+        self.assertEqual(game.score, initial_score + 250)
+        self.assertIsNone(game.mystery_ship)
+
+    def test_mystery_ship_score_display(self):
+        """Verify score display is set after shooting UFO."""
+        game = Game(test_mode=True)
+        game.mystery_ship = MysteryShip(x=20.0, y=1, speed=0.5, points=150)
+        game.player_projectiles.append(Projectile(x=20, y=1, direction=-1))
+        game._check_collisions()
+        self.assertIsNotNone(game.mystery_score_display)
+        self.assertEqual(game.mystery_score_display[2], 150)
 
 
 class TestCLIArgParser(unittest.TestCase):

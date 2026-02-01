@@ -15,7 +15,7 @@
 
 ## Gameplay Features
 
-- [ ] **Step 8:** Add a Mystery Ship (UFO) that crosses the top of the screen
+- [x] **Step 8:** Add a Mystery Ship (UFO) that crosses the top of the screen
 - [ ] **Step 9:** Add a pause system with `PAUSED` game state
 - [ ] **Step 10:** Implement power-ups dropped by aliens (rapid fire, shield, wide shot)
 - [ ] **Step 11:** Add combo scoring system with time-windowed multiplier

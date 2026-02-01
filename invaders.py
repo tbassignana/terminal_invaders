@@ -343,6 +343,16 @@ class Projectile:
     direction: int  # -1 for up (player), 1 for down (alien)
 
 
+@dataclass
+class MysteryShip:
+    """UFO that crosses the top of the screen for bonus points."""
+    x: float
+    y: int = 1
+    speed: float = 0.5
+    points: int = 100
+    active: bool = True
+
+
 # ============================================================================
 # SCORE MANAGER
 # ============================================================================
@@ -710,6 +720,11 @@ class Game:
         self.flash_active = False
         self.flash_end_time = 0
 
+        # Mystery ship (UFO)
+        self.mystery_ship: Optional[MysteryShip] = None
+        self.last_mystery_spawn_check = time.time()
+        self.mystery_score_display: Optional[Tuple[int, int, int, float]] = None  # (x, y, pts, end_time)
+
         # Event bus
         self.event_bus = EventBus()
 
@@ -858,6 +873,10 @@ class Game:
         self.alien_move_interval = self.config.alien_move_interval
         self.last_alien_move_time = time.time()
 
+        # Reset mystery ship
+        self.mystery_ship = None
+        self.mystery_score_display = None
+
         # Set state to playing
         self.state = GameState.PLAYING
 
@@ -887,6 +906,9 @@ class Game:
 
         # Alien firing
         self._alien_fire()
+
+        # Update mystery ship
+        self._update_mystery_ship(current_time)
 
         # Check collisions
         self._check_collisions()
@@ -924,6 +946,31 @@ class Game:
         else:
             for alien in self.aliens:
                 alien.x += self.alien_direction
+
+    def _update_mystery_ship(self, current_time: float) -> None:
+        """Spawn and update the mystery ship (UFO)."""
+        # Clear expired score display
+        if self.mystery_score_display and current_time >= self.mystery_score_display[3]:
+            self.mystery_score_display = None
+
+        if self.mystery_ship and self.mystery_ship.active:
+            # Move the ship
+            self.mystery_ship.x += self.mystery_ship.speed
+            # Despawn at screen edge
+            if self.mystery_ship.x < -3 or self.mystery_ship.x > self.width + 3:
+                self.mystery_ship = None
+        else:
+            # Random spawn check (~once per 25 seconds at 60fps)
+            # Probability per frame: 1/(25*60) ≈ 0.000667
+            if current_time - self.last_mystery_spawn_check >= 1.0:
+                self.last_mystery_spawn_check = current_time
+                if random.random() < 1.0 / 25.0:
+                    direction = random.choice([-1, 1])
+                    start_x = -3.0 if direction == 1 else float(self.width + 3)
+                    points = random.choice([50, 100, 150, 200, 250, 300])
+                    self.mystery_ship = MysteryShip(
+                        x=start_x, y=1, speed=0.5 * direction, points=points
+                    )
 
     def _update_projectiles(self) -> None:
         """Update all projectile positions."""
@@ -989,6 +1036,22 @@ class Game:
                     bunker.hit()
                     if proj in self.alien_projectiles:
                         self.alien_projectiles.remove(proj)
+                    break
+
+        # Player projectiles vs mystery ship
+        if self.mystery_ship and self.mystery_ship.active:
+            for proj in self.player_projectiles[:]:
+                if (abs(proj.x - self.mystery_ship.x) <= 2 and
+                    abs(proj.y - self.mystery_ship.y) <= 1):
+                    pts = self.mystery_ship.points
+                    self.score += pts
+                    self.mystery_score_display = (
+                        int(self.mystery_ship.x), self.mystery_ship.y, pts,
+                        time.time() + 1.0
+                    )
+                    self.mystery_ship = None
+                    if proj in self.player_projectiles:
+                        self.player_projectiles.remove(proj)
                     break
 
     def _next_level(self) -> None:
