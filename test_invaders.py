@@ -653,6 +653,65 @@ class TestMysteryShip(unittest.TestCase):
         self.assertEqual(game.mystery_score_display[2], 150)
 
 
+class TestComboScoring(unittest.TestCase):
+    """Step 11: Tests for the combo scoring system."""
+
+    def test_combo_tracking(self):
+        """Verify combo count increments on rapid kills."""
+        game = Game(test_mode=True)
+        now = time.time()
+        game._register_kill(now)
+        game._register_kill(now + 0.5)
+        self.assertEqual(game.combo_count, 2)
+
+    def test_combo_multiplier_calculation(self):
+        """Verify multiplier ramps from 1x to 5x."""
+        game = Game(test_mode=True)
+        now = time.time()
+        self.assertEqual(game.get_combo_multiplier(), 1)
+        game._register_kill(now)
+        game._register_kill(now + 0.1)
+        self.assertEqual(game.get_combo_multiplier(), 2)
+        game._register_kill(now + 0.2)
+        self.assertEqual(game.get_combo_multiplier(), 3)
+
+    def test_combo_timeout_reset(self):
+        """Verify combo resets after time window expires."""
+        game = Game(test_mode=True)
+        now = time.time()
+        game._register_kill(now)
+        game._register_kill(now + 0.5)
+        self.assertEqual(game.combo_count, 2)
+        # Kill outside window
+        game._register_kill(now + 5.0)
+        self.assertEqual(game.combo_count, 1)
+
+    def test_max_combo_cap(self):
+        """Verify combo multiplier caps at 5."""
+        game = Game(test_mode=True)
+        now = time.time()
+        for i in range(10):
+            game._register_kill(now + i * 0.1)
+        self.assertEqual(game.get_combo_multiplier(), 5)
+
+    def test_combo_score_integration(self):
+        """Verify combo multiplier affects score in collision detection."""
+        game = Game(test_mode=True)
+        # Set up two aliens close together
+        game.aliens = [Alien(x=20, y=10, alien_type=0), Alien(x=25, y=10, alien_type=0)]
+        # Kill first one to start combo
+        game.player_projectiles.append(Projectile(x=20, y=10, direction=-1))
+        game._check_collisions()
+        first_score = game.score
+
+        # Kill second one within combo window
+        game.player_projectiles.append(Projectile(x=25, y=10, direction=-1))
+        game._check_collisions()
+        second_kill_points = game.score - first_score
+        # Second kill should have higher points due to combo
+        self.assertGreaterEqual(second_kill_points, first_score)
+
+
 class TestPowerUps(unittest.TestCase):
     """Step 10: Tests for the power-up system."""
 

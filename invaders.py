@@ -756,6 +756,12 @@ class Game:
         self.power_ups: List[PowerUp] = []
         self.active_power_ups: List[ActivePowerUp] = []
 
+        # Combo system
+        self.combo_count = 0
+        self.combo_last_kill_time: float = 0
+        self.combo_window: float = 2.0  # seconds
+        self.combo_max: int = 5
+
         # Event bus
         self.event_bus = EventBus()
 
@@ -917,6 +923,10 @@ class Game:
         self.power_ups.clear()
         self.active_power_ups.clear()
 
+        # Reset combo
+        self.combo_count = 0
+        self.combo_last_kill_time = 0
+
         # Set state to playing
         self.state = GameState.PLAYING
 
@@ -1059,6 +1069,21 @@ class Game:
             ap for ap in self.active_power_ups if ap.power_type != PowerUpType.SHIELD
         ]
 
+    def get_combo_multiplier(self) -> int:
+        """Return the current combo multiplier (1x to 5x)."""
+        if self.combo_count < 2:
+            return 1
+        return min(self.combo_count, self.combo_max)
+
+    def _register_kill(self, current_time: float) -> int:
+        """Register an alien kill for combo tracking. Returns the multiplier."""
+        if current_time - self.combo_last_kill_time <= self.combo_window:
+            self.combo_count += 1
+        else:
+            self.combo_count = 1
+        self.combo_last_kill_time = current_time
+        return self.get_combo_multiplier()
+
     def _update_projectiles(self) -> None:
         """Update all projectile positions."""
         # Player projectiles move up (faster)
@@ -1088,6 +1113,7 @@ class Game:
 
     def _check_collisions(self) -> None:
         """Check all collision types."""
+        current_time = time.time()
         # Player projectiles vs aliens
         for proj in self.player_projectiles[:]:
             for alien in self.aliens[:]:
@@ -1096,7 +1122,8 @@ class Game:
                     self.aliens.remove(alien)
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
-                    self.score += 10 * (3 - alien.alien_type)
+                    multiplier = self._register_kill(current_time)
+                    self.score += 10 * (3 - alien.alien_type) * multiplier
                     self._spawn_power_up(alien.x, alien.y)
                     self.event_bus.publish(GameEvent.ALIEN_KILLED, alien_type=alien.alien_type)
                     break
