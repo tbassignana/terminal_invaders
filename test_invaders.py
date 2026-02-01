@@ -64,6 +64,8 @@ from invaders import (
     DEFAULT_EXPLOSION_CONFIG,
     FORMATION_FUNCS,
     FORMATION_NAMES,
+    LAST_STAND_FIRE_SLOT_MULT,
+    LAST_STAND_SPEED_MULT,
     MENU_ITEMS,
     MYSTERY_SHIP_CHAR,
     PLAYER_START_LIVES,
@@ -5237,6 +5239,113 @@ class TestProgressiveAlienSpeed(unittest.TestCase):
         # Each should be less than the previous
         for i in range(1, len(intervals)):
             self.assertLessEqual(intervals[i], intervals[i - 1])
+
+
+class TestLastStandMechanic(unittest.TestCase):
+    """Tests for the 'last stand' mechanic (buffs at 1 life)."""
+
+    def _make_game(self, lives=5):
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.player.lives = lives
+        return game
+
+    def test_is_last_stand_at_one_life(self):
+        """Last stand activates when player has exactly 1 life."""
+        game = self._make_game(lives=1)
+        self.assertTrue(game.is_last_stand())
+
+    def test_not_last_stand_at_multiple_lives(self):
+        """Last stand is not active with more than 1 life."""
+        game = self._make_game(lives=3)
+        self.assertFalse(game.is_last_stand())
+
+    def test_not_last_stand_at_zero_lives(self):
+        """Last stand is not active at 0 lives (game over)."""
+        game = self._make_game(lives=0)
+        self.assertFalse(game.is_last_stand())
+
+    def test_get_last_stand_info_active(self):
+        """get_last_stand_info returns correct buffs when active."""
+        game = self._make_game(lives=1)
+        info = game.get_last_stand_info()
+        self.assertTrue(info["active"])
+        self.assertEqual(info["speed_mult"], LAST_STAND_SPEED_MULT)
+        self.assertEqual(info["fire_slot_mult"], LAST_STAND_FIRE_SLOT_MULT)
+
+    def test_get_last_stand_info_inactive(self):
+        """get_last_stand_info returns no buffs when inactive."""
+        game = self._make_game(lives=3)
+        info = game.get_last_stand_info()
+        self.assertFalse(info["active"])
+        self.assertEqual(info["speed_mult"], 1)
+        self.assertEqual(info["fire_slot_mult"], 1)
+
+    def test_speed_boost_on_movement(self):
+        """Player moves faster when last stand is active."""
+        game = self._make_game(lives=1)
+        game.width = 80
+        game.player.x = 40
+        start_x = game.player.x
+        game.handle_input(curses.KEY_RIGHT)
+        moved = game.player.x - start_x
+        expected_speed = game.config.player_speed * LAST_STAND_SPEED_MULT
+        self.assertEqual(moved, expected_speed)
+
+    def test_normal_speed_without_last_stand(self):
+        """Player moves at normal speed when lives > 1."""
+        game = self._make_game(lives=3)
+        game.width = 80
+        game.player.x = 40
+        start_x = game.player.x
+        game.handle_input(curses.KEY_RIGHT)
+        moved = game.player.x - start_x
+        self.assertEqual(moved, game.config.player_speed)
+
+    def test_double_fire_slots(self):
+        """Last stand doubles the max projectile slots."""
+        game = self._make_game(lives=1)
+        game.width = 80
+        game.player.y = 20
+        base_max = 3 + game.weapon_level
+        expected_max = base_max * LAST_STAND_FIRE_SLOT_MULT
+        # Fire many times to fill up slots
+        for _ in range(expected_max + 5):
+            game.handle_input(ord(" "))
+        self.assertEqual(len(game.player_projectiles), expected_max)
+
+    def test_normal_fire_slots_without_last_stand(self):
+        """Normal fire slots when lives > 1."""
+        game = self._make_game(lives=3)
+        game.width = 80
+        game.player.y = 20
+        base_max = 3 + game.weapon_level
+        for _ in range(base_max + 5):
+            game.handle_input(ord(" "))
+        self.assertEqual(len(game.player_projectiles), base_max)
+
+    def test_hud_shows_last_stand(self):
+        """Bottom HUD includes last stand indicator when active."""
+        game = self._make_game(lives=1)
+        game.width = 80
+        game.height = 30
+        hud = game.get_bottom_hud_info()
+        self.assertIn("LAST STAND", hud["last_stand"])
+
+    def test_hud_no_last_stand_normally(self):
+        """Bottom HUD has empty last stand when lives > 1."""
+        game = self._make_game(lives=3)
+        game.width = 80
+        game.height = 30
+        hud = game.get_bottom_hud_info()
+        self.assertEqual(hud["last_stand"], "")
+
+    def test_last_stand_deactivates_on_life_gain(self):
+        """Last stand turns off when player gains a life."""
+        game = self._make_game(lives=1)
+        self.assertTrue(game.is_last_stand())
+        game.player.lives = 2
+        self.assertFalse(game.is_last_stand())
 
 
 if __name__ == "__main__":

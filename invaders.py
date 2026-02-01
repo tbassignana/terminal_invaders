@@ -754,6 +754,10 @@ WEAPON_PATTERNS = {
 }
 WEAPON_SPEED_BONUS = {1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.3}  # Level 5 = 30% faster
 
+# Last Stand mechanic — buffs when player is at 1 life
+LAST_STAND_SPEED_MULT = 2  # Double movement speed
+LAST_STAND_FIRE_SLOT_MULT = 2  # Double max projectile slots
+
 
 @dataclass
 class BossAlien:
@@ -2331,6 +2335,19 @@ class Game:
             for c in self.collectibles
         ]
 
+    def is_last_stand(self) -> bool:
+        """Return True if player is at exactly 1 life (last stand buff active)."""
+        return self.player.lives == 1
+
+    def get_last_stand_info(self) -> dict:
+        """Return last stand state for display/testing."""
+        active = self.is_last_stand()
+        return {
+            "active": active,
+            "speed_mult": LAST_STAND_SPEED_MULT if active else 1,
+            "fire_slot_mult": LAST_STAND_FIRE_SLOT_MULT if active else 1,
+        }
+
     def get_scaled_bunker_health(self) -> int:
         """Return starting bunker health for the current level (reduced every 5 levels, min 1)."""
         reduction = (self.level - 1) // 5
@@ -2511,14 +2528,17 @@ class Game:
             if key == ord("p") or key == ord("P") or key == 27:  # P or Escape
                 self._toggle_pause()
             elif key == curses.KEY_LEFT or key == ord("a"):
-                self.player.x = max(0, self.player.x - self.config.player_speed)
+                speed = self.config.player_speed * (LAST_STAND_SPEED_MULT if self.is_last_stand() else 1)
+                self.player.x = max(0, self.player.x - speed)
                 self.player_move_direction = -1
             elif key == curses.KEY_RIGHT or key == ord("d"):
-                self.player.x = min(self.width - 3, self.player.x + self.config.player_speed)
+                speed = self.config.player_speed * (LAST_STAND_SPEED_MULT if self.is_last_stand() else 1)
+                self.player.x = min(self.width - 3, self.player.x + speed)
                 self.player_move_direction = 1
             elif key == ord(" "):
-                # Fire projectile(s) based on weapon level
-                max_proj = 3 + self.weapon_level  # Higher weapon = more active projectiles allowed
+                # Fire projectile(s) based on weapon level; last stand doubles slots
+                ls_mult = LAST_STAND_FIRE_SLOT_MULT if self.is_last_stand() else 1
+                max_proj = (3 + self.weapon_level) * ls_mult
                 if len(self.player_projectiles) < max_proj:
                     pattern = WEAPON_PATTERNS.get(self.weapon_level, WEAPON_PATTERNS[1])
                     cx = self.player.x + 1
@@ -3067,6 +3087,12 @@ class Game:
         self._safe_addstr(hud_row, 2, hud["aliens"], hud_attr)
         self._safe_addstr(hud_row, self.width // 2 - len(hud["combo"]) // 2, hud["combo"], hud_attr)
         self._safe_addstr(hud_row, self.width - len(hud["power_ups"]) - 2, hud["power_ups"], hud_attr)
+        # Last stand blinking indicator (bold + blink when at 1 life)
+        if hud["last_stand"]:
+            ls_text = hud["last_stand"]
+            ls_x = self.width // 2 - len(ls_text) // 2
+            ls_attr = curses.color_pair(COLOR_PLAYER) | curses.A_BOLD
+            self._safe_addstr(hud_row - 1, ls_x, ls_text, ls_attr)
 
         # FPS counter (when enabled via F1 or --show-fps, on row above bottom HUD)
         if self.show_fps:
@@ -3109,10 +3135,13 @@ class Game:
         active_types = [POWERUP_LABELS.get(ap.power_type, "?") for ap in self.active_power_ups]
         power_str = f"PWR: {' '.join(active_types)}" if active_types else "PWR: --"
 
+        last_stand_str = "!! LAST STAND !!" if self.is_last_stand() else ""
+
         return {
             "aliens": aliens_str,
             "combo": combo_str,
             "power_ups": power_str,
+            "last_stand": last_stand_str,
             "row": self.height - 1,
         }
 
