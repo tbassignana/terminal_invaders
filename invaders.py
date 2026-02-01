@@ -222,6 +222,16 @@ COLOR_PROJECTILE = 5
 COLOR_GAME_OVER = 6
 COLOR_BUNKER_DAMAGED = 7   # Yellow for damaged bunkers
 COLOR_BUNKER_CRITICAL = 8  # Red for critical bunkers
+COLOR_ALIEN_TYPE_0 = 9     # Cyan for top-row aliens
+COLOR_ALIEN_TYPE_1 = 10    # Magenta for middle-row aliens
+COLOR_ALIEN_TYPE_2 = 11    # Yellow for bottom-row aliens
+
+# Map alien type (0, 1, 2) to its color pair
+ALIEN_TYPE_COLORS = {
+    0: COLOR_ALIEN_TYPE_0,
+    1: COLOR_ALIEN_TYPE_1,
+    2: COLOR_ALIEN_TYPE_2,
+}
 
 
 # ============================================================================
@@ -1451,7 +1461,7 @@ class Game:
                             y=float(alien.y),
                             count=random.randint(5, 8),
                             chars="*+.'`",
-                            color_pair=COLOR_ALIEN,
+                            color_pair=ALIEN_TYPE_COLORS.get(alien.alien_type, COLOR_ALIEN),
                             speed_range=(2.0, 6.0),
                             lifetime_range=(0.3, 0.5),
                         )
@@ -1720,10 +1730,16 @@ class Game:
         self._safe_addstr(0, self.width // 2 - len(level_text) // 2, level_text, curses.color_pair(COLOR_TEXT))
         self._safe_addstr(0, self.width - len(lives_display) - 2, lives_display, curses.color_pair(COLOR_TEXT))
 
-        # Render aliens
+        # Render aliens (color per type, bold in frenzy mode)
+        total_aliens = self.config.alien_rows * self.config.alien_cols
+        frenzy = len(self.aliens) < total_aliens * 0.3
         for alien in self.aliens:
             char = ALIEN_CHARS[alien.alien_type][self.alien_animation_frame]
-            self._safe_addstr(alien.y, alien.x, char, curses.color_pair(COLOR_ALIEN))
+            color = ALIEN_TYPE_COLORS.get(alien.alien_type, COLOR_ALIEN)
+            attr = curses.color_pair(color)
+            if frenzy:
+                attr |= curses.A_BOLD
+            self._safe_addstr(alien.y, alien.x, char, attr)
 
         # Render dying aliens (death animation flash)
         for da in self.dying_aliens:
@@ -1864,6 +1880,9 @@ class Game:
             curses.init_pair(COLOR_GAME_OVER, curses.COLOR_RED, -1)
             curses.init_pair(COLOR_BUNKER_DAMAGED, curses.COLOR_YELLOW, -1)
             curses.init_pair(COLOR_BUNKER_CRITICAL, curses.COLOR_RED, -1)
+            curses.init_pair(COLOR_ALIEN_TYPE_0, curses.COLOR_CYAN, -1)
+            curses.init_pair(COLOR_ALIEN_TYPE_1, curses.COLOR_MAGENTA, -1)
+            curses.init_pair(COLOR_ALIEN_TYPE_2, curses.COLOR_YELLOW, -1)
 
             # Get screen dimensions
             self.height, self.width = stdscr.getmaxyx()

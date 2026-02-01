@@ -27,7 +27,10 @@ from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
 
 from invaders import (
-    COLOR_ALIEN,
+    ALIEN_TYPE_COLORS,
+    COLOR_ALIEN_TYPE_0,
+    COLOR_ALIEN_TYPE_1,
+    COLOR_ALIEN_TYPE_2,
     COLOR_BUNKER,
     COLOR_BUNKER_CRITICAL,
     COLOR_BUNKER_DAMAGED,
@@ -2483,12 +2486,14 @@ class TestExplosionParticlesOnAlienDeath(unittest.TestCase):
         self.assertTrue(all(5 <= c <= 8 for c in counts), f"Particle counts {counts} should all be in [5,8]")
 
     def test_particles_inherit_alien_color(self):
-        """Verify explosion particles use the alien's color pair."""
+        """Verify explosion particles use the alien type's color pair."""
         game = self._kill_alien_with_particles()
+        # The helper creates a type 1 alien
+        expected_color = ALIEN_TYPE_COLORS[1]
         for p in game.particle_system.particles:
             self.assertEqual(
-                p.color_pair, COLOR_ALIEN,
-                "Particle color_pair should match COLOR_ALIEN",
+                p.color_pair, expected_color,
+                "Particle color_pair should match alien type's color",
             )
 
     def test_particles_use_explosion_characters(self):
@@ -2630,6 +2635,11 @@ class TestAlienDeathAnimation(unittest.TestCase):
         """Verify the death animation character sequence is correct."""
         self.assertEqual(DEATH_ANIM_CHARS, ["#", "*", "+"])
 
+    def test_dying_alien_char_returns_empty_when_past_frames(self):
+        """Verify DyingAlien.char returns '' when frame exceeds animation length."""
+        da = DyingAlien(x=5, y=5, frame=len(DEATH_ANIM_CHARS))
+        self.assertEqual(da.char, "")
+
 
 class TestBunkerDamageVisualEffects(unittest.TestCase):
     """Tests for bunker damage visual effects (Step 30)."""
@@ -2762,6 +2772,70 @@ class TestStarfieldBackground(unittest.TestCase):
         ]
         game.test_mode = True
         self.assertAlmostEqual(game.stars[0][1], 6.0, places=1)
+
+
+class TestColorPerAlienType(unittest.TestCase):
+    """Tests for color-per-alien-type rendering (Step 33)."""
+
+    def test_alien_type_0_gets_cyan(self):
+        """Verify type 0 aliens use COLOR_ALIEN_TYPE_0 (cyan)."""
+        self.assertEqual(ALIEN_TYPE_COLORS[0], COLOR_ALIEN_TYPE_0)
+
+    def test_alien_type_1_gets_magenta(self):
+        """Verify type 1 aliens use COLOR_ALIEN_TYPE_1 (magenta)."""
+        self.assertEqual(ALIEN_TYPE_COLORS[1], COLOR_ALIEN_TYPE_1)
+
+    def test_alien_type_2_gets_yellow(self):
+        """Verify type 2 aliens use COLOR_ALIEN_TYPE_2 (yellow)."""
+        self.assertEqual(ALIEN_TYPE_COLORS[2], COLOR_ALIEN_TYPE_2)
+
+    def test_all_three_types_have_distinct_colors(self):
+        """Verify each alien type has a different color pair."""
+        colors = list(ALIEN_TYPE_COLORS.values())
+        self.assertEqual(len(colors), len(set(colors)), "All alien types should have distinct colors")
+
+    def test_frenzy_mode_threshold(self):
+        """Verify frenzy activates when <30% aliens remain."""
+        game = Game(test_mode=True)
+        total = game.config.alien_rows * game.config.alien_cols
+        threshold = total * 0.3
+        # Set above threshold — should NOT be frenzy
+        above = int(threshold) + 1
+        game.aliens = [Alien(x=i, y=5) for i in range(above)]
+        frenzy = len(game.aliens) < threshold
+        self.assertFalse(frenzy, f"{above} aliens should not trigger frenzy (threshold={threshold})")
+        # Set 1 alien — should be frenzy
+        game.aliens = [Alien(x=0, y=5)]
+        frenzy = len(game.aliens) < threshold
+        self.assertTrue(frenzy, "1 alien should trigger frenzy")
+
+    def test_explosion_particles_use_alien_type_color(self):
+        """Verify explosion particles use the killed alien's type color."""
+        game = Game(test_mode=True)
+        game.test_mode = False  # Enable particles for this test
+        game.aliens = [Alien(x=10, y=5, alien_type=2)]
+        game.player_projectiles = [Projectile(x=10, y=5, direction=-1)]
+        game._check_collisions()
+        game.test_mode = True
+        # Particles should use type 2 color (yellow)
+        particles = game.particle_system.particles
+        self.assertGreater(len(particles), 0, "Should spawn explosion particles")
+        for p in particles:
+            self.assertEqual(p.color_pair, ALIEN_TYPE_COLORS[2])
+
+    def test_update_decrements_bunker_flash_and_advances_dying_aliens(self):
+        """Verify update() decrements bunker flash_frames and advances dying aliens."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        # Set up a bunker with flash_frames
+        b = Bunker(x=10, y=20, health=3, flash_frames=2)
+        game.bunkers = [b]
+        # Set up a dying alien
+        da = DyingAlien(x=5, y=5, frame=0)
+        game.dying_aliens = [da]
+        game.update()
+        self.assertEqual(b.flash_frames, 1, "Flash should decrement by 1")
+        self.assertEqual(da.frame, 1, "Dying alien should advance one frame")
 
 
 if __name__ == "__main__":
