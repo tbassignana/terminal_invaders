@@ -66,7 +66,7 @@
 ### In-Game Visual Feedback
 
 - [x] **Step 36:** Add score popup text on alien kill ("+30" floats upward, combo multiplier shown)
-- [ ] **Step 37:** Add mystery ship visual effects (blink, wider sprite `=<UFO>=`, large explosion)
+- [x] **Step 37:** Add mystery ship visual effects (blink, wider sprite `=<UFO>=`, large explosion)
 - [ ] **Step 38:** Add power-up visual indicators (blink, distinct chars R/S/W, HUD timer `[R 3s]`)
 - [ ] **Step 39:** Add screen flash effect on level complete (green flash 0.15s)
 - [ ] **Step 40:** Add wave/ripple effect on alien formation descent (`~` line fading bold→dim)

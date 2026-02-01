@@ -481,6 +481,9 @@ class Projectile:
             self.trail.pop(0)
 
 
+MYSTERY_SHIP_CHAR = "=<UFO>="  # Wider 7-char sprite
+
+
 @dataclass
 class MysteryShip:
     """UFO that crosses the top of the screen for bonus points."""
@@ -490,6 +493,17 @@ class MysteryShip:
     speed: float = 0.5
     points: int = 100
     active: bool = True
+    blink_frame: int = 0  # Toggles for blink effect
+
+    def get_display_char(self) -> str:
+        """Return display character (blinks every 4 frames)."""
+        if self.blink_frame % 8 < 6:  # Visible 6 out of 8 frames
+            return MYSTERY_SHIP_CHAR
+        return " " * len(MYSTERY_SHIP_CHAR)  # Blank during blink
+
+    def advance_blink(self) -> None:
+        """Advance the blink animation frame."""
+        self.blink_frame += 1
 
 
 class PowerUpType(Enum):
@@ -1396,10 +1410,11 @@ class Game:
             self.mystery_score_display = None
 
         if self.mystery_ship and self.mystery_ship.active:
-            # Move the ship
+            # Move the ship and advance blink animation
             self.mystery_ship.x += self.mystery_ship.speed
-            # Despawn at screen edge
-            if self.mystery_ship.x < -3 or self.mystery_ship.x > self.width + 3:
+            self.mystery_ship.advance_blink()
+            # Despawn at screen edge (wider sprite = ±5)
+            if self.mystery_ship.x < -5 or self.mystery_ship.x > self.width + 5:
                 self.mystery_ship = None
         else:
             # Random spawn check (~once per 25 seconds at 60fps)
@@ -1408,9 +1423,9 @@ class Game:
                 self.last_mystery_spawn_check = current_time
                 if random.random() < 1.0 / 25.0:
                     direction = random.choice([-1, 1])
-                    start_x = -3.0 if direction == 1 else float(self.width + 3)
+                    start_x = -5.0 if direction == 1 else float(self.width + 5)
                     points = random.choice([50, 100, 150, 200, 250, 300])
-                    self.mystery_ship = MysteryShip(x=start_x, y=1, speed=0.5 * direction, points=points)
+                    self.mystery_ship = MysteryShip(x=start_x, y=2, speed=0.5 * direction, points=points)
 
     def _spawn_power_up(self, x: int, y: int) -> None:
         """Possibly spawn a power-up at the given position (10% chance)."""
@@ -1591,13 +1606,28 @@ class Game:
                         self.alien_projectiles.remove(proj)
                     break
 
-        # Player projectiles vs mystery ship (single entity, no grid needed)
+        # Player projectiles vs mystery ship (wider sprite = ±3 hit range)
         if self.mystery_ship and self.mystery_ship.active:
             for proj in self.player_projectiles[:]:
-                if abs(proj.x - self.mystery_ship.x) <= 2 and abs(proj.y - self.mystery_ship.y) <= 1:
+                if abs(proj.x - self.mystery_ship.x) <= 3 and abs(proj.y - self.mystery_ship.y) <= 1:
                     pts = self.mystery_ship.points
                     self.score += pts
+                    # Score popup for mystery ship
+                    self.score_popups.append(
+                        ScorePopup(x=float(self.mystery_ship.x), y=float(self.mystery_ship.y), text=f"+{pts}")
+                    )
                     self.mystery_score_display = (int(self.mystery_ship.x), self.mystery_ship.y, pts, time.time() + 1.0)
+                    # Large explosion (10-15 particles, wider spread)
+                    if not self.test_mode:
+                        self.particle_system.spawn(
+                            x=float(self.mystery_ship.x),
+                            y=float(self.mystery_ship.y),
+                            count=random.randint(10, 15),
+                            chars="*#@+.'`",
+                            color_pair=COLOR_GAME_OVER,
+                            speed_range=(3.0, 8.0),
+                            lifetime_range=(0.5, 0.8),
+                        )
                     self.mystery_ship = None
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
@@ -1864,6 +1894,22 @@ class Game:
             if frenzy:
                 attr |= curses.A_BOLD
             self._safe_addstr(alien.y, alien.x, char, attr)
+
+        # Render mystery ship (wider sprite with blink effect)
+        if self.mystery_ship and self.mystery_ship.active:
+            display = self.mystery_ship.get_display_char()
+            # Center the wider sprite around the ship x position
+            draw_x = int(self.mystery_ship.x) - len(MYSTERY_SHIP_CHAR) // 2
+            self._safe_addstr(
+                self.mystery_ship.y, draw_x, display,
+                curses.color_pair(COLOR_GAME_OVER) | curses.A_BOLD,
+            )
+
+        # Render mystery ship score display (brief score flash after hit)
+        if self.mystery_score_display:
+            mx, my, mpts, _ = self.mystery_score_display
+            score_text = str(mpts)
+            self._safe_addstr(my, mx, score_text, curses.color_pair(COLOR_GAME_OVER) | curses.A_BOLD)
 
         # Render dying aliens (death animation flash)
         for da in self.dying_aliens:

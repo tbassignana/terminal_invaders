@@ -42,6 +42,7 @@ from invaders import (
     COLOR_TEXT,
     DEATH_ANIM_CHARS,
     DEFAULT_CONFIG,
+    MYSTERY_SHIP_CHAR,
     PLAYER_START_LIVES,
     TITLE_ART,
     TITLE_COLOR_CYCLE,
@@ -646,7 +647,7 @@ class TestMysteryShip(unittest.TestCase):
     def test_mystery_ship_despawn_at_edge(self):
         """Verify ship is removed when it exits the screen."""
         game = Game(test_mode=True)
-        game.mystery_ship = MysteryShip(x=float(game.width + 4), y=1, speed=0.5, points=100)
+        game.mystery_ship = MysteryShip(x=float(game.width + 6), y=1, speed=0.5, points=100)
         game._update_mystery_ship(time.time())
         self.assertIsNone(game.mystery_ship)
 
@@ -2845,6 +2846,16 @@ class TestColorPerAlienType(unittest.TestCase):
         self.assertEqual(b.flash_frames, 1, "Flash should decrement by 1")
         self.assertEqual(da.frame, 1, "Dying alien should advance one frame")
 
+    def test_update_removes_finished_dying_aliens(self):
+        """Verify update() culls dying aliens that have finished their animation."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        # DyingAlien at last frame (frame=2 means one more advance finishes it)
+        da = DyingAlien(x=5, y=5, frame=2)
+        game.dying_aliens = [da]
+        game.update()  # advance() makes frame=3, finished=True, removed
+        self.assertEqual(len(game.dying_aliens), 0, "Finished dying alien should be removed")
+
 
 class TestHUDBorder(unittest.TestCase):
     """Tests for HUD separator line and decorative border (Step 34)."""
@@ -2994,6 +3005,66 @@ class TestScorePopup(unittest.TestCase):
         game.score_popups.append(ScorePopup(x=5.0, y=5.0, text="+10"))
         game.reset_game()
         self.assertEqual(len(game.score_popups), 0)
+
+    def test_update_moves_and_culls_popups(self):
+        """Verify game.update() advances popups and removes expired ones."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        # Add one fresh popup and one already-expired popup
+        fresh = ScorePopup(x=10.0, y=10.0, text="+30", age=0.0, lifetime=1.0)
+        expired = ScorePopup(x=20.0, y=10.0, text="+10", age=2.0, lifetime=1.0)
+        game.score_popups = [fresh, expired]
+        game.update()
+        remaining_texts = [p.text for p in game.score_popups]
+        self.assertNotIn("+10", remaining_texts, "Expired popup should be culled")
+        self.assertIn("+30", remaining_texts, "Fresh popup should remain")
+
+
+class TestMysteryShipVisualEffects(unittest.TestCase):
+    """Tests for mystery ship visual effects (Step 37)."""
+
+    def test_wider_sprite_constant(self):
+        """Verify MYSTERY_SHIP_CHAR is the wider 7-char =<UFO>= sprite."""
+        self.assertEqual(MYSTERY_SHIP_CHAR, "=<UFO>=")
+        self.assertEqual(len(MYSTERY_SHIP_CHAR), 7)
+
+    def test_blink_effect_visible_most_frames(self):
+        """Verify mystery ship is visible for 6 out of 8 blink frames."""
+        ship = MysteryShip(x=40.0, y=2)
+        visible_count = 0
+        for _ in range(8):
+            if ship.get_display_char().strip():
+                visible_count += 1
+            ship.advance_blink()
+        self.assertEqual(visible_count, 6, "Ship should be visible 6 out of 8 frames")
+
+    def test_blink_effect_blank_during_off_frames(self):
+        """Verify mystery ship is blank during blink off-frames."""
+        ship = MysteryShip(x=40.0, y=2)
+        # Advance to frame 6 (first blink-off frame)
+        for _ in range(6):
+            ship.advance_blink()
+        display = ship.get_display_char()
+        self.assertEqual(display.strip(), "", "Ship should be blank during blink off-frame")
+
+    def test_mystery_ship_score_popup_on_hit(self):
+        """Verify score popup created when mystery ship is hit."""
+        game = Game(test_mode=True)
+        game.mystery_ship = MysteryShip(x=10.0, y=2, points=150)
+        game.player_projectiles = [Projectile(x=10, y=2, direction=-1)]
+        game._check_collisions()
+        # Should have a score popup
+        mystery_popups = [p for p in game.score_popups if "+150" in p.text]
+        self.assertEqual(len(mystery_popups), 1)
+
+    def test_mystery_ship_wider_hit_range(self):
+        """Verify wider sprite has ±3 hit detection range."""
+        game = Game(test_mode=True)
+        game.mystery_ship = MysteryShip(x=10.0, y=2, points=100)
+        # Projectile at x=13, within ±3 range of x=10
+        game.player_projectiles = [Projectile(x=13, y=2, direction=-1)]
+        game._check_collisions()
+        self.assertIsNone(game.mystery_ship, "Ship at range 3 should be hit")
 
 
 if __name__ == "__main__":
