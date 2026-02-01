@@ -1108,6 +1108,83 @@ class StatsManager:
 
 
 # ============================================================================
+# ACHIEVEMENT SYSTEM
+# ============================================================================
+
+DEFAULT_ACHIEVEMENTS_PATH = os.path.expanduser("~/.invaders_achievements.json")
+
+# Achievement definitions: id -> {name, description}
+ACHIEVEMENTS = {
+    "first_blood": {"name": "First Blood", "desc": "Kill your first alien"},
+    "sharpshooter": {"name": "Sharpshooter", "desc": "Reach 75% accuracy (min 20 shots)"},
+    "combo_master": {"name": "Combo Master", "desc": "Reach a x5 combo multiplier"},
+    "survivor": {"name": "Survivor", "desc": "Complete level 5"},
+    "boss_slayer": {"name": "Boss Slayer", "desc": "Defeat a boss alien"},
+    "power_collector": {"name": "Power Collector", "desc": "Collect 10 power-ups in one game"},
+    "coin_hoarder": {"name": "Coin Hoarder", "desc": "Collect 50 coins/gems in one game"},
+    "untouchable": {"name": "Untouchable", "desc": "Complete a level without taking damage"},
+    "high_roller": {"name": "High Roller", "desc": "Score 10,000 points in a single game"},
+    "veteran": {"name": "Veteran", "desc": "Play 10 games total"},
+}
+
+
+class AchievementManager:
+    """Tracks and persists achievement unlocks."""
+
+    def __init__(self, path: str = DEFAULT_ACHIEVEMENTS_PATH):
+        self.path = path
+        self.unlocked: Dict[str, str] = {}  # id -> unlock date ISO string
+        self._load()
+        self.pending_popups: List[str] = []  # Achievement IDs to show as popups
+
+    def _load(self) -> None:
+        try:
+            with open(self.path, "r") as f:
+                self.unlocked = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.unlocked = {}
+
+    def _save(self) -> None:
+        try:
+            with open(self.path, "w") as f:
+                json.dump(self.unlocked, f, indent=2)
+        except OSError:
+            logger.warning("Failed to save achievements to %s", self.path, exc_info=True)
+
+    def unlock(self, achievement_id: str) -> bool:
+        """Unlock an achievement. Returns True if newly unlocked (not already)."""
+        if achievement_id not in ACHIEVEMENTS:
+            return False
+        if achievement_id in self.unlocked:
+            return False
+        self.unlocked[achievement_id] = datetime.now().isoformat()
+        self.pending_popups.append(achievement_id)
+        self._save()
+        return True
+
+    def is_unlocked(self, achievement_id: str) -> bool:
+        return achievement_id in self.unlocked
+
+    def get_all(self) -> List[dict]:
+        """Return all achievements with unlock status."""
+        result = []
+        for aid, info in ACHIEVEMENTS.items():
+            result.append({
+                "id": aid,
+                "name": info["name"],
+                "desc": info["desc"],
+                "unlocked": aid in self.unlocked,
+            })
+        return result
+
+    def pop_popup(self) -> Optional[str]:
+        """Pop and return the next pending achievement popup ID, or None."""
+        if self.pending_popups:
+            return self.pending_popups.pop(0)
+        return None
+
+
+# ============================================================================
 # REPLAY SYSTEM
 # ============================================================================
 
@@ -1570,6 +1647,13 @@ class Game:
         self.replay_player: Optional[ReplayPlayer] = None
         self.replay_frame: int = 0
 
+        # Achievement system
+        self.achievement_manager: Optional[AchievementManager] = None
+        self.power_ups_collected: int = 0  # Count per game for achievement
+        self.coins_collected: int = 0  # Count per game for achievement
+        self.level_took_damage: bool = False  # Reset each level for untouchable achievement
+        self.achievement_popup: Optional[Tuple[str, float]] = None  # (text, expires_at)
+
         # Level transition countdown (3... 2... 1... GO!)
         self.level_transition_time: float = 0  # When LEVEL_TRANSITION started
         self.level_countdown_duration: float = 4.0  # 3s countdown + 1s "GO!"
@@ -1815,6 +1899,7 @@ class Game:
             return
 
         self.player.take_damage()
+        self.level_took_damage = True
 
         # Notify subscribers
         self.event_bus.publish(GameEvent.PLAYER_HIT)
@@ -1885,6 +1970,10 @@ class Game:
         self.initials_cursor = 0
         self.initials_submitted = False
         self.milestones_reached.clear()
+        self.power_ups_collected = 0
+        self.coins_collected = 0
+        self.level_took_damage = False
+        self.achievement_popup = None
 
         # Reset replay frame counter and seed random for determinism
         self.replay_seed = int(time.time() * 1000) % (2**31)
@@ -2030,6 +2119,9 @@ class Game:
 
         # Check score milestones for bonus lives
         self._check_score_milestones()
+
+        # Check achievements
+        self._check_achievements()
 
         # Update power-ups
         self._update_power_ups(current_time)
@@ -2186,6 +2278,7 @@ class Game:
             # Check player collection
             if abs(pu.x - self.player.x - 1) <= 1 and abs(pu.y - self.player.y) <= 1:
                 self.power_ups.remove(pu)
+                self.power_ups_collected += 1
                 self._activate_power_up(pu.power_type, current_time)
 
         # Expire active power-ups
@@ -2202,6 +2295,7 @@ class Game:
             # Check player collection
             if abs(coll.x - self.player.x - 1) <= 1 and abs(coll.y - self.player.y) <= 1:
                 self.collectibles.remove(coll)
+                self.coins_collected += 1
                 self.score += coll.points
                 self.score_popups.append(
                     ScorePopup(x=float(coll.x), y=float(coll.y), text=f"+{coll.points}")
@@ -2561,6 +2655,8 @@ class Game:
                                 speed_range=(4.0, 10.0),
                                 lifetime_range=(0.6, 1.0),
                             )
+                        if self.achievement_manager:
+                            self.achievement_manager.unlock("boss_slayer")
                         self.boss = None
                     break
 
@@ -2659,6 +2755,58 @@ class Game:
             "total_milestones": len(SCORE_MILESTONES),
         }
 
+    def _check_achievements(self) -> None:
+        """Check and unlock achievements based on current game state."""
+        am = self.achievement_manager
+        if am is None:
+            return
+
+        # first_blood: kill your first alien
+        if self.total_kills >= 1:
+            am.unlock("first_blood")
+
+        # sharpshooter: 75% accuracy with min 20 shots
+        if self.total_shots >= 20 and self.total_kills / self.total_shots >= 0.75:
+            am.unlock("sharpshooter")
+
+        # combo_master: reach x5 combo
+        if self.combo_count >= 5:
+            am.unlock("combo_master")
+
+        # high_roller: score 10,000+
+        if self.score >= 10000:
+            am.unlock("high_roller")
+
+        # power_collector: 10 power-ups in one game
+        if self.power_ups_collected >= 10:
+            am.unlock("power_collector")
+
+        # coin_hoarder: 50 coins in one game
+        if self.coins_collected >= 50:
+            am.unlock("coin_hoarder")
+
+        # veteran: play 10 games total (check via stats manager)
+        if self.stats_manager and self.stats_manager.stats.get("games_played", 0) >= 10:
+            am.unlock("veteran")
+
+        # Process achievement popups
+        popup_id = am.pop_popup()
+        if popup_id and popup_id in ACHIEVEMENTS:
+            name = ACHIEVEMENTS[popup_id]["name"]
+            self.achievement_popup = (f"ACHIEVEMENT: {name}!", time.time() + 3.0)
+
+    def get_achievement_info(self) -> dict:
+        """Return achievement state for display/testing."""
+        am = self.achievement_manager
+        return {
+            "has_manager": am is not None,
+            "unlocked_count": len(am.unlocked) if am else 0,
+            "popup": self.achievement_popup,
+            "power_ups_collected": self.power_ups_collected,
+            "coins_collected": self.coins_collected,
+            "level_took_damage": self.level_took_damage,
+        }
+
     def get_special_alien_counts(self) -> dict:
         """Return counts of special aliens for display/testing."""
         zigzag = sum(1 for a in self.aliens if a.behavior == ALIEN_BEHAVIOR_ZIGZAG)
@@ -2714,6 +2862,14 @@ class Game:
 
     def _next_level(self) -> None:
         """Advance to next level and award bonus lives."""
+        # Check level-based achievements before advancing
+        if self.achievement_manager:
+            if self.level >= 5:
+                self.achievement_manager.unlock("survivor")
+            if not self.level_took_damage:
+                self.achievement_manager.unlock("untouchable")
+        self.level_took_damage = False  # Reset for next level
+
         # Award lives based on level completed (level 1 = +1, level 2 = +2, etc.)
         completed_level = self.level
         self.lives_awarded = completed_level

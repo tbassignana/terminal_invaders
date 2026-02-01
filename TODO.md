@@ -115,6 +115,6 @@
 - [x] **Step 70:** Add persistent statistics tracking (lifetime stats in `~/.invaders_stats.json`)
 - [x] **Step 71:** Add game over score submission flow (3-char initials entry, arcade style)
 - [x] **Step 72:** Add replay/ghost system (input recording + deterministic playback via seed)
-- [ ] **Step 73:** Add achievement system (10 achievements, persistence, unlock popups)
+- [x] **Step 73:** Add achievement system (10 achievements, persistence, unlock popups)
 - [ ] **Step 74:** Add endless/survival mode (continuous waves, escalating intensity, separate leaderboard)
 - [ ] **Step 75:** Add two-player mode — alternating turns (independent scores, comparison scoreboard)

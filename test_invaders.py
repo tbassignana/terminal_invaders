@@ -30,6 +30,7 @@ from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
 
 from invaders import (
+    ACHIEVEMENTS,
     ALIEN_BEHAVIOR_NORMAL,
     ALIEN_BEHAVIOR_SHIELDED,
     ALIEN_BEHAVIOR_ZIGZAG,
@@ -85,6 +86,7 @@ from invaders import (
     WEAPON_PATTERNS,
     WEAPON_SPEED_BONUS,
     AbstractSoundBackend,
+    AchievementManager,
     ActivePowerUp,
     Alien,
     BossAlien,
@@ -6127,6 +6129,174 @@ class TestReplaySystem(unittest.TestCase):
         parser = build_argument_parser()
         args = parser.parse_args(["--replay", "/tmp/test.json"])
         self.assertEqual(args.replay, "/tmp/test.json")
+
+
+class TestAchievementSystem(unittest.TestCase):
+    """Tests for the achievement system."""
+
+    def _make_achievement_manager(self):
+        """Create an AchievementManager with a temp file."""
+        path = os.path.join(tempfile.mkdtemp(), "achievements.json")
+        return AchievementManager(path=path), path
+
+    def _cleanup(self, path):
+        if os.path.exists(path):
+            os.unlink(path)
+
+    def test_achievements_defined(self):
+        """ACHIEVEMENTS dict has 10 entries."""
+        self.assertEqual(len(ACHIEVEMENTS), 10)
+
+    def test_all_achievements_have_name_and_desc(self):
+        """Each achievement has name and desc keys."""
+        for aid, info in ACHIEVEMENTS.items():
+            self.assertIn("name", info, f"Achievement {aid} missing name")
+            self.assertIn("desc", info, f"Achievement {aid} missing desc")
+
+    def test_unlock_new_achievement(self):
+        """Unlocking a new achievement returns True."""
+        am, path = self._make_achievement_manager()
+        result = am.unlock("first_blood")
+        self.assertTrue(result)
+        self.assertTrue(am.is_unlocked("first_blood"))
+        self._cleanup(path)
+
+    def test_unlock_duplicate(self):
+        """Unlocking an already-unlocked achievement returns False."""
+        am, path = self._make_achievement_manager()
+        am.unlock("first_blood")
+        result = am.unlock("first_blood")
+        self.assertFalse(result)
+        self._cleanup(path)
+
+    def test_unlock_invalid_id(self):
+        """Unlocking a non-existent achievement returns False."""
+        am, path = self._make_achievement_manager()
+        result = am.unlock("nonexistent_achievement")
+        self.assertFalse(result)
+        self._cleanup(path)
+
+    def test_persistence(self):
+        """Achievements persist across instances."""
+        am, path = self._make_achievement_manager()
+        am.unlock("first_blood")
+        am2 = AchievementManager(path=path)
+        self.assertTrue(am2.is_unlocked("first_blood"))
+        self._cleanup(path)
+
+    def test_get_all(self):
+        """get_all() returns all achievements with unlock status."""
+        am, path = self._make_achievement_manager()
+        am.unlock("first_blood")
+        all_achievements = am.get_all()
+        self.assertEqual(len(all_achievements), 10)
+        first_blood = next(a for a in all_achievements if a["id"] == "first_blood")
+        self.assertTrue(first_blood["unlocked"])
+        survivor = next(a for a in all_achievements if a["id"] == "survivor")
+        self.assertFalse(survivor["unlocked"])
+        self._cleanup(path)
+
+    def test_popup_on_unlock(self):
+        """Unlocking an achievement adds a pending popup."""
+        am, path = self._make_achievement_manager()
+        am.unlock("first_blood")
+        popup_id = am.pop_popup()
+        self.assertEqual(popup_id, "first_blood")
+        self.assertIsNone(am.pop_popup())  # No more popups
+        self._cleanup(path)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_game_first_blood_achievement(self, _mock_cp):
+        """First kill triggers first_blood achievement."""
+        game = Game(test_mode=True)
+        am, path = self._make_achievement_manager()
+        game.achievement_manager = am
+        game.total_kills = 1
+        game._check_achievements()
+        self.assertTrue(am.is_unlocked("first_blood"))
+        self._cleanup(path)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_game_sharpshooter_achievement(self, _mock_cp):
+        """75% accuracy with 20+ shots triggers sharpshooter."""
+        game = Game(test_mode=True)
+        am, path = self._make_achievement_manager()
+        game.achievement_manager = am
+        game.total_shots = 20
+        game.total_kills = 15  # 75% accuracy
+        game._check_achievements()
+        self.assertTrue(am.is_unlocked("sharpshooter"))
+        self._cleanup(path)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_game_combo_master_achievement(self, _mock_cp):
+        """Reaching x5 combo triggers combo_master."""
+        game = Game(test_mode=True)
+        am, path = self._make_achievement_manager()
+        game.achievement_manager = am
+        game.combo_count = 5
+        game._check_achievements()
+        self.assertTrue(am.is_unlocked("combo_master"))
+        self._cleanup(path)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_game_high_roller_achievement(self, _mock_cp):
+        """Score 10000+ triggers high_roller."""
+        game = Game(test_mode=True)
+        am, path = self._make_achievement_manager()
+        game.achievement_manager = am
+        game.score = 10000
+        game._check_achievements()
+        self.assertTrue(am.is_unlocked("high_roller"))
+        self._cleanup(path)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_game_achievement_info(self, _mock_cp):
+        """get_achievement_info() returns expected structure."""
+        game = Game(test_mode=True)
+        info = game.get_achievement_info()
+        self.assertFalse(info["has_manager"])
+        self.assertEqual(info["power_ups_collected"], 0)
+        self.assertEqual(info["coins_collected"], 0)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_game_achievement_popup_created(self, _mock_cp):
+        """Achievement unlock creates a popup on game."""
+        game = Game(test_mode=True)
+        am, path = self._make_achievement_manager()
+        game.achievement_manager = am
+        game.total_kills = 1
+        game._check_achievements()
+        self.assertIsNotNone(game.achievement_popup)
+        self.assertIn("First Blood", game.achievement_popup[0])
+        self._cleanup(path)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_reset_clears_achievement_counters(self, _mock_cp):
+        """Game reset clears per-game achievement counters."""
+        game = Game(test_mode=True)
+        game.power_ups_collected = 5
+        game.coins_collected = 10
+        game.level_took_damage = True
+        game.reset_game()
+        self.assertEqual(game.power_ups_collected, 0)
+        self.assertEqual(game.coins_collected, 0)
+        self.assertFalse(game.level_took_damage)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_damage_sets_level_took_damage(self, _mock_cp):
+        """Taking damage sets level_took_damage flag."""
+        game = Game(test_mode=True)
+        game.player.lives = 3
+        game.handle_player_damage()
+        self.assertTrue(game.level_took_damage)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_no_achievements_without_manager(self, _mock_cp):
+        """_check_achievements() is safe when no manager is set."""
+        game = Game(test_mode=True)
+        game.total_kills = 100
+        game._check_achievements()  # Should not raise
 
 
 if __name__ == "__main__":
