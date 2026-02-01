@@ -103,7 +103,7 @@
 - [x] **Step 58:** Add boss alien every 5 levels (large sprite, multi-HP, spread shots, big score)
 - [x] **Step 59:** Add wave-based sub-levels (3 waves per level with escalating difficulty)
 - [x] **Step 60:** Add player weapon upgrade system (5 levels: single→dual→triple→quad + speed)
-- [ ] **Step 61:** Add aliens with special behaviors (zigzag movement, shielded 2-HP aliens)
+- [x] **Step 61:** Add aliens with special behaviors (zigzag movement, shielded 2-HP aliens)
 - [ ] **Step 62:** Add collectible coins/gems dropped by aliens (bronze/silver/gold with timed expiry)
 - [ ] **Step 63:** Add progressive alien speed increase within a level (original SI acceleration)
 - [ ] **Step 64:** Add "last stand" mechanic (buffs at 1 life: speed boost, double fire slots)

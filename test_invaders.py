@@ -13,6 +13,7 @@ This test file validates the core game mechanics:
 import curses
 import logging
 import os
+import random
 import sys
 import tempfile
 import time
@@ -29,6 +30,9 @@ from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
 
 from invaders import (
+    ALIEN_BEHAVIOR_NORMAL,
+    ALIEN_BEHAVIOR_SHIELDED,
+    ALIEN_BEHAVIOR_ZIGZAG,
     ALIEN_EXPLOSION_CONFIGS,
     ALIEN_TYPE_COLORS,
     BORDER_BL,
@@ -5020,6 +5024,94 @@ class TestWeaponUpgradeSystem(unittest.TestCase):
     def test_weapon_level_1_no_speed_bonus(self):
         """Level 1 weapon has no speed bonus."""
         self.assertEqual(WEAPON_SPEED_BONUS[1], 1.0)
+
+
+class TestSpecialAlienBehaviors(unittest.TestCase):
+    """Step 61: Aliens with special behaviors (zigzag, shielded)."""
+
+    def test_alien_default_behavior_normal(self):
+        """Aliens default to normal behavior."""
+        alien = Alien(x=10, y=5)
+        self.assertEqual(alien.behavior, ALIEN_BEHAVIOR_NORMAL)
+        self.assertEqual(alien.hp, 1)
+
+    def test_alien_take_hit_kills_normal(self):
+        """Normal 1-HP alien dies on first hit."""
+        alien = Alien(x=10, y=5, hp=1)
+        self.assertTrue(alien.take_hit())
+
+    def test_alien_take_hit_shielded_survives_first(self):
+        """Shielded 2-HP alien survives first hit."""
+        alien = Alien(x=10, y=5, hp=2, behavior=ALIEN_BEHAVIOR_SHIELDED)
+        self.assertFalse(alien.take_hit())
+        self.assertTrue(alien.is_shielded() is False)  # Now at 1 HP
+
+    def test_alien_take_hit_shielded_dies_second(self):
+        """Shielded alien dies on second hit."""
+        alien = Alien(x=10, y=5, hp=2, behavior=ALIEN_BEHAVIOR_SHIELDED)
+        alien.take_hit()
+        self.assertTrue(alien.take_hit())
+
+    def test_special_aliens_spawn_at_level_3_plus(self):
+        """Special aliens only appear from level 3 onwards."""
+        # Level 1: no special aliens
+        game = Game(test_mode=True)
+        game.level = 1
+        random.seed(42)
+        game._init_aliens()
+        counts_l1 = game.get_special_alien_counts()
+        self.assertEqual(counts_l1["zigzag"], 0)
+        self.assertEqual(counts_l1["shielded"], 0)
+
+    def test_special_aliens_at_higher_levels(self):
+        """At level 5+, some special aliens should appear (seeded for determinism)."""
+        game = Game(test_mode=True)
+        game.level = 5
+        random.seed(12345)
+        game._init_aliens()
+        counts = game.get_special_alien_counts()
+        total_special = counts["zigzag"] + counts["shielded"]
+        self.assertGreater(total_special, 0)
+
+    def test_get_special_alien_counts(self):
+        """get_special_alien_counts returns correct counts."""
+        game = Game(test_mode=True)
+        game.aliens = [
+            Alien(x=0, y=0, behavior=ALIEN_BEHAVIOR_NORMAL),
+            Alien(x=4, y=0, behavior=ALIEN_BEHAVIOR_ZIGZAG),
+            Alien(x=8, y=0, behavior=ALIEN_BEHAVIOR_SHIELDED, hp=2),
+        ]
+        counts = game.get_special_alien_counts()
+        self.assertEqual(counts["normal"], 1)
+        self.assertEqual(counts["zigzag"], 1)
+        self.assertEqual(counts["shielded"], 1)
+
+    def test_shielded_alien_absorbs_projectile(self):
+        """Shielded alien absorbs projectile without dying."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=5, hp=2, behavior=ALIEN_BEHAVIOR_SHIELDED)]
+        game.player_projectiles.append(Projectile(x=10, y=5, direction=-1))
+        game._check_collisions()
+        # Alien survives but lost 1 HP
+        self.assertEqual(len(game.aliens), 1)
+        self.assertEqual(game.aliens[0].hp, 1)
+
+    def test_shielded_alien_dies_on_second_hit(self):
+        """Shielded alien dies after 2 hits."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=5, hp=2, behavior=ALIEN_BEHAVIOR_SHIELDED)]
+        # First hit
+        game.player_projectiles.append(Projectile(x=10, y=5, direction=-1))
+        game._check_collisions()
+        # Second hit
+        game.player_projectiles.append(Projectile(x=10, y=5, direction=-1))
+        game._check_collisions()
+        self.assertEqual(len(game.aliens), 0)
+
+    def test_zigzag_alien_has_phase(self):
+        """Zigzag aliens have a zigzag_phase set."""
+        alien = Alien(x=10, y=5, behavior=ALIEN_BEHAVIOR_ZIGZAG, zigzag_phase=1.5)
+        self.assertEqual(alien.zigzag_phase, 1.5)
 
 
 if __name__ == "__main__":

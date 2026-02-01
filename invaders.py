@@ -514,18 +514,40 @@ class Player:
         self.lives = PLAYER_START_LIVES
 
 
+ALIEN_BEHAVIOR_NORMAL = "normal"
+ALIEN_BEHAVIOR_ZIGZAG = "zigzag"
+ALIEN_BEHAVIOR_SHIELDED = "shielded"
+
+# Probability of special alien behaviors per type (increases with alien_type)
+SPECIAL_ALIEN_CHANCE = {0: 0.15, 1: 0.10, 2: 0.05}
+
+
 @dataclass
 class Alien:
-    """Individual alien with position and type."""
+    """Individual alien with position, type, HP, and behavior."""
 
     x: int
     y: int
     alien_type: int = 0
     alive: bool = True
+    hp: int = 1  # 1 for normal, 2 for shielded
+    behavior: str = ALIEN_BEHAVIOR_NORMAL
+    zigzag_offset: float = 0.0  # Current zigzag displacement
+    zigzag_phase: float = 0.0  # Phase offset for zigzag oscillation
+    base_x: int = 0  # Original x for zigzag calculations
 
     def __post_init__(self):
-        """Set alien type based on row if not specified."""
-        pass
+        """Store base x for zigzag movement."""
+        self.base_x = self.x
+
+    def take_hit(self) -> bool:
+        """Reduce HP. Return True if the alien is killed."""
+        self.hp -= 1
+        return self.hp <= 0
+
+    def is_shielded(self) -> bool:
+        """Return True if this alien has more than 1 HP."""
+        return self.hp > 1
 
 
 # Death animation characters: # → * → + → gone
@@ -1460,7 +1482,23 @@ class Game:
                     continue
                 x = start_x + col * cfg.alien_spacing_x
                 y = cfg.alien_start_y + row * cfg.alien_spacing_y
-                self.aliens.append(Alien(x=x, y=y, alien_type=alien_type % 3))
+                # Assign special behaviors based on level and chance
+                behavior = ALIEN_BEHAVIOR_NORMAL
+                hp = 1
+                if self.level >= 3:
+                    chance = SPECIAL_ALIEN_CHANCE.get(alien_type % 3, 0.05)
+                    roll = random.random()
+                    if roll < chance / 2:
+                        behavior = ALIEN_BEHAVIOR_SHIELDED
+                        hp = 2
+                    elif roll < chance:
+                        behavior = ALIEN_BEHAVIOR_ZIGZAG
+                alien = Alien(
+                    x=x, y=y, alien_type=alien_type % 3,
+                    hp=hp, behavior=behavior,
+                    zigzag_phase=random.uniform(0, math.pi * 2),
+                )
+                self.aliens.append(alien)
         self.initial_alien_count = len(self.aliens)
 
         # Spawn boss on boss levels (every 5 levels)
@@ -1799,6 +1837,14 @@ class Game:
         else:
             for alien in self.aliens:
                 alien.x += self.alien_direction
+                alien.base_x += self.alien_direction
+
+        # Apply zigzag oscillation for zigzag-behavior aliens
+        for alien in self.aliens:
+            if alien.behavior == ALIEN_BEHAVIOR_ZIGZAG:
+                alien.zigzag_phase += 0.3
+                alien.zigzag_offset = math.sin(alien.zigzag_phase) * 1.5
+                alien.x = int(alien.base_x + alien.zigzag_offset)
 
     def _update_mystery_ship(self, current_time: float) -> None:
         """Spawn and update the mystery ship (UFO)."""
@@ -1996,9 +2042,13 @@ class Game:
                 if alien not in self.aliens:
                     continue
                 if abs(proj.x - alien.x) <= 1 and abs(proj.y - alien.y) <= 1:
-                    self.aliens.remove(alien)
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
+                    killed = alien.take_hit()
+                    if not killed:
+                        # Alien survived (shielded) — just absorb the projectile
+                        break
+                    self.aliens.remove(alien)
                     self.total_kills += 1
                     multiplier = self._register_kill(current_time)
                     points = 10 * (3 - alien.alien_type) * multiplier
@@ -2179,6 +2229,12 @@ class Game:
         """Recalculate weapon level based on total kills."""
         new_level = min(WEAPON_MAX_LEVEL, 1 + self.total_kills // WEAPON_KILLS_PER_LEVEL)
         self.weapon_level = max(1, new_level)
+
+    def get_special_alien_counts(self) -> dict:
+        """Return counts of special aliens for display/testing."""
+        zigzag = sum(1 for a in self.aliens if a.behavior == ALIEN_BEHAVIOR_ZIGZAG)
+        shielded = sum(1 for a in self.aliens if a.behavior == ALIEN_BEHAVIOR_SHIELDED)
+        return {"zigzag": zigzag, "shielded": shielded, "normal": len(self.aliens) - zigzag - shielded}
 
     def get_scaled_bunker_health(self) -> int:
         """Return starting bunker health for the current level (reduced every 5 levels, min 1)."""
