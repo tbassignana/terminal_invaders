@@ -31,6 +31,9 @@ from invaders import (
     Alien,
     Projectile,
     MysteryShip,
+    PowerUpType,
+    PowerUp,
+    ActivePowerUp,
     ScoreManager,
     Game,
     AbstractSoundBackend,
@@ -648,6 +651,64 @@ class TestMysteryShip(unittest.TestCase):
         game._check_collisions()
         self.assertIsNotNone(game.mystery_score_display)
         self.assertEqual(game.mystery_score_display[2], 150)
+
+
+class TestPowerUps(unittest.TestCase):
+    """Step 10: Tests for the power-up system."""
+
+    def test_power_up_drop_chance(self):
+        """Verify power-ups spawn roughly 10% of the time over many trials."""
+        game = Game(test_mode=True)
+        import random as rng
+        rng.seed(42)
+        count = 0
+        for _ in range(1000):
+            game.power_ups.clear()
+            game._spawn_power_up(20, 10)
+            if game.power_ups:
+                count += 1
+        # Should be roughly 100 (10%), allow wide range
+        self.assertGreater(count, 50)
+        self.assertLess(count, 200)
+
+    def test_power_up_falling_movement(self):
+        """Verify power-ups fall down each update."""
+        game = Game(test_mode=True)
+        pu = PowerUp(x=20, y=5.0, power_type=PowerUpType.RAPID_FIRE)
+        game.power_ups.append(pu)
+        game._update_power_ups(time.time())
+        self.assertGreater(pu.y, 5.0)
+
+    def test_power_up_player_collection(self):
+        """Verify player collects power-up when overlapping."""
+        game = Game(test_mode=True)
+        # Place power-up at player position
+        pu = PowerUp(x=game.player.x + 1, y=float(game.player.y),
+                     power_type=PowerUpType.SHIELD)
+        game.power_ups.append(pu)
+        game._update_power_ups(time.time())
+        self.assertEqual(len(game.power_ups), 0)
+        self.assertTrue(game.has_power_up(PowerUpType.SHIELD))
+
+    def test_power_up_effect_expiration(self):
+        """Verify timed power-ups expire after their duration."""
+        game = Game(test_mode=True)
+        game.active_power_ups.append(
+            ActivePowerUp(power_type=PowerUpType.RAPID_FIRE, expires_at=time.time() - 1)
+        )
+        game._update_power_ups(time.time())
+        self.assertFalse(game.has_power_up(PowerUpType.RAPID_FIRE))
+
+    def test_shield_absorbs_hit(self):
+        """Verify shield prevents damage and is consumed."""
+        game = Game(test_mode=True)
+        game.active_power_ups.append(
+            ActivePowerUp(power_type=PowerUpType.SHIELD, expires_at=time.time() + 999)
+        )
+        initial_lives = game.player.lives
+        game.handle_player_damage()
+        self.assertEqual(game.player.lives, initial_lives)
+        self.assertFalse(game.has_power_up(PowerUpType.SHIELD))
 
 
 class TestPauseSystem(unittest.TestCase):

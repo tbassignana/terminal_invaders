@@ -354,6 +354,29 @@ class MysteryShip:
     active: bool = True
 
 
+class PowerUpType(Enum):
+    """Types of power-ups."""
+    RAPID_FIRE = auto()
+    SHIELD = auto()
+    WIDE_SHOT = auto()
+
+
+@dataclass
+class PowerUp:
+    """A falling power-up pickup."""
+    x: int
+    y: float
+    power_type: PowerUpType
+    speed: float = 0.3
+
+
+@dataclass
+class ActivePowerUp:
+    """An active power-up effect on the player."""
+    power_type: PowerUpType
+    expires_at: float
+
+
 # ============================================================================
 # SCORE MANAGER
 # ============================================================================
@@ -729,6 +752,10 @@ class Game:
         # Pause tracking
         self.pause_start_time: float = 0
 
+        # Power-ups
+        self.power_ups: List[PowerUp] = []
+        self.active_power_ups: List[ActivePowerUp] = []
+
         # Event bus
         self.event_bus = EventBus()
 
@@ -818,6 +845,11 @@ class Game:
         - Resets position
         - Checks for game over
         """
+        # Shield absorbs one hit
+        if self.has_power_up(PowerUpType.SHIELD):
+            self._consume_shield()
+            return
+
         self.player.take_damage()
 
         # Notify subscribers
@@ -881,6 +913,10 @@ class Game:
         self.mystery_ship = None
         self.mystery_score_display = None
 
+        # Clear power-ups
+        self.power_ups.clear()
+        self.active_power_ups.clear()
+
         # Set state to playing
         self.state = GameState.PLAYING
 
@@ -916,6 +952,9 @@ class Game:
 
         # Check collisions
         self._check_collisions()
+
+        # Update power-ups
+        self._update_power_ups(current_time)
 
         # Check invasion
         self.check_invasion()
@@ -976,6 +1015,50 @@ class Game:
                         x=start_x, y=1, speed=0.5 * direction, points=points
                     )
 
+    def _spawn_power_up(self, x: int, y: int) -> None:
+        """Possibly spawn a power-up at the given position (10% chance)."""
+        if random.random() < 0.1:
+            power_type = random.choice(list(PowerUpType))
+            self.power_ups.append(PowerUp(x=x, y=float(y), power_type=power_type))
+
+    def _update_power_ups(self, current_time: float) -> None:
+        """Move falling power-ups and check collection; expire active effects."""
+        # Move falling power-ups
+        for pu in self.power_ups[:]:
+            pu.y += pu.speed
+            if pu.y >= self.height:
+                self.power_ups.remove(pu)
+                continue
+            # Check player collection
+            if (abs(pu.x - self.player.x - 1) <= 1 and
+                abs(pu.y - self.player.y) <= 1):
+                self.power_ups.remove(pu)
+                self._activate_power_up(pu.power_type, current_time)
+
+        # Expire active power-ups
+        self.active_power_ups = [
+            ap for ap in self.active_power_ups if ap.expires_at > current_time
+        ]
+
+    def _activate_power_up(self, power_type: PowerUpType, current_time: float) -> None:
+        """Activate a collected power-up."""
+        if power_type == PowerUpType.SHIELD:
+            # Shield is a one-time use, set a long expiry
+            self.active_power_ups.append(ActivePowerUp(power_type=power_type, expires_at=current_time + 999))
+        else:
+            # Timed effects last 5 seconds
+            self.active_power_ups.append(ActivePowerUp(power_type=power_type, expires_at=current_time + 5.0))
+
+    def has_power_up(self, power_type: PowerUpType) -> bool:
+        """Check if a specific power-up is currently active."""
+        return any(ap.power_type == power_type for ap in self.active_power_ups)
+
+    def _consume_shield(self) -> None:
+        """Remove the shield power-up (used on hit)."""
+        self.active_power_ups = [
+            ap for ap in self.active_power_ups if ap.power_type != PowerUpType.SHIELD
+        ]
+
     def _update_projectiles(self) -> None:
         """Update all projectile positions."""
         # Player projectiles move up (faster)
@@ -1014,6 +1097,7 @@ class Game:
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
                     self.score += 10 * (3 - alien.alien_type)
+                    self._spawn_power_up(alien.x, alien.y)
                     self.event_bus.publish(GameEvent.ALIEN_KILLED, alien_type=alien.alien_type)
                     break
 

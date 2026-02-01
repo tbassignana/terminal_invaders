@@ -17,7 +17,7 @@
 
 - [x] **Step 8:** Add a Mystery Ship (UFO) that crosses the top of the screen
 - [x] **Step 9:** Add a pause system with `PAUSED` game state
-- [ ] **Step 10:** Implement power-ups dropped by aliens (rapid fire, shield, wide shot)
+- [x] **Step 10:** Implement power-ups dropped by aliens (rapid fire, shield, wide shot)
 - [ ] **Step 11:** Add combo scoring system with time-windowed multiplier
 - [ ] **Step 12:** Implement difficulty scaling per level (speed, rows, bunker health)
 - [ ] **Step 13:** Add screen shake effect on player death
