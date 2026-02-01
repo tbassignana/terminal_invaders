@@ -3009,6 +3009,25 @@ class TestAnimatedTitleScreen(unittest.TestCase):
         _, _, ctrl_text = layout["controls"]
         self.assertIn("Fire", ctrl_text)
 
+    def test_title_art_lines_within_terminal_width(self):
+        """All TITLE_ART lines must fit within an 80-column terminal."""
+        for i, line in enumerate(TITLE_ART):
+            self.assertLessEqual(len(line), 80, f"TITLE_ART line {i} is {len(line)} chars")
+
+    def test_title_art_block_alignment(self):
+        """All lines within each word block share the same column in layout."""
+        game = Game(test_mode=True)
+        layout = game.get_title_layout()
+        art_lines = layout["art_lines"]
+        # Find the gap row to split into SPACE vs INVADERS blocks
+        gap_index = TITLE_ART.index("")
+        space_cols = [col for row, col, _ in art_lines if row < game.height // 2 - len(TITLE_ART) // 2 - 2 + gap_index]
+        invaders_cols = [col for row, col, _ in art_lines if row >= game.height // 2 - len(TITLE_ART) // 2 - 2 + gap_index]
+        if space_cols:
+            self.assertEqual(len(set(space_cols)), 1, "SPACE lines should share same column")
+        if invaders_cols:
+            self.assertEqual(len(set(invaders_cols)), 1, "INVADERS lines should share same column")
+
 
 class TestScorePopup(unittest.TestCase):
     """Tests for score popup text on alien kill (Step 36)."""

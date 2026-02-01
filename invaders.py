@@ -353,18 +353,19 @@ def get_formation_positions(name: str, rows: int, cols: int) -> set:
 
 
 # ASCII art title for animated title screen (each line is one row)
+# Letters are 5-wide with 2-space gaps; lines within each word are equal-length.
 TITLE_ART = [
-    " ███ ████  ██  ██ ██ █████",
-    " █   █  █ █  █ █  █  █    ",
-    " ███ ████ ████ █  █  ███  ",
-    "   █ █    █  █ █  █  █    ",
-    " ███ █    █  █  ██   █████",
+    " ███   ████   █████   ████   █████",
+    "█      █   █  █   █  █       █    ",
+    " ███   ████   █████  █       ████ ",
+    "    █  █      █   █  █       █    ",
+    " ███   █      █   █   ████   █████",
     "",
-    " █ █  █ █  █ ██  ███ ████ ███ ",
-    " █ █  █ █  █ █ █ █ █ █  █ █  █",
-    " █ █  █ █  █ █ █ █ █ █  █ ███ ",
-    " █ █  ██ ████ █ █ █ █ ████ █ █",
-    " █ █  █   █ █ ██  ███ █  █ █ █",
+    "█████  █   █  █   █   █████  ████   █████  ████    ███ ",
+    "  █    ██  █  █   █   █   █  █   █  █      █   █  █    ",
+    "  █    █ █ █   █ █    █████  █   █  ████   ████    ███ ",
+    "  █    █  ██   █ █    █   █  █   █  █      █  █       █",
+    "█████  █   █    █     █   █  ████   █████  █   █   ███ ",
 ]
 
 # Color pairs to cycle through for title animation
@@ -753,6 +754,8 @@ ALIEN_PROJ_TYPES = {
 }
 # Weighted probabilities for random selection (normal=60%, fast=25%, heavy=15%)
 ALIEN_PROJ_WEIGHTS = {"normal": 60, "fast": 25, "heavy": 15}
+_ALIEN_PROJ_TYPES = list(ALIEN_PROJ_WEIGHTS.keys())
+_ALIEN_PROJ_WEIGHT_VALUES = list(ALIEN_PROJ_WEIGHTS.values())
 
 MYSTERY_SHIP_CHAR = "=<UFO>="  # Wider 7-char sprite
 
@@ -973,15 +976,16 @@ class ParticleSystem:
             )
 
     def update(self, dt: float) -> None:
-        """Advance all particles by dt seconds, cull expired ones."""
-        alive = []
+        """Advance all particles by dt seconds, cull expired ones in-place."""
+        write = 0
         for p in self.particles:
             p.age += dt
             if p.age < p.lifetime:
                 p.x += p.dx * dt
                 p.y += p.dy * dt
-                alive.append(p)
-        self.particles = alive
+                self.particles[write] = p
+                write += 1
+        del self.particles[write:]
 
     def clear(self) -> None:
         """Remove all particles."""
@@ -1715,6 +1719,10 @@ class Game:
         # Title screen animation
         self.title_color_frame = 0  # Color cycle counter for title screen
 
+        # HUD rendering cache (avoids string rebuilds each frame)
+        self._hud_lives_count = -1
+        self._hud_lives_text = ""
+
         # Starfield background
         self.stars: List[Tuple[float, float, str]] = []  # [(x, y, char), ...]
         self.star_scroll_speed = 1.0  # pixels per second
@@ -2273,21 +2281,26 @@ class Game:
         if not self.aliens:
             return
 
-        # Check bounds
-        min_x = min(a.x for a in self.aliens)
-        max_x = max(a.x for a in self.aliens)
+        # Single-pass bounds computation (min_x, max_x, max_y)
+        min_x = max_x = self.aliens[0].x
+        max_y = self.aliens[0].y
+        for a in self.aliens:
+            if a.x < min_x:
+                min_x = a.x
+            if a.x > max_x:
+                max_x = a.x
+            if a.y > max_y:
+                max_y = a.y
 
         # Change direction at edges
         if max_x >= self.width - 4 and self.alien_direction > 0:
             self.alien_direction = -1
-            max_y = max(a.y for a in self.aliens)
             for alien in self.aliens:
                 alien.y += 1
             # Trigger ripple at the formation's new lowest row
             self.ripple_effects.append(RippleEffect(y=max_y + 1))
         elif min_x <= 2 and self.alien_direction < 0:
             self.alien_direction = 1
-            max_y = max(a.y for a in self.aliens)
             for alien in self.aliens:
                 alien.y += 1
             self.ripple_effects.append(RippleEffect(y=max_y + 1))
@@ -2490,8 +2503,8 @@ class Game:
             return
 
         fire_prob = self.get_alien_fire_probability()
-        proj_types = list(ALIEN_PROJ_WEIGHTS.keys())
-        proj_weights = list(ALIEN_PROJ_WEIGHTS.values())
+        proj_types = _ALIEN_PROJ_TYPES
+        proj_weights = _ALIEN_PROJ_WEIGHT_VALUES
 
         for alien in self.aliens:
             if random.random() < fire_prob:
@@ -3253,11 +3266,27 @@ class Game:
         # Center the art block vertically, with subtitle and controls below
         art_top = self.height // 2 - art_height // 2 - 2
 
-        art_lines = []
+        # Split art into word blocks (separated by empty lines) and center
+        # each block independently so all lines within a block share the
+        # same left column.
+        blocks: list[list[tuple[int, str]]] = []
+        current_block: list[tuple[int, str]] = []
         for i, line in enumerate(art):
             if line:
-                col = (self.width - len(line)) // 2
-                art_lines.append((art_top + i, col, line))
+                current_block.append((i, line))
+            else:
+                if current_block:
+                    blocks.append(current_block)
+                    current_block = []
+        if current_block:
+            blocks.append(current_block)
+
+        art_lines = []
+        for block in blocks:
+            block_max_width = max(len(line) for _, line in block)
+            col = (self.width - block_max_width) // 2
+            for idx, line in block:
+                art_lines.append((art_top + idx, col, line))
 
         subtitle = "Press SPACE to Start"
         controls = "A/D or Arrows = Move | SPACE = Fire | Q = Quit"
@@ -3562,7 +3591,10 @@ class Game:
 
         # Score and lives header
         score_text = f"Score: {self.score}"
-        lives_display = f"Lives: {'<A> ' * self.player.lives}"
+        if self.player.lives != self._hud_lives_count:
+            self._hud_lives_count = self.player.lives
+            self._hud_lives_text = f"Lives: {'<A> ' * self.player.lives}"
+        lives_display = self._hud_lives_text
         level_text = f"Level: {self.level}"
 
         self._safe_addstr(0, 2, score_text, curses.color_pair(COLOR_TEXT))
@@ -3646,8 +3678,8 @@ class Game:
         # Render player (blink during invincibility i-frames)
         player_visible = True
         if self.is_invincible():
-            # Blink at ~4 Hz: visible every other 1/8s cycle
-            player_visible = int(time.time() * 8) % 2 == 0
+            # Blink at ~4 Hz using frame counter (avoids time.time() syscall)
+            player_visible = (self.replay_frame // 8) % 2 == 0
         if player_visible:
             self._safe_addstr(self.player.y, self.player.x, self.config.player_char, curses.color_pair(COLOR_PLAYER))
 
