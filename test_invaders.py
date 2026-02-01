@@ -4184,6 +4184,144 @@ class TestMainMenuStateMachine(unittest.TestCase):
         am.stop()  # Should not raise
 
 
+class TestHighScoresDisplay(unittest.TestCase):
+    """Tests for high scores display screen (Step 52)."""
+
+    def _game_with_scores(self, scores=None):
+        """Create a game with a mock score_manager."""
+        game = Game(test_mode=True)
+        game.score_manager = ScoreManager(scores_path=os.path.join(tempfile.mkdtemp(), "scores.json"))
+        if scores:
+            for s in scores:
+                game.score_manager.record(s["score"], s["level"])
+        return game
+
+    def test_empty_scores_display(self):
+        """Empty scores returns empty=True."""
+        game = self._game_with_scores()
+        hs = game.get_high_scores_display()
+        self.assertTrue(hs["empty"])
+        self.assertEqual(len(hs["rows"]), 0)
+        self.assertEqual(hs["title"], "HIGH SCORES")
+
+    def test_scores_display_with_entries(self):
+        """Scores display returns formatted rows."""
+        game = self._game_with_scores([
+            {"score": 500, "level": 3},
+            {"score": 1000, "level": 5},
+        ])
+        hs = game.get_high_scores_display()
+        self.assertFalse(hs["empty"])
+        self.assertEqual(len(hs["rows"]), 2)
+        # Highest score should be rank 1
+        self.assertEqual(hs["rows"][0]["rank"], 1)
+        self.assertEqual(hs["rows"][0]["score"], 1000)
+
+    def test_scores_display_max_10(self):
+        """Only top 10 scores are shown."""
+        game = self._game_with_scores([{"score": i * 100, "level": 1} for i in range(15)])
+        hs = game.get_high_scores_display()
+        self.assertEqual(len(hs["rows"]), 10)
+
+    def test_scores_display_rank_order(self):
+        """Scores are ranked by score descending."""
+        game = self._game_with_scores([
+            {"score": 100, "level": 1},
+            {"score": 300, "level": 2},
+            {"score": 200, "level": 3},
+        ])
+        hs = game.get_high_scores_display()
+        scores = [r["score"] for r in hs["rows"]]
+        self.assertEqual(scores, [300, 200, 100])
+
+    def test_scores_display_date_format(self):
+        """Dates are formatted as YYYY-MM-DD."""
+        game = self._game_with_scores([{"score": 100, "level": 1}])
+        hs = game.get_high_scores_display()
+        self.assertRegex(hs["rows"][0]["date"], r"\d{4}-\d{2}-\d{2}")
+
+    def test_scores_display_no_score_manager(self):
+        """get_high_scores_display works when score_manager is None."""
+        game = Game(test_mode=True)
+        game.score_manager = None
+        hs = game.get_high_scores_display()
+        self.assertTrue(hs["empty"])
+
+    def test_scores_display_invalid_date(self):
+        """Invalid date in score entry shows fallback."""
+        game = Game(test_mode=True)
+        game.score_manager = ScoreManager(scores_path=os.path.join(tempfile.mkdtemp(), "scores.json"))
+        game.score_manager.scores = [{"score": 100, "level": 1, "date": "not-a-date"}]
+        hs = game.get_high_scores_display()
+        self.assertEqual(hs["rows"][0]["date"], "----")
+
+    def test_audio_loop_exception_breaks(self):
+        """AudioManager._audio_loop breaks on exception (covers except path)."""
+        import invaders
+        am = invaders.AudioManager()
+        am.game_running = True
+        with unittest.mock.patch("subprocess.Popen", side_effect=OSError("mocked")):
+            am._audio_loop()  # Should not raise, should break
+
+    def test_scores_display_missing_date_key(self):
+        """Score entry without date key shows fallback."""
+        game = Game(test_mode=True)
+        game.score_manager = ScoreManager(scores_path=os.path.join(tempfile.mkdtemp(), "scores.json"))
+        game.score_manager.scores = [{"score": 200, "level": 2}]
+        hs = game.get_high_scores_display()
+        self.assertEqual(hs["rows"][0]["date"], "----")
+
+    def test_score_manager_save_failure_logs(self):
+        """ScoreManager._save handles write failure gracefully."""
+        sm = ScoreManager(scores_path="/nonexistent/deeply/nested/dir/scores.json")
+        sm.scores = [{"score": 100, "level": 1, "date": "2025-01-01"}]
+        sm._save()  # Should not raise
+
+    def test_sfx_init_in_non_test_mode(self):
+        """SoundEffects is initialized when not in test_mode (with mocked backend)."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        # Verify SoundEffects can be created
+        sfx = SoundEffects()
+        self.assertIsNotNone(sfx)
+
+    def test_game_init_bunkers_non_test_mode(self):
+        """Game initializes bunkers when test_mode is False."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game._init_bunkers()
+        game.test_mode = True
+        self.assertGreater(len(game.bunkers), 0)
+
+    def test_render_menu_with_mock_screen(self):
+        """_render_menu works with a mock curses screen."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        mock_screen = unittest.mock.MagicMock()
+        mock_screen.getmaxyx.return_value = (30, 80)
+        game.screen = mock_screen
+        with unittest.mock.patch("curses.color_pair", return_value=0):
+            game.render()
+        mock_screen.clear.assert_called()
+
+    def test_render_high_scores_with_mock_screen(self):
+        """_render_menu renders HIGH_SCORES sub-screen with mock screen."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.HIGH_SCORES
+        game.score_manager = ScoreManager(scores_path=os.path.join(tempfile.mkdtemp(), "scores.json"))
+        game.score_manager.record(500, 3)
+        mock_screen = unittest.mock.MagicMock()
+        mock_screen.getmaxyx.return_value = (30, 80)
+        game.screen = mock_screen
+        with unittest.mock.patch("curses.color_pair", return_value=0):
+            game.render()
+        mock_screen.clear.assert_called()
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

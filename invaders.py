@@ -1133,6 +1133,7 @@ class Game:
         self.state = GameState.PLAYING if test_mode else GameState.MENU
         self.menu_screen: MenuScreen = MenuScreen.MAIN
         self.menu_selection: int = 0  # Index into MENU_ITEMS
+        self.score_manager = ScoreManager() if not test_mode else None
         self.score = 0
         self.level = 1
 
@@ -2123,6 +2124,36 @@ class Game:
             "color_index": color_idx,
         }
 
+    def get_high_scores_display(self) -> dict:
+        """Return high scores display data (testable without curses).
+
+        Returns dict with:
+            title: "HIGH SCORES"
+            rows: list of dicts with rank, score, level, date
+            empty: True if no scores recorded
+        """
+        scores = self.score_manager.scores if self.score_manager else []
+        rows = []
+        for i, entry in enumerate(scores[:10]):
+            date_str = entry.get("date", "")
+            # Parse ISO date and format as short date
+            try:
+                dt = datetime.fromisoformat(date_str)
+                date_short = dt.strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                date_short = "----"
+            rows.append({
+                "rank": i + 1,
+                "score": entry.get("score", 0),
+                "level": entry.get("level", 0),
+                "date": date_short,
+            })
+        return {
+            "title": "HIGH SCORES",
+            "rows": rows,
+            "empty": len(rows) == 0,
+        }
+
     def get_menu_info(self) -> dict:
         """Return current menu state info (testable without curses).
 
@@ -2163,15 +2194,40 @@ class Game:
             ctrl_r, ctrl_c, ctrl_text = layout["controls"]
             self._safe_addstr(ctrl_r, ctrl_c, ctrl_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM)
         else:
-            # Sub-screen placeholder (implemented in steps 52-55)
-            screen_name = self.menu_screen.name.replace("_", " ").title()
-            text = f"[ {screen_name} ]"
-            self._safe_addstr(self.height // 2, (self.width - len(text)) // 2, text, curses.color_pair(COLOR_TEXT))
+            if self.menu_screen == MenuScreen.HIGH_SCORES:
+                self._render_high_scores_screen()
+            else:
+                # Sub-screen placeholder (implemented in steps 53-55)
+                screen_name = self.menu_screen.name.replace("_", " ").title()
+                text = f"[ {screen_name} ]"
+                self._safe_addstr(self.height // 2, (self.width - len(text)) // 2, text, curses.color_pair(COLOR_TEXT))
             back_text = "Press ESC to return"
             self._safe_addstr(
-                self.height // 2 + 2, (self.width - len(back_text)) // 2,
+                self.height // 2 + 2 + (11 if self.menu_screen == MenuScreen.HIGH_SCORES else 0),
+                (self.width - len(back_text)) // 2,
                 back_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM
             )
+
+    def _render_high_scores_screen(self) -> None:
+        """Render the high scores display table."""
+        hs = self.get_high_scores_display()
+        center_y = self.height // 2 - 6
+        title = hs["title"]
+        self._safe_addstr(center_y, (self.width - len(title)) // 2, title, curses.color_pair(COLOR_TEXT) | curses.A_BOLD)
+
+        if hs["empty"]:
+            empty_text = "No scores yet. Play a game!"
+            self._safe_addstr(center_y + 2, (self.width - len(empty_text)) // 2, empty_text, curses.color_pair(COLOR_TEXT))
+        else:
+            header = f"{'Rank':>4}  {'Score':>8}  {'Level':>5}  {'Date':>10}"
+            self._safe_addstr(center_y + 2, (self.width - len(header)) // 2, header, curses.color_pair(COLOR_TEXT) | curses.A_DIM)
+            for row in hs["rows"]:
+                line = f"  {row['rank']:>2}.  {row['score']:>8}  {'Lv':>3}{row['level']:<2}  {row['date']:>10}"
+                r = center_y + 3 + row["rank"]
+                attr = curses.color_pair(COLOR_TEXT)
+                if row["rank"] == 1:
+                    attr |= curses.A_BOLD
+                self._safe_addstr(r, (self.width - len(line)) // 2, line, attr)
 
     def _render_game(self) -> None:
         """Render the main gameplay."""
