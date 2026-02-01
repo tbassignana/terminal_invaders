@@ -229,6 +229,8 @@ COLOR_BORDER = 12          # Dim cyan for HUD border
 COLOR_POWERUP = 13         # Bright white for power-up pickups
 COLOR_BUNKER_HIGH = 14     # Bright green (high health, between full and damaged)
 COLOR_BUNKER_LOW = 15      # Dark red/yellow (low health, between damaged and critical)
+COLOR_BG_DANGER_LOW = 16   # White-on-red background (mild danger)
+COLOR_BG_DANGER_HIGH = 17  # White-on-red background (high danger)
 
 # Box-drawing characters for HUD border
 BORDER_H = "─"   # Horizontal line
@@ -2005,6 +2007,15 @@ class Game:
         # Handle flash effect (red for damage, green for level complete)
         if self.flash_active:
             self.screen.bkgd(" ", curses.color_pair(self.flash_color))
+        elif self.state == GameState.PLAYING and self.aliens:
+            # Progressive background color shift as aliens descend
+            danger = self.get_descent_danger_ratio()
+            if danger >= 0.75:
+                self.screen.bkgd(" ", curses.color_pair(COLOR_BG_DANGER_HIGH) | curses.A_BOLD)
+            elif danger >= 0.5:
+                self.screen.bkgd(" ", curses.color_pair(COLOR_BG_DANGER_LOW) | curses.A_DIM)
+            else:
+                self.screen.bkgd(" ")
         else:
             self.screen.bkgd(" ")
 
@@ -2288,6 +2299,21 @@ class Game:
             "row": self.height - 1,
         }
 
+    def get_descent_danger_ratio(self) -> float:
+        """Return how far aliens have descended toward the player (0.0=safe, 1.0=invaded).
+
+        Used for progressive background color shift as aliens approach.
+        Returns 0.0 if no aliens present.
+        """
+        if not self.aliens:
+            return 0.0
+        lowest_alien_y = max(a.y for a in self.aliens)
+        start_y = self.config.alien_start_y
+        player_y = self.player.y
+        if player_y <= start_y:
+            return 0.0
+        return max(0.0, min(1.0, (lowest_alien_y - start_y) / (player_y - start_y)))
+
     def get_level_transition_info(self) -> dict:
         """Return level transition countdown info (testable without curses).
 
@@ -2497,6 +2523,8 @@ class Game:
             curses.init_pair(COLOR_POWERUP, curses.COLOR_WHITE, -1)
             curses.init_pair(COLOR_BUNKER_HIGH, curses.COLOR_GREEN, -1)
             curses.init_pair(COLOR_BUNKER_LOW, curses.COLOR_YELLOW, -1)
+            curses.init_pair(COLOR_BG_DANGER_LOW, curses.COLOR_WHITE, curses.COLOR_RED)
+            curses.init_pair(COLOR_BG_DANGER_HIGH, curses.COLOR_WHITE, curses.COLOR_RED)
 
             # Get screen dimensions
             self.height, self.width = stdscr.getmaxyx()

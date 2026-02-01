@@ -37,6 +37,8 @@ from invaders import (
     COLOR_ALIEN_TYPE_0,
     COLOR_ALIEN_TYPE_1,
     COLOR_ALIEN_TYPE_2,
+    COLOR_BG_DANGER_HIGH,
+    COLOR_BG_DANGER_LOW,
     COLOR_BORDER,
     COLOR_BUNKER,
     COLOR_BUNKER_CRITICAL,
@@ -3887,6 +3889,94 @@ class TestAlienTypeSpecificDeathExplosions(unittest.TestCase):
             self.assertIn("chars", cfg)
             self.assertIn("speed", cfg)
             self.assertIn("lifetime", cfg)
+
+
+class TestProgressiveBackgroundColorShift(unittest.TestCase):
+    """Tests for progressive background color shift as aliens descend (Step 49)."""
+
+    def test_danger_ratio_zero_when_no_aliens(self):
+        """No aliens means zero danger."""
+        game = Game(test_mode=True)
+        game.aliens = []
+        self.assertEqual(game.get_descent_danger_ratio(), 0.0)
+
+    def test_danger_ratio_zero_at_start(self):
+        """Aliens at starting position give near-zero danger."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=game.config.alien_start_y)]
+        ratio = game.get_descent_danger_ratio()
+        self.assertAlmostEqual(ratio, 0.0, places=2)
+
+    def test_danger_ratio_increases_with_descent(self):
+        """Danger increases as aliens move down."""
+        game = Game(test_mode=True)
+        start_y = game.config.alien_start_y
+        player_y = game.player.y
+        mid_y = (start_y + player_y) // 2
+        game.aliens = [Alien(x=10, y=mid_y)]
+        ratio = game.get_descent_danger_ratio()
+        self.assertGreater(ratio, 0.3)
+        self.assertLess(ratio, 0.7)
+
+    def test_danger_ratio_one_at_player(self):
+        """Aliens at player row give danger ratio of 1.0."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=game.player.y)]
+        self.assertAlmostEqual(game.get_descent_danger_ratio(), 1.0, places=2)
+
+    def test_danger_ratio_clamped_to_one(self):
+        """Danger ratio does not exceed 1.0 even if aliens go past player."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=game.player.y + 5)]
+        self.assertEqual(game.get_descent_danger_ratio(), 1.0)
+
+    def test_danger_uses_lowest_alien(self):
+        """Danger ratio is based on the lowest alien, not the highest."""
+        game = Game(test_mode=True)
+        start_y = game.config.alien_start_y
+        game.aliens = [
+            Alien(x=10, y=start_y),      # high up
+            Alien(x=15, y=start_y + 10),  # lower
+        ]
+        ratio = game.get_descent_danger_ratio()
+        # Should match the lower alien's position
+        single_game = Game(test_mode=True)
+        single_game.aliens = [Alien(x=15, y=start_y + 10)]
+        self.assertAlmostEqual(ratio, single_game.get_descent_danger_ratio(), places=5)
+
+    def test_danger_ratio_zero_when_player_at_start(self):
+        """Edge case: player_y <= alien_start_y returns 0.0."""
+        game = Game(test_mode=True)
+        game.player.y = game.config.alien_start_y  # player at alien start
+        game.aliens = [Alien(x=10, y=game.config.alien_start_y)]
+        self.assertEqual(game.get_descent_danger_ratio(), 0.0)
+
+    def test_color_constants_defined(self):
+        """Color pair constants for danger backgrounds are defined."""
+        self.assertEqual(COLOR_BG_DANGER_LOW, 16)
+        self.assertEqual(COLOR_BG_DANGER_HIGH, 17)
+
+    def test_macoss_play_spawns_thread(self):
+        """MacOSSoundBackend.play spawns a thread for playback (covers inner _play)."""
+        backend = MacOSSoundBackend()
+        with unittest.mock.patch("os.path.exists", return_value=True), \
+             unittest.mock.patch("subprocess.run") as mock_run:
+            backend.play("/fake/sound.aiff", volume=0.5)
+            import time as _time
+            _time.sleep(0.1)  # Give thread time to execute
+            mock_run.assert_called_once()
+
+    def test_cleanup_audio_exception_handling(self):
+        """_cleanup_audio handles pkill failure gracefully (covers exception path)."""
+        import invaders
+
+        old = invaders._audio_manager
+        try:
+            invaders._audio_manager = None
+            with unittest.mock.patch("subprocess.run", side_effect=OSError("mocked pkill")):
+                invaders._cleanup_audio()  # Should not raise
+        finally:
+            invaders._audio_manager = old
 
 
 if __name__ == "__main__":
