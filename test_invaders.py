@@ -1545,10 +1545,11 @@ class TestHandleInput(unittest.TestCase):
         self.assertEqual(game.state, GameState.PLAYING)
 
     def test_game_over_restart(self):
-        """Pressing R at GAME_OVER resets the game."""
+        """Pressing R at GAME_OVER resets the game (after initials submitted)."""
         game = Game(test_mode=True)
         game.state = GameState.GAME_OVER
         game.score = 500
+        game.initials_submitted = True
         game.handle_input(ord("r"))
         self.assertEqual(game.state, GameState.PLAYING)
         self.assertEqual(game.score, 0)
@@ -5892,6 +5893,91 @@ class TestStatsManager(unittest.TestCase):
         self.assertEqual(sm.get_stats()["games_played"], 1)
         self.assertEqual(sm.get_stats()["best_score"], 500)
         self._cleanup(path)
+
+
+class TestInitialsEntry(unittest.TestCase):
+    """Tests for arcade-style 3-char initials entry on game over."""
+
+    def _make_game_over(self):
+        game = Game(test_mode=True)
+        game.state = GameState.GAME_OVER
+        game.width = 80
+        game.height = 30
+        game.score = 1000
+        return game
+
+    def test_initials_default(self):
+        """Initials default to 'AAA'."""
+        game = self._make_game_over()
+        self.assertEqual(game.get_initials_info()["initials"], "AAA")
+
+    def test_cursor_starts_at_zero(self):
+        """Cursor starts at first position."""
+        game = self._make_game_over()
+        self.assertEqual(game.get_initials_info()["cursor"], 0)
+
+    def test_not_submitted_by_default(self):
+        """Initials are not submitted by default."""
+        game = self._make_game_over()
+        self.assertFalse(game.get_initials_info()["submitted"])
+
+    def test_up_cycles_letter_forward(self):
+        """UP arrow cycles letter forward (A→B)."""
+        game = self._make_game_over()
+        game.handle_input(curses.KEY_UP)
+        self.assertEqual(game.initials_entry[0], "B")
+
+    def test_down_cycles_letter_backward(self):
+        """DOWN arrow cycles letter backward (A→Z)."""
+        game = self._make_game_over()
+        game.handle_input(curses.KEY_DOWN)
+        self.assertEqual(game.initials_entry[0], "Z")
+
+    def test_right_moves_cursor(self):
+        """RIGHT arrow moves cursor to next position."""
+        game = self._make_game_over()
+        game.handle_input(curses.KEY_RIGHT)
+        self.assertEqual(game.initials_cursor, 1)
+
+    def test_left_moves_cursor(self):
+        """LEFT arrow moves cursor back."""
+        game = self._make_game_over()
+        game.initials_cursor = 1
+        game.handle_input(curses.KEY_LEFT)
+        self.assertEqual(game.initials_cursor, 0)
+
+    def test_cursor_bounded(self):
+        """Cursor stays within 0-2 bounds."""
+        game = self._make_game_over()
+        game.handle_input(curses.KEY_LEFT)  # Already at 0
+        self.assertEqual(game.initials_cursor, 0)
+        game.initials_cursor = 2
+        game.handle_input(curses.KEY_RIGHT)  # Already at 2
+        self.assertEqual(game.initials_cursor, 2)
+
+    def test_enter_submits(self):
+        """ENTER key submits initials."""
+        game = self._make_game_over()
+        game.handle_input(ord("\n"))
+        self.assertTrue(game.initials_submitted)
+
+    def test_r_only_works_after_submit(self):
+        """R key doesn't reset until initials are submitted."""
+        game = self._make_game_over()
+        game.handle_input(ord("R"))
+        self.assertEqual(game.state, GameState.GAME_OVER)  # Still game over
+        game.handle_input(ord("\n"))  # Submit first
+        game.handle_input(ord("R"))
+        self.assertEqual(game.state, GameState.PLAYING)  # Now reset works
+
+    def test_reset_clears_initials(self):
+        """Game reset clears initials state."""
+        game = self._make_game_over()
+        game.initials_entry = ["X", "Y", "Z"]
+        game.initials_submitted = True
+        game.reset_game()
+        self.assertEqual(game.get_initials_info()["initials"], "AAA")
+        self.assertFalse(game.initials_submitted)
 
 
 if __name__ == "__main__":

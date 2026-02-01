@@ -113,7 +113,7 @@
 - [x] **Step 68:** Add score threshold milestones with bonus life rewards (1K, 2.5K, 5K, 10K, 25K, 50K)
 - [x] **Step 69:** Add "bullet time" slow motion power-up (50% alien speed for 4s, blue tint)
 - [x] **Step 70:** Add persistent statistics tracking (lifetime stats in `~/.invaders_stats.json`)
-- [ ] **Step 71:** Add game over score submission flow (3-char initials entry, arcade style)
+- [x] **Step 71:** Add game over score submission flow (3-char initials entry, arcade style)
 - [ ] **Step 72:** Add replay/ghost system (input recording + deterministic playback via seed)
 - [ ] **Step 73:** Add achievement system (10 achievements, persistence, unlock popups)
 - [ ] **Step 74:** Add endless/survival mode (continuous waves, escalating intensity, separate leaderboard)

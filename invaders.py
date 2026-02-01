@@ -1488,6 +1488,11 @@ class Game:
         self.total_kills: int = 0
         self.game_over_time: float = 0  # When GAME_OVER state was entered
 
+        # Initials entry (arcade-style score submission)
+        self.initials_entry: List[str] = ["A", "A", "A"]
+        self.initials_cursor: int = 0
+        self.initials_submitted: bool = False
+
         # Level transition countdown (3... 2... 1... GO!)
         self.level_transition_time: float = 0  # When LEVEL_TRANSITION started
         self.level_countdown_duration: float = 4.0  # 3s countdown + 1s "GO!"
@@ -1799,6 +1804,9 @@ class Game:
         self.total_kills = 0
         self.game_over_time = 0
         self.game_start_time = time.time()
+        self.initials_entry = ["A", "A", "A"]
+        self.initials_cursor = 0
+        self.initials_submitted = False
         self.milestones_reached.clear()
 
         # Reset player
@@ -2796,8 +2804,26 @@ class Game:
                 self._toggle_pause()
 
         elif self.state == GameState.GAME_OVER:
-            if key == ord("r") or key == ord("R"):
-                self.reset_game()
+            if not self.initials_submitted:
+                # Initials entry: UP/DOWN cycle letters, LEFT/RIGHT move cursor, ENTER submit
+                if key == curses.KEY_UP:
+                    c = self.initials_entry[self.initials_cursor]
+                    self.initials_entry[self.initials_cursor] = chr((ord(c) - ord("A") + 1) % 26 + ord("A"))
+                elif key == curses.KEY_DOWN:
+                    c = self.initials_entry[self.initials_cursor]
+                    self.initials_entry[self.initials_cursor] = chr((ord(c) - ord("A") - 1) % 26 + ord("A"))
+                elif key == curses.KEY_RIGHT:
+                    self.initials_cursor = min(2, self.initials_cursor + 1)
+                elif key == curses.KEY_LEFT:
+                    self.initials_cursor = max(0, self.initials_cursor - 1)
+                elif key == ord("\n") or key == ord(" "):
+                    self.initials_submitted = True
+                    # Record score with initials to score manager
+                    if self.score_manager:
+                        self.score_manager.record(self.score, self.level)
+            else:
+                if key == ord("r") or key == ord("R"):
+                    self.reset_game()
 
         elif self.state == GameState.LEVEL_TRANSITION:
             if key == ord(" ") or key == ord("\n"):
@@ -3462,6 +3488,14 @@ class Game:
             "shots": self.total_shots,
             "accuracy": accuracy,
             "curtain_rows": curtain_rows,
+        }
+
+    def get_initials_info(self) -> dict:
+        """Return initials entry state for display/testing."""
+        return {
+            "initials": "".join(self.initials_entry),
+            "cursor": self.initials_cursor,
+            "submitted": self.initials_submitted,
         }
 
     def get_border_layout(self) -> list:
