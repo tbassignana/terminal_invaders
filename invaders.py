@@ -170,6 +170,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--fps", type=int, default=None, help="Target FPS (default: 60)")
     parser.add_argument("--show-fps", action="store_true", help="Display FPS counter during gameplay")
+    parser.add_argument("--record", type=str, default=None, metavar="FILE", help="Record replay to FILE (JSON)")
+    parser.add_argument("--replay", type=str, default=None, metavar="FILE", help="Play back a recorded replay from FILE")
     parser.add_argument("--version", action="version", version=f"Terminal Invaders {__version__}")
     return parser
 
@@ -1106,6 +1108,75 @@ class StatsManager:
 
 
 # ============================================================================
+# REPLAY SYSTEM
+# ============================================================================
+
+DEFAULT_REPLAY_DIR = os.path.expanduser("~/.invaders_replays")
+
+
+class ReplayRecorder:
+    """Records game inputs for deterministic replay.
+
+    Stores the random seed and a sequence of (frame, key_code) pairs.
+    """
+
+    def __init__(self, seed: int):
+        self.seed: int = seed
+        self.inputs: List[Tuple[int, int]] = []  # [(frame, key_code), ...]
+
+    def record(self, frame: int, key: int) -> None:
+        """Record an input event at the given frame number."""
+        self.inputs.append((frame, key))
+
+    def save(self, path: str) -> None:
+        """Save the replay to a JSON file."""
+        data = {
+            "seed": self.seed,
+            "inputs": self.inputs,
+        }
+        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(data, f)
+
+    def to_dict(self) -> dict:
+        """Return replay data as a dict (for testing)."""
+        return {"seed": self.seed, "inputs": list(self.inputs)}
+
+
+class ReplayPlayer:
+    """Plays back a recorded replay by feeding inputs at the right frame.
+
+    Loads a replay file and provides key inputs indexed by frame number.
+    """
+
+    def __init__(self, seed: int, inputs: List[Tuple[int, int]]):
+        self.seed: int = seed
+        self.inputs: List[Tuple[int, int]] = inputs
+        self._index: int = 0  # Current position in input list
+
+    @classmethod
+    def load(cls, path: str) -> "ReplayPlayer":
+        """Load a replay from a JSON file."""
+        with open(path, "r") as f:
+            data = json.load(f)
+        inputs = [tuple(pair) for pair in data["inputs"]]
+        return cls(seed=data["seed"], inputs=inputs)
+
+    def get_inputs_for_frame(self, frame: int) -> List[int]:
+        """Return all key inputs recorded for the given frame."""
+        keys: List[int] = []
+        while self._index < len(self.inputs) and self.inputs[self._index][0] == frame:
+            keys.append(self.inputs[self._index][1])
+            self._index += 1
+        return keys
+
+    @property
+    def finished(self) -> bool:
+        """Return True if all inputs have been consumed."""
+        return self._index >= len(self.inputs)
+
+
+# ============================================================================
 # AUDIO SYSTEM
 # ============================================================================
 
@@ -1493,6 +1564,12 @@ class Game:
         self.initials_cursor: int = 0
         self.initials_submitted: bool = False
 
+        # Replay system
+        self.replay_seed: int = int(time.time() * 1000) % (2**31)
+        self.replay_recorder: Optional[ReplayRecorder] = None
+        self.replay_player: Optional[ReplayPlayer] = None
+        self.replay_frame: int = 0
+
         # Level transition countdown (3... 2... 1... GO!)
         self.level_transition_time: float = 0  # When LEVEL_TRANSITION started
         self.level_countdown_duration: float = 4.0  # 3s countdown + 1s "GO!"
@@ -1809,6 +1886,13 @@ class Game:
         self.initials_submitted = False
         self.milestones_reached.clear()
 
+        # Reset replay frame counter and seed random for determinism
+        self.replay_seed = int(time.time() * 1000) % (2**31)
+        self.replay_frame = 0
+        if self.replay_recorder:
+            self.replay_recorder = ReplayRecorder(self.replay_seed)
+        random.seed(self.replay_seed)
+
         # Reset player
         self.player.lives = self.config.player_start_lives
         self.player.x = self._initial_player_x
@@ -1861,6 +1945,9 @@ class Game:
 
     def update(self) -> None:
         """Main game update loop."""
+        # Advance replay frame counter
+        self.replay_frame += 1
+
         # Title screen color cycling runs in MENU state
         if self.state == GameState.MENU:
             self.title_color_frame += 1
@@ -2729,6 +2816,10 @@ class Game:
         if key == ord("q") or key == ord("Q"):
             return False
 
+        # Record input for replay system
+        if self.replay_recorder:
+            self.replay_recorder.record(self.replay_frame, key)
+
         # Handle terminal resize
         if key == curses.KEY_RESIZE:
             if self.screen:
@@ -3498,6 +3589,35 @@ class Game:
             "submitted": self.initials_submitted,
         }
 
+    def start_recording(self) -> None:
+        """Begin recording inputs for replay. Seeds random for determinism."""
+        random.seed(self.replay_seed)
+        self.replay_recorder = ReplayRecorder(self.replay_seed)
+        self.replay_frame = 0
+
+    def stop_recording(self) -> Optional[ReplayRecorder]:
+        """Stop recording and return the recorder (or None if not recording)."""
+        recorder = self.replay_recorder
+        self.replay_recorder = None
+        return recorder
+
+    def start_replay(self, player: ReplayPlayer) -> None:
+        """Begin replaying from a ReplayPlayer. Seeds random with the replay seed."""
+        self.replay_player = player
+        self.replay_seed = player.seed
+        self.replay_frame = 0
+        random.seed(player.seed)
+
+    def get_replay_info(self) -> dict:
+        """Return replay system state for display/testing."""
+        return {
+            "recording": self.replay_recorder is not None,
+            "replaying": self.replay_player is not None,
+            "frame": self.replay_frame,
+            "seed": self.replay_seed,
+            "input_count": len(self.replay_recorder.inputs) if self.replay_recorder else 0,
+        }
+
     def get_border_layout(self) -> list:
         """Return list of (row, col, char) tuples describing the HUD border.
 
@@ -3754,7 +3874,19 @@ def main():
     if args.show_fps:
         game.show_fps = True
 
+    # Replay system CLI integration
+    if args.record:
+        game.start_recording()
+    if args.replay:
+        player = ReplayPlayer.load(args.replay)
+        game.start_replay(player)
+
     game.run()
+
+    # Save recording after game exits
+    if args.record and game.replay_recorder:
+        game.replay_recorder.save(args.record)
+        logger.info("Replay saved to %s", args.record)
 
 
 if __name__ == "__main__":

@@ -108,6 +108,8 @@ from invaders import (
     PowerUp,
     PowerUpType,
     Projectile,
+    ReplayPlayer,
+    ReplayRecorder,
     RippleEffect,
     ScoreManager,
     ScorePopup,
@@ -5978,6 +5980,153 @@ class TestInitialsEntry(unittest.TestCase):
         game.reset_game()
         self.assertEqual(game.get_initials_info()["initials"], "AAA")
         self.assertFalse(game.initials_submitted)
+
+
+class TestReplaySystem(unittest.TestCase):
+    """Tests for the replay recording and playback system."""
+
+    def test_recorder_stores_seed(self):
+        """ReplayRecorder stores the random seed."""
+        rec = ReplayRecorder(seed=12345)
+        self.assertEqual(rec.seed, 12345)
+
+    def test_recorder_records_inputs(self):
+        """ReplayRecorder records (frame, key) pairs."""
+        rec = ReplayRecorder(seed=1)
+        rec.record(0, ord("a"))
+        rec.record(5, ord(" "))
+        self.assertEqual(len(rec.inputs), 2)
+        self.assertEqual(rec.inputs[0], (0, ord("a")))
+        self.assertEqual(rec.inputs[1], (5, ord(" ")))
+
+    def test_recorder_to_dict(self):
+        """ReplayRecorder.to_dict() returns seed and inputs."""
+        rec = ReplayRecorder(seed=42)
+        rec.record(1, ord("x"))
+        d = rec.to_dict()
+        self.assertEqual(d["seed"], 42)
+        self.assertEqual(d["inputs"], [(1, ord("x"))])
+
+    def test_recorder_save_and_player_load(self):
+        """Save a recording and load it back as a ReplayPlayer."""
+        rec = ReplayRecorder(seed=99)
+        rec.record(0, ord("a"))
+        rec.record(10, ord(" "))
+        path = os.path.join(tempfile.mkdtemp(), "test_replay.json")
+        rec.save(path)
+
+        player = ReplayPlayer.load(path)
+        self.assertEqual(player.seed, 99)
+        self.assertEqual(len(player.inputs), 2)
+        os.unlink(path)
+
+    def test_player_get_inputs_for_frame(self):
+        """ReplayPlayer returns correct inputs per frame."""
+        player = ReplayPlayer(seed=1, inputs=[(0, 65), (0, 66), (5, 67)])
+        keys_0 = player.get_inputs_for_frame(0)
+        self.assertEqual(keys_0, [65, 66])
+        keys_1 = player.get_inputs_for_frame(1)
+        self.assertEqual(keys_1, [])
+        keys_5 = player.get_inputs_for_frame(5)
+        self.assertEqual(keys_5, [67])
+
+    def test_player_finished(self):
+        """ReplayPlayer.finished is True when all inputs consumed."""
+        player = ReplayPlayer(seed=1, inputs=[(0, 65)])
+        self.assertFalse(player.finished)
+        player.get_inputs_for_frame(0)
+        self.assertTrue(player.finished)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_game_start_recording(self, _mock_cp):
+        """Game.start_recording() creates a recorder and seeds random."""
+        game = Game(test_mode=True)
+        game.start_recording()
+        info = game.get_replay_info()
+        self.assertTrue(info["recording"])
+        self.assertFalse(info["replaying"])
+        self.assertEqual(info["input_count"], 0)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_game_recording_captures_input(self, _mock_cp):
+        """Inputs during recording are captured in the recorder."""
+        game = Game(test_mode=True)
+        game.start_recording()
+        game.handle_input(ord("a"))
+        game.handle_input(ord("d"))
+        info = game.get_replay_info()
+        self.assertEqual(info["input_count"], 2)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_game_stop_recording(self, _mock_cp):
+        """Game.stop_recording() returns recorder and clears it."""
+        game = Game(test_mode=True)
+        game.start_recording()
+        game.handle_input(ord("a"))
+        rec = game.stop_recording()
+        self.assertIsNotNone(rec)
+        self.assertEqual(len(rec.inputs), 1)
+        self.assertFalse(game.get_replay_info()["recording"])
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_game_start_replay(self, _mock_cp):
+        """Game.start_replay() sets up the player and seeds random."""
+        game = Game(test_mode=True)
+        player = ReplayPlayer(seed=42, inputs=[(0, ord("a"))])
+        game.start_replay(player)
+        info = game.get_replay_info()
+        self.assertTrue(info["replaying"])
+        self.assertEqual(info["seed"], 42)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_replay_determinism_with_seed(self, _mock_cp):
+        """Same seed produces identical random sequences."""
+        seed = 12345
+        random.seed(seed)
+        seq1 = [random.random() for _ in range(10)]
+        random.seed(seed)
+        seq2 = [random.random() for _ in range(10)]
+        self.assertEqual(seq1, seq2)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_replay_frame_increments(self, _mock_cp):
+        """Game.update() increments replay_frame."""
+        game = Game(test_mode=True)
+        initial = game.replay_frame
+        game.update()
+        self.assertEqual(game.replay_frame, initial + 1)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_reset_game_resets_replay_frame(self, _mock_cp):
+        """Game.reset_game() resets replay_frame to 0."""
+        game = Game(test_mode=True)
+        game.update()
+        game.update()
+        self.assertGreater(game.replay_frame, 0)
+        game.reset_game()
+        self.assertEqual(game.replay_frame, 0)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_get_replay_info_defaults(self, _mock_cp):
+        """get_replay_info() returns expected defaults."""
+        game = Game(test_mode=True)
+        info = game.get_replay_info()
+        self.assertFalse(info["recording"])
+        self.assertFalse(info["replaying"])
+        self.assertEqual(info["frame"], 0)
+        self.assertIsInstance(info["seed"], int)
+
+    def test_cli_record_argument(self):
+        """CLI parser accepts --record argument."""
+        parser = build_argument_parser()
+        args = parser.parse_args(["--record", "/tmp/test.json"])
+        self.assertEqual(args.record, "/tmp/test.json")
+
+    def test_cli_replay_argument(self):
+        """CLI parser accepts --replay argument."""
+        parser = build_argument_parser()
+        args = parser.parse_args(["--replay", "/tmp/test.json"])
+        self.assertEqual(args.replay, "/tmp/test.json")
 
 
 if __name__ == "__main__":
