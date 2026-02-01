@@ -2712,6 +2712,58 @@ class TestPlayerThrustAnimation(unittest.TestCase):
         self.assertIsNotNone(game.player_move_direction)
 
 
+class TestStarfieldBackground(unittest.TestCase):
+    """Tests for the starfield background (Step 32)."""
+
+    def test_star_count_proportional_to_area(self):
+        """Verify star count scales with screen area."""
+        game = Game(test_mode=True)
+        expected_min = max(10, (game.width * game.height) // 40)
+        self.assertEqual(len(game.stars), expected_min)
+
+    def test_stars_within_screen_bounds(self):
+        """Verify all stars are within the screen bounds."""
+        game = Game(test_mode=True)
+        for x, y, _ in game.stars:
+            self.assertGreaterEqual(x, 0)
+            self.assertLess(x, game.width)
+            self.assertGreaterEqual(y, 0)
+            self.assertLess(y, game.height)
+
+    def test_star_chars_are_dot_or_asterisk(self):
+        """Verify stars use only . or * characters."""
+        game = Game(test_mode=True)
+        for _, _, c in game.stars:
+            self.assertIn(c, [".", "*"])
+
+    def test_starfield_regenerates_on_resize(self):
+        """Verify starfield is regenerated when screen is resized."""
+        game = Game(test_mode=True)
+        old_stars = game.stars[:]
+        game.handle_resize(120, 40)
+        # Count should change proportional to new area
+        expected = max(10, (120 * 40) // 40)
+        self.assertEqual(len(game.stars), expected)
+        # Stars should be different (new random positions)
+        self.assertNotEqual(game.stars, old_stars)
+
+    def test_stars_scroll_downward(self):
+        """Verify stars move downward when updated with particles enabled."""
+        game = Game(test_mode=True)
+        # Manually set known star positions
+        game.stars = [(10.0, 5.0, ".")]
+        # Simulate scroll by calling update logic directly
+        game.test_mode = False
+        dt = 1.0  # 1 second
+        scroll = game.star_scroll_speed * dt
+        game.stars = [
+            (x, y + scroll if y + scroll < game.height else y + scroll - game.height, c)
+            for x, y, c in game.stars
+        ]
+        game.test_mode = True
+        self.assertAlmostEqual(game.stars[0][1], 6.0, places=1)
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

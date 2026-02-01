@@ -971,6 +971,11 @@ class Game:
         self.thrust_frame = 0  # Alternates 0/1 each frame for flicker
         self.player_move_direction = 0  # -1=left, 0=stationary, 1=right
 
+        # Starfield background
+        self.stars: List[Tuple[float, float, str]] = []  # [(x, y, char), ...]
+        self.star_scroll_speed = 1.0  # pixels per second
+        self._generate_starfield()
+
         # Flash effect state
         self.flash_active = False
         self.flash_end_time = 0
@@ -1026,6 +1031,17 @@ class Game:
 
         if not test_mode:
             self._init_bunkers()
+
+    def _generate_starfield(self) -> None:
+        """Generate random star positions proportional to screen area."""
+        area = self.width * self.height
+        star_count = max(10, area // 40)  # ~1 star per 40 chars
+        self.stars = []
+        for _ in range(star_count):
+            x = random.uniform(0, self.width - 1)
+            y = random.uniform(0, self.height - 1)
+            char = random.choice([".", "*"])
+            self.stars.append((x, y, char))
 
     def _init_player_position(self) -> None:
         """Set player starting position."""
@@ -1237,6 +1253,14 @@ class Game:
         self._last_update_time = current_time
         if not self.test_mode:
             self.particle_system.update(dt)
+
+        # Scroll starfield downward
+        if not self.test_mode:
+            scroll = self.star_scroll_speed * dt
+            self.stars = [
+                (x, y + scroll if y + scroll < self.height else y + scroll - self.height, c)
+                for x, y, c in self.stars
+            ]
 
         # Update bunker flash effects
         for bunker in self.bunkers:
@@ -1566,6 +1590,9 @@ class Game:
         ]
         self.alien_projectiles = [p for p in self.alien_projectiles if 0 <= p.x < self.width and 0 <= p.y < self.height]
 
+        # Regenerate starfield for new dimensions
+        self._generate_starfield()
+
         # Clamp alien positions
         for alien in self.aliens:
             alien.x = max(0, min(alien.x, self.width - 4))
@@ -1680,6 +1707,10 @@ class Game:
 
     def _render_game(self) -> None:
         """Render the main gameplay."""
+        # Render starfield background (behind everything)
+        for sx, sy, sc in self.stars:
+            self._safe_addstr(int(sy), int(sx), sc, curses.color_pair(COLOR_PROJECTILE) | curses.A_DIM)
+
         # Score and lives header
         score_text = f"Score: {self.score}"
         lives_display = f"Lives: {'<A> ' * self.player.lives}"
