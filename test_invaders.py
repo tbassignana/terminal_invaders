@@ -2507,6 +2507,63 @@ class TestExplosionParticlesOnAlienDeath(unittest.TestCase):
         self.assertEqual(len(game.particle_system.particles), 0, "test_mode should skip particle spawning")
 
 
+class TestProjectileTrailEffect(unittest.TestCase):
+    """Tests for the fading trail effect on player projectiles (Step 28)."""
+
+    def test_projectile_has_trail_attribute(self):
+        """Verify Projectile dataclass has a trail list."""
+        p = Projectile(x=10, y=10.0, direction=-1)
+        self.assertIsInstance(p.trail, list)
+        self.assertEqual(len(p.trail), 0)
+
+    def test_record_position_adds_to_trail(self):
+        """Verify record_position stores the current position."""
+        p = Projectile(x=10, y=10.0, direction=-1)
+        p.record_position()
+        self.assertEqual(len(p.trail), 1)
+        self.assertEqual(p.trail[0], (10, 10.0))
+
+    def test_trail_max_length_is_3(self):
+        """Verify trail keeps only the last 3 positions."""
+        p = Projectile(x=5, y=20.0, direction=-1)
+        for i in range(5):
+            p.y = 20.0 - i
+            p.record_position()
+        self.assertEqual(len(p.trail), 3, "Trail should cap at 3 entries")
+
+    def test_trail_grows_during_movement(self):
+        """Verify trail records positions as projectile moves."""
+        game = Game(test_mode=True)
+        game.player_projectiles = [Projectile(x=10, y=15.0, direction=-1)]
+        # Simulate several movement updates
+        for _ in range(3):
+            game._update_projectiles()
+        proj = game.player_projectiles[0]
+        self.assertEqual(len(proj.trail), 3, "After 3 updates, trail should have 3 entries")
+
+    def test_trail_positions_are_behind_projectile(self):
+        """Verify trail positions are below (higher y) the current projectile position."""
+        game = Game(test_mode=True)
+        proj = Projectile(x=10, y=15.0, direction=-1)
+        game.player_projectiles = [proj]
+        for _ in range(3):
+            game._update_projectiles()
+        # All trail positions should have higher y than current position (behind it)
+        for _, ty in proj.trail:
+            self.assertGreater(ty, proj.y, "Trail positions should be behind (higher y) the projectile")
+
+    def test_trail_does_not_persist_after_removal(self):
+        """Verify trail data is gone when projectile is removed."""
+        game = Game(test_mode=True)
+        proj = Projectile(x=10, y=2.0, direction=-1)
+        game.player_projectiles = [proj]
+        # Move until projectile goes off-screen
+        for _ in range(20):
+            game._update_projectiles()
+        self.assertEqual(len(game.player_projectiles), 0, "Projectile should be removed at top")
+        # The removed projectile's trail is no longer in the game
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

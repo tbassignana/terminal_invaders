@@ -357,6 +357,17 @@ class Projectile:
     x: int
     y: float
     direction: int  # -1 for up (player), 1 for down (alien)
+    trail: list = None  # Position history for trail effect (last 3 positions)
+
+    def __post_init__(self) -> None:
+        if self.trail is None:
+            self.trail = []
+
+    def record_position(self) -> None:
+        """Record current position for trail rendering. Keep last 3 positions."""
+        self.trail.append((self.x, self.y))
+        if len(self.trail) > 3:
+            self.trail.pop(0)
 
 
 @dataclass
@@ -1286,6 +1297,7 @@ class Game:
         """Update all projectile positions."""
         # Player projectiles move up (faster)
         for proj in self.player_projectiles[:]:
+            proj.record_position()
             proj.y -= self.config.player_projectile_speed
             if proj.y < 0:
                 self.player_projectiles.remove(proj)
@@ -1603,9 +1615,14 @@ class Game:
         # Render player
         self._safe_addstr(self.player.y, self.player.x, self.config.player_char, curses.color_pair(COLOR_PLAYER))
 
-        # Render projectiles
+        # Render projectiles and trails
+        trail_chars = ["|", ":", "."]  # newest to oldest
         for proj in self.player_projectiles:
             self._safe_addstr(proj.y, proj.x, self.config.projectile_player, curses.color_pair(COLOR_PROJECTILE))
+            # Render fading trail behind the projectile
+            for i, (tx, ty) in enumerate(reversed(proj.trail)):
+                if i < len(trail_chars):
+                    self._safe_addstr(int(ty), int(tx), trail_chars[i], curses.color_pair(COLOR_PROJECTILE) | curses.A_DIM)
 
         for proj in self.alien_projectiles:
             self._safe_addstr(proj.y, proj.x, self.config.projectile_alien, curses.color_pair(COLOR_GAME_OVER))

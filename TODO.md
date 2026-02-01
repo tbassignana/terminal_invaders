@@ -51,7 +51,7 @@
 
 - [x] **Step 26:** Add a particle system engine (Particle dataclass + ParticleSystem manager)
 - [x] **Step 27:** Add explosion particles on alien death (5-8 particles, directional spread)
-- [ ] **Step 28:** Add trail effect on player projectiles (`|` → `:` → `.` fading trail)
+- [x] **Step 28:** Add trail effect on player projectiles (`|` → `:` → `.` fading trail)
 - [ ] **Step 29:** Add alien death animation (brief `#` → `*` → `+` flash before removal)
 - [ ] **Step 30:** Add bunker damage visual effects (flash, color shift green→yellow→red, debris particles)
 - [ ] **Step 31:** Add player thrust/engine animation (flickering char below ship, directional tilt)
