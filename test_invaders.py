@@ -35,6 +35,8 @@ from invaders import (
     BORDER_BR,
     BORDER_H,
     BORDER_V,
+    BOSS_HP_PER_LEVEL,
+    BOSS_SPRITE,
     COLOR_ALIEN_TYPE_0,
     COLOR_ALIEN_TYPE_1,
     COLOR_ALIEN_TYPE_2,
@@ -65,6 +67,7 @@ from invaders import (
     AbstractSoundBackend,
     ActivePowerUp,
     Alien,
+    BossAlien,
     Bunker,
     ComboText,
     DyingAlien,
@@ -4728,6 +4731,134 @@ class TestAlienFormationPatterns(unittest.TestCase):
         # fire_probability should use initial_alien_count, not crash
         prob = game.get_alien_fire_probability()
         self.assertGreater(prob, 0)
+
+
+class TestBossAlien(unittest.TestCase):
+    """Step 58: Boss alien every 5 levels."""
+
+    def test_boss_alien_dataclass(self):
+        """BossAlien has hp, max_hp, direction, speed fields."""
+        boss = BossAlien(x=40.0, y=2, hp=5, max_hp=5)
+        self.assertEqual(boss.hp, 5)
+        self.assertEqual(boss.max_hp, 5)
+        self.assertTrue(boss.is_alive())
+
+    def test_boss_take_hit_reduces_hp(self):
+        """take_hit reduces HP by 1."""
+        boss = BossAlien(x=40.0, y=2, hp=3, max_hp=3)
+        remaining = boss.take_hit()
+        self.assertEqual(remaining, 2)
+        self.assertTrue(boss.is_alive())
+
+    def test_boss_dies_at_zero_hp(self):
+        """Boss is not alive when HP reaches 0."""
+        boss = BossAlien(x=40.0, y=2, hp=1, max_hp=1)
+        boss.take_hit()
+        self.assertFalse(boss.is_alive())
+
+    def test_boss_sprite_defined(self):
+        """BOSS_SPRITE is a non-empty string."""
+        self.assertGreater(len(BOSS_SPRITE), 5)
+
+    def test_boss_hp_bar(self):
+        """get_hp_bar returns filled/empty bar."""
+        boss = BossAlien(x=40.0, y=2, hp=3, max_hp=5)
+        bar = boss.get_hp_bar()
+        self.assertEqual(bar, "[###--]")
+
+    def test_is_boss_level_every_5(self):
+        """is_boss_level returns True for levels 5, 10, 15."""
+        game = Game(test_mode=True)
+        for level in [5, 10, 15, 20]:
+            game.level = level
+            self.assertTrue(game.is_boss_level(), f"Level {level} should be boss")
+        for level in [1, 2, 3, 4, 6, 7]:
+            game.level = level
+            self.assertFalse(game.is_boss_level(), f"Level {level} should not be boss")
+
+    def test_boss_spawns_on_boss_level(self):
+        """Boss spawns when _init_aliens is called on a boss level."""
+        game = Game(test_mode=True)
+        game.level = 5
+        game._init_aliens()
+        self.assertIsNotNone(game.boss)
+        self.assertEqual(game.boss.hp, BOSS_HP_PER_LEVEL)
+
+    def test_boss_not_spawned_on_normal_level(self):
+        """Boss is None on non-boss levels."""
+        game = Game(test_mode=True)
+        game.level = 3
+        game._init_aliens()
+        self.assertIsNone(game.boss)
+
+    def test_boss_hp_scales_with_level(self):
+        """Boss HP increases at higher boss levels."""
+        game = Game(test_mode=True)
+        game.level = 10
+        game._init_aliens()
+        self.assertEqual(game.boss.hp, 2 * BOSS_HP_PER_LEVEL)
+
+    def test_get_boss_info(self):
+        """get_boss_info returns dict with boss state."""
+        game = Game(test_mode=True)
+        game.level = 5
+        game._init_aliens()
+        info = game.get_boss_info()
+        self.assertIsNotNone(info)
+        self.assertEqual(info["hp"], BOSS_HP_PER_LEVEL)
+        self.assertTrue(info["alive"])
+        self.assertIn("hp_bar", info)
+        self.assertIn("sprite", info)
+
+    def test_get_boss_info_none_when_no_boss(self):
+        """get_boss_info returns None when no boss exists."""
+        game = Game(test_mode=True)
+        self.assertIsNone(game.get_boss_info())
+
+    def test_boss_collision_reduces_hp(self):
+        """Hitting boss with projectile reduces HP."""
+        game = Game(test_mode=True)
+        game.level = 5
+        game._init_aliens()
+        initial_hp = game.boss.hp
+        # Fire a projectile at the boss
+        boss_cx = int(game.boss.x) + len(BOSS_SPRITE) // 2
+        game.player_projectiles.append(Projectile(x=boss_cx, y=game.boss.y, direction=-1))
+        game._check_collisions()
+        self.assertEqual(game.boss.hp, initial_hp - 1)
+
+    def test_boss_defeat_awards_score(self):
+        """Defeating boss awards BOSS_POINTS * tier."""
+        game = Game(test_mode=True)
+        game.level = 5
+        game._init_aliens()
+        game.boss.hp = 1  # One hit to kill
+        boss_cx = int(game.boss.x) + len(BOSS_SPRITE) // 2
+        old_score = game.score
+        game.player_projectiles.append(Projectile(x=boss_cx, y=game.boss.y, direction=-1))
+        game._check_collisions()
+        self.assertIsNone(game.boss)
+        self.assertGreater(game.score, old_score)
+
+    def test_level_not_complete_while_boss_alive(self):
+        """Level doesn't complete if boss is still alive even with no aliens."""
+        game = Game(test_mode=True)
+        game.level = 5
+        game._init_aliens()
+        game.aliens = []  # Clear all regular aliens
+        game.update()
+        # Boss still alive, so should still be PLAYING
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_boss_fires_spread_shots(self):
+        """Boss fires 3 projectiles (spread shot)."""
+        game = Game(test_mode=True)
+        game.level = 5
+        game._init_aliens()
+        game.boss.last_fire_time = 0  # Force fire
+        initial_proj_count = len(game.alien_projectiles)
+        game._update_boss(time.time())
+        self.assertEqual(len(game.alien_projectiles), initial_proj_count + 3)
 
 
 if __name__ == "__main__":

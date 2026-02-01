@@ -714,6 +714,48 @@ class MysteryShip:
         self.blink_frame += 1
 
 
+BOSS_SPRITE = "[=<BOSS>=]"  # 10-char wide boss sprite
+BOSS_HP_PER_LEVEL = 5  # HP per boss level tier (level 5=5HP, level 10=10HP, etc.)
+BOSS_POINTS = 500  # Base points for defeating a boss
+BOSS_FIRE_INTERVAL = 1.5  # Seconds between boss shots
+
+
+@dataclass
+class BossAlien:
+    """Boss alien that appears every 5 levels."""
+
+    x: float
+    y: int
+    hp: int
+    max_hp: int
+    direction: int = 1  # 1=right, -1=left
+    speed: float = 0.3
+    last_fire_time: float = 0
+    hit_flash_until: float = 0  # Brief flash when hit
+
+    def is_alive(self) -> bool:
+        """Return True if boss still has HP."""
+        return self.hp > 0
+
+    def take_hit(self) -> int:
+        """Reduce HP by 1. Return remaining HP."""
+        self.hp = max(0, self.hp - 1)
+        self.hit_flash_until = time.time() + 0.1
+        return self.hp
+
+    def get_display(self) -> str:
+        """Return the boss sprite (flashes on hit)."""
+        if time.time() < self.hit_flash_until:
+            return "#" * len(BOSS_SPRITE)
+        return BOSS_SPRITE
+
+    def get_hp_bar(self) -> str:
+        """Return a text HP bar like [####----]."""
+        filled = self.hp
+        empty = self.max_hp - self.hp
+        return f"[{'#' * filled}{'-' * empty}]"
+
+
 class PowerUpType(Enum):
     """Types of power-ups."""
 
@@ -1313,6 +1355,9 @@ class Game:
         self.last_mystery_spawn_check = time.time()
         self.mystery_score_display: Optional[Tuple[int, int, int, float]] = None  # (x, y, pts, end_time)
 
+        # Boss alien (every 5 levels)
+        self.boss: Optional[BossAlien] = None
+
         # Pause tracking
         self.pause_start_time: float = 0
 
@@ -1401,6 +1446,18 @@ class Game:
                 y = cfg.alien_start_y + row * cfg.alien_spacing_y
                 self.aliens.append(Alien(x=x, y=y, alien_type=alien_type % 3))
         self.initial_alien_count = len(self.aliens)
+
+        # Spawn boss on boss levels (every 5 levels)
+        if self.is_boss_level():
+            boss_hp = (self.level // 5) * BOSS_HP_PER_LEVEL
+            self.boss = BossAlien(
+                x=float(self.width // 2 - len(BOSS_SPRITE) // 2),
+                y=2,
+                hp=boss_hp,
+                max_hp=boss_hp,
+            )
+        else:
+            self.boss = None
 
     def _init_bunkers(self) -> None:
         """Create defensive bunkers (health scaled by level)."""
@@ -1630,6 +1687,9 @@ class Game:
         # Update mystery ship
         self._update_mystery_ship(current_time)
 
+        # Update boss alien
+        self._update_boss(current_time)
+
         # Check collisions
         self._check_collisions()
 
@@ -1686,8 +1746,9 @@ class Game:
         if self.sfx and self.aliens:
             self.sfx.update_march(len(self.aliens), self.initial_alien_count or 1)
 
-        # Check level complete
-        if not self.aliens:
+        # Check level complete (all aliens dead AND boss dead if boss level)
+        boss_alive = self.boss and self.boss.is_alive()
+        if not self.aliens and not boss_alive:
             self._next_level()
 
     def _move_aliens(self) -> None:
@@ -1864,6 +1925,28 @@ class Game:
             if random.random() < fire_prob:
                 self.alien_projectiles.append(Projectile(x=alien.x + 1, y=alien.y + 1, direction=1))
 
+    def _update_boss(self, current_time: float) -> None:
+        """Update boss alien movement and firing."""
+        if not self.boss or not self.boss.is_alive():
+            return
+
+        # Move boss left-right
+        self.boss.x += self.boss.direction * self.boss.speed
+        sprite_len = len(BOSS_SPRITE)
+        if self.boss.x <= 1:
+            self.boss.direction = 1
+        elif self.boss.x + sprite_len >= self.width - 1:
+            self.boss.direction = -1
+
+        # Boss fires spread shots (3 projectiles)
+        if current_time - self.boss.last_fire_time >= BOSS_FIRE_INTERVAL:
+            self.boss.last_fire_time = current_time
+            cx = int(self.boss.x) + sprite_len // 2
+            for offset in [-2, 0, 2]:
+                self.alien_projectiles.append(
+                    Projectile(x=cx + offset, y=self.boss.y + 1, direction=1)
+                )
+
     def _check_collisions(self) -> None:
         """Check all collision types using spatial partitioning.
 
@@ -1993,6 +2076,34 @@ class Game:
                         self.player_projectiles.remove(proj)
                     break
 
+        # Player projectiles vs boss alien (wide hitbox ±5)
+        if self.boss and self.boss.is_alive():
+            boss_cx = int(self.boss.x) + len(BOSS_SPRITE) // 2
+            for proj in self.player_projectiles[:]:
+                if abs(proj.x - boss_cx) <= 5 and abs(proj.y - self.boss.y) <= 1:
+                    if proj in self.player_projectiles:
+                        self.player_projectiles.remove(proj)
+                    remaining = self.boss.take_hit()
+                    if remaining <= 0:
+                        # Boss defeated
+                        multiplier = self._register_kill(time.time())
+                        points = BOSS_POINTS * (self.level // 5) * multiplier
+                        self.score += points
+                        self.total_kills += 1
+                        self.score_popups.append(
+                            ScorePopup(x=float(self.boss.x), y=float(self.boss.y), text=f"+{points}")
+                        )
+                        if not self.test_mode:
+                            self.particle_system.spawn(
+                                x=float(boss_cx), y=float(self.boss.y),
+                                count=20, chars="*#@+X'`",
+                                color_pair=COLOR_GAME_OVER,
+                                speed_range=(4.0, 10.0),
+                                lifetime_range=(0.6, 1.0),
+                            )
+                        self.boss = None
+                    break
+
     def get_scaled_alien_rows(self) -> int:
         """Return alien rows for the current level (extra row every 3 levels, max 8)."""
         extra = (self.level - 1) // 3
@@ -2001,6 +2112,24 @@ class Game:
     def get_current_formation(self) -> str:
         """Return the formation pattern name for the current level."""
         return get_formation_for_level(self.level)
+
+    def is_boss_level(self) -> bool:
+        """Return True if the current level is a boss level (every 5 levels)."""
+        return self.level >= 5 and self.level % 5 == 0
+
+    def get_boss_info(self) -> Optional[dict]:
+        """Return boss state info for display/testing, or None if no boss."""
+        if not self.boss:
+            return None
+        return {
+            "x": self.boss.x,
+            "y": self.boss.y,
+            "hp": self.boss.hp,
+            "max_hp": self.boss.max_hp,
+            "hp_bar": self.boss.get_hp_bar(),
+            "sprite": self.boss.get_display(),
+            "alive": self.boss.is_alive(),
+        }
 
     def get_scaled_bunker_health(self) -> int:
         """Return starting bunker health for the current level (reduced every 5 levels, min 1)."""
