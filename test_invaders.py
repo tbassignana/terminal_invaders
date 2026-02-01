@@ -99,6 +99,7 @@ from invaders import (
     Game,
     GameConfig,
     GameEvent,
+    GameMode,
     GameState,
     MacOSSoundBackend,
     MenuScreen,
@@ -6297,6 +6298,141 @@ class TestAchievementSystem(unittest.TestCase):
         game = Game(test_mode=True)
         game.total_kills = 100
         game._check_achievements()  # Should not raise
+
+
+class TestEndlessMode(unittest.TestCase):
+    """Tests for endless/survival mode."""
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_default_mode_is_campaign(self, _mock_cp):
+        """Default game mode is CAMPAIGN."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.game_mode, GameMode.CAMPAIGN)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_endless_mode_set(self, _mock_cp):
+        """Game mode can be set to ENDLESS."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.ENDLESS
+        info = game.get_endless_info()
+        self.assertTrue(info["is_endless"])
+        self.assertEqual(info["mode"], "ENDLESS")
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_endless_wave_starts_at_zero(self, _mock_cp):
+        """Endless wave counter starts at 0."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.endless_wave, 0)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_endless_next_wave_increments(self, _mock_cp):
+        """_endless_next_wave increments the wave counter."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.ENDLESS
+        game._endless_next_wave()
+        self.assertEqual(game.endless_wave, 1)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_endless_speed_escalates(self, _mock_cp):
+        """Endless mode speeds up aliens each wave."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.ENDLESS
+        initial_interval = game.alien_move_interval
+        game._endless_next_wave()
+        self.assertLess(game.alien_move_interval, initial_interval)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_endless_level_up_every_3_waves(self, _mock_cp):
+        """Level increments every 3 endless waves."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.ENDLESS
+        initial_level = game.level
+        game._endless_next_wave()  # wave 1
+        game._endless_next_wave()  # wave 2
+        self.assertEqual(game.level, initial_level)  # No level up yet
+        game._endless_next_wave()  # wave 3 -> level up
+        self.assertEqual(game.level, initial_level + 1)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_endless_wave_bonus_scales(self, _mock_cp):
+        """Endless wave bonus increases with wave number."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.ENDLESS
+        game._endless_next_wave()  # wave 1 -> +100
+        score_after_w1 = game.score
+        game._endless_next_wave()  # wave 2 -> +200
+        score_after_w2 = game.score
+        bonus_w1 = score_after_w1
+        bonus_w2 = score_after_w2 - score_after_w1
+        self.assertGreater(bonus_w2, bonus_w1)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_endless_triggers_on_wave_clear(self, _mock_cp):
+        """In endless mode, clearing aliens triggers _endless_next_wave instead of _next_level."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.ENDLESS
+        game.aliens.clear()  # Clear all aliens
+        game.boss = None
+        game.update()  # Should trigger _endless_next_wave
+        self.assertEqual(game.endless_wave, 1)
+        self.assertGreater(len(game.aliens), 0)  # New aliens spawned
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_campaign_does_not_trigger_endless(self, _mock_cp):
+        """In campaign mode, clearing all waves triggers _next_level, not endless."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.CAMPAIGN
+        game.current_wave = game.max_waves  # On last wave
+        game.aliens.clear()
+        game.boss = None
+        game.update()
+        self.assertEqual(game.endless_wave, 0)  # Endless wave unchanged
+        self.assertEqual(game.state, GameState.LEVEL_TRANSITION)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_reset_clears_endless_wave(self, _mock_cp):
+        """Game reset clears endless_wave counter."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.ENDLESS
+        game._endless_next_wave()
+        game._endless_next_wave()
+        self.assertEqual(game.endless_wave, 2)
+        game.reset_game()
+        self.assertEqual(game.endless_wave, 0)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_endless_popup_text(self, _mock_cp):
+        """Endless wave creates a score popup with 'SURVIVAL WAVE'."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.ENDLESS
+        game._endless_next_wave()
+        popup_texts = [p.text for p in game.score_popups]
+        matching = [t for t in popup_texts if "SURVIVAL WAVE" in t]
+        self.assertTrue(len(matching) > 0)
+
+    def test_cli_endless_argument(self):
+        """CLI parser accepts --endless argument."""
+        parser = build_argument_parser()
+        args = parser.parse_args(["--endless"])
+        self.assertTrue(args.endless)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_get_endless_info_defaults(self, _mock_cp):
+        """get_endless_info() returns expected default values."""
+        game = Game(test_mode=True)
+        info = game.get_endless_info()
+        self.assertEqual(info["mode"], "CAMPAIGN")
+        self.assertFalse(info["is_endless"])
+        self.assertEqual(info["endless_wave"], 0)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_endless_speed_floor(self, _mock_cp):
+        """Endless mode alien_move_interval does not go below 0.08."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.ENDLESS
+        for _ in range(100):
+            game._endless_next_wave()
+        self.assertGreaterEqual(game.alien_move_interval, 0.08)
 
 
 if __name__ == "__main__":

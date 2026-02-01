@@ -170,6 +170,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--fps", type=int, default=None, help="Target FPS (default: 60)")
     parser.add_argument("--show-fps", action="store_true", help="Display FPS counter during gameplay")
+    parser.add_argument("--endless", action="store_true", help="Start in endless/survival mode")
     parser.add_argument("--record", type=str, default=None, metavar="FILE", help="Record replay to FILE (JSON)")
     parser.add_argument("--replay", type=str, default=None, metavar="FILE", help="Play back a recorded replay from FILE")
     parser.add_argument("--version", action="version", version=f"Terminal Invaders {__version__}")
@@ -429,6 +430,13 @@ MENU_ITEMS = [
     ("Credits", MenuScreen.CREDITS),
     ("Quit", None),          # Quits the game
 ]
+
+
+class GameMode(Enum):
+    """Game mode selection."""
+
+    CAMPAIGN = auto()
+    ENDLESS = auto()
 
 
 class GameState(Enum):
@@ -983,6 +991,7 @@ class ParticleSystem:
 # ============================================================================
 
 DEFAULT_SCORES_PATH = os.path.expanduser("~/.invaders_scores.json")
+DEFAULT_ENDLESS_SCORES_PATH = os.path.expanduser("~/.invaders_endless_scores.json")
 
 
 class ScoreManager:
@@ -1620,11 +1629,14 @@ class Game:
         self.menu_flash_until: float = 0  # Flash on select timestamp
         self.sound_enabled: bool = True
         self.music_enabled: bool = True
+        self.game_mode: GameMode = GameMode.CAMPAIGN
         self.score_manager = ScoreManager() if not test_mode else None
+        self.endless_score_manager: Optional[ScoreManager] = None
         self.stats_manager: Optional[StatsManager] = None  # Created in test or real mode
         self.game_start_time: float = time.time()
         self.score = 0
         self.level = 1
+        self.endless_wave: int = 0  # Wave counter for endless mode
         self.initial_alien_count: int = 0  # Set by _init_aliens()
         self.current_wave: int = 1  # Sub-wave within a level (1-3)
         self.max_waves: int = 3  # Waves per level
@@ -1970,6 +1982,7 @@ class Game:
         self.initials_cursor = 0
         self.initials_submitted = False
         self.milestones_reached.clear()
+        self.endless_wave = 0
         self.power_ups_collected = 0
         self.coins_collected = 0
         self.level_took_damage = False
@@ -2182,7 +2195,9 @@ class Game:
         # Check wave/level complete (all aliens dead AND boss dead if boss level)
         boss_alive = self.boss and self.boss.is_alive()
         if not self.aliens and not boss_alive:
-            if self.current_wave < self.max_waves:
+            if self.game_mode == GameMode.ENDLESS:
+                self._endless_next_wave()
+            elif self.current_wave < self.max_waves:
                 self._next_wave()
             else:
                 self._next_level()
@@ -2807,6 +2822,15 @@ class Game:
             "level_took_damage": self.level_took_damage,
         }
 
+    def get_endless_info(self) -> dict:
+        """Return endless mode state for display/testing."""
+        return {
+            "mode": self.game_mode.name,
+            "is_endless": self.game_mode == GameMode.ENDLESS,
+            "endless_wave": self.endless_wave,
+            "level": self.level,
+        }
+
     def get_special_alien_counts(self) -> dict:
         """Return counts of special aliens for display/testing."""
         zigzag = sum(1 for a in self.aliens if a.behavior == ALIEN_BEHAVIOR_ZIGZAG)
@@ -2857,6 +2881,31 @@ class Game:
                 x=float(self.width // 2),
                 y=float(self.height // 2),
                 text=f"WAVE {self.current_wave}! +{wave_bonus}",
+            )
+        )
+
+    def _endless_next_wave(self) -> None:
+        """Advance to the next wave in endless/survival mode.
+
+        Continuously escalates difficulty: faster aliens, more aggressive firing.
+        No level transitions — waves spawn immediately.
+        """
+        self.endless_wave += 1
+        # Escalate: every 3 waves acts like a level-up for difficulty scaling
+        if self.endless_wave % 3 == 0:
+            self.level += 1
+        # Speed escalation: 3% per wave, floor at 0.08s
+        self.alien_move_interval = max(0.08, self.config.alien_move_interval * (0.97 ** self.endless_wave))
+        # Respawn aliens
+        self._init_aliens()
+        # Wave bonus
+        wave_bonus = 100 * self.endless_wave
+        self.score += wave_bonus
+        self.score_popups.append(
+            ScorePopup(
+                x=float(self.width // 2),
+                y=float(self.height // 2),
+                text=f"SURVIVAL WAVE {self.endless_wave}! +{wave_bonus}",
             )
         )
 
@@ -4029,6 +4078,8 @@ def main():
         game.audio = None  # Prevent audio manager from starting
     if args.show_fps:
         game.show_fps = True
+    if args.endless:
+        game.game_mode = GameMode.ENDLESS
 
     # Replay system CLI integration
     if args.record:
