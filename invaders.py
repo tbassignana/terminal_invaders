@@ -832,6 +832,41 @@ class ActivePowerUp:
     expires_at: float
 
 
+# Collectible coin/gem types with display char, color description, and point value
+COLLECTIBLE_TYPES = {
+    "bronze": {"char": "o", "points": 10, "color": COLOR_BUNKER_DAMAGED},    # Yellow
+    "silver": {"char": "O", "points": 25, "color": COLOR_TEXT},              # White
+    "gold": {"char": "$", "points": 50, "color": COLOR_ALIEN_TYPE_2},        # Yellow-bold
+}
+COLLECTIBLE_EXPIRY = 5.0  # Seconds before a collectible despawns
+COLLECTIBLE_DROP_CHANCE = 0.15  # 15% chance per alien kill
+
+
+@dataclass
+class Collectible:
+    """A falling coin/gem that awards bonus points when collected."""
+
+    x: int
+    y: float
+    coin_type: str  # "bronze", "silver", or "gold"
+    spawn_time: float
+    speed: float = 0.2
+
+    @property
+    def points(self) -> int:
+        """Return point value for this collectible type."""
+        return COLLECTIBLE_TYPES.get(self.coin_type, {}).get("points", 10)
+
+    @property
+    def char(self) -> str:
+        """Return display character for this collectible type."""
+        return COLLECTIBLE_TYPES.get(self.coin_type, {}).get("char", "o")
+
+    def is_expired(self, current_time: float) -> bool:
+        """Return True if this collectible has timed out."""
+        return current_time - self.spawn_time >= COLLECTIBLE_EXPIRY
+
+
 # ============================================================================
 # PARTICLE SYSTEM
 # ============================================================================
@@ -1413,6 +1448,9 @@ class Game:
         self.power_ups: List[PowerUp] = []
         self.active_power_ups: List[ActivePowerUp] = []
 
+        # Collectibles (coins/gems)
+        self.collectibles: List[Collectible] = []
+
         # Combo system
         self.combo_count = 0
         self.combo_last_kill_time: float = 0
@@ -1753,6 +1791,9 @@ class Game:
         # Update power-ups
         self._update_power_ups(current_time)
 
+        # Update collectibles
+        self._update_collectibles(current_time)
+
         # Update particles
         dt = current_time - self._last_update_time
         self._last_update_time = current_time
@@ -1876,6 +1917,21 @@ class Game:
             power_type = random.choice(list(PowerUpType))
             self.power_ups.append(PowerUp(x=x, y=float(y), power_type=power_type))
 
+    def _spawn_collectible(self, x: int, y: int) -> None:
+        """Possibly spawn a collectible coin/gem at the given position."""
+        if random.random() < COLLECTIBLE_DROP_CHANCE:
+            # Weighted: bronze 60%, silver 30%, gold 10%
+            roll = random.random()
+            if roll < 0.1:
+                coin_type = "gold"
+            elif roll < 0.4:
+                coin_type = "silver"
+            else:
+                coin_type = "bronze"
+            self.collectibles.append(
+                Collectible(x=x, y=float(y), coin_type=coin_type, spawn_time=time.time())
+            )
+
     def _update_power_ups(self, current_time: float) -> None:
         """Move falling power-ups and check collection; expire active effects."""
         # Move falling power-ups
@@ -1891,6 +1947,22 @@ class Game:
 
         # Expire active power-ups
         self.active_power_ups = [ap for ap in self.active_power_ups if ap.expires_at > current_time]
+
+    def _update_collectibles(self, current_time: float) -> None:
+        """Move falling collectibles, check collection, expire old ones."""
+        for coll in self.collectibles[:]:
+            coll.y += coll.speed
+            # Remove if off screen or expired
+            if coll.y >= self.height or coll.is_expired(current_time):
+                self.collectibles.remove(coll)
+                continue
+            # Check player collection
+            if abs(coll.x - self.player.x - 1) <= 1 and abs(coll.y - self.player.y) <= 1:
+                self.collectibles.remove(coll)
+                self.score += coll.points
+                self.score_popups.append(
+                    ScorePopup(x=float(coll.x), y=float(coll.y), text=f"+{coll.points}")
+                )
 
     def _activate_power_up(self, power_type: PowerUpType, current_time: float) -> None:
         """Activate a collected power-up."""
@@ -2061,6 +2133,7 @@ class Game:
                         ScorePopup(x=float(alien.x), y=float(alien.y), text=popup_text)
                     )
                     self._spawn_power_up(alien.x, alien.y)
+                    self._spawn_collectible(alien.x, alien.y)
                     # Add dying alien animation
                     self.dying_aliens.append(DyingAlien(x=alien.x, y=alien.y))
                     # Spawn type-specific explosion particles at alien death position
@@ -2235,6 +2308,13 @@ class Game:
         zigzag = sum(1 for a in self.aliens if a.behavior == ALIEN_BEHAVIOR_ZIGZAG)
         shielded = sum(1 for a in self.aliens if a.behavior == ALIEN_BEHAVIOR_SHIELDED)
         return {"zigzag": zigzag, "shielded": shielded, "normal": len(self.aliens) - zigzag - shielded}
+
+    def get_collectibles_info(self) -> list:
+        """Return collectible state for display/testing."""
+        return [
+            {"x": c.x, "y": c.y, "type": c.coin_type, "points": c.points, "char": c.char}
+            for c in self.collectibles
+        ]
 
     def get_scaled_bunker_health(self) -> int:
         """Return starting bunker health for the current level (reduced every 5 levels, min 1)."""

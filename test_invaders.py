@@ -41,6 +41,9 @@ from invaders import (
     BORDER_V,
     BOSS_HP_PER_LEVEL,
     BOSS_SPRITE,
+    COLLECTIBLE_DROP_CHANCE,
+    COLLECTIBLE_EXPIRY,
+    COLLECTIBLE_TYPES,
     COLOR_ALIEN_TYPE_0,
     COLOR_ALIEN_TYPE_1,
     COLOR_ALIEN_TYPE_2,
@@ -77,6 +80,7 @@ from invaders import (
     Alien,
     BossAlien,
     Bunker,
+    Collectible,
     ComboText,
     DyingAlien,
     EventBus,
@@ -5112,6 +5116,78 @@ class TestSpecialAlienBehaviors(unittest.TestCase):
         """Zigzag aliens have a zigzag_phase set."""
         alien = Alien(x=10, y=5, behavior=ALIEN_BEHAVIOR_ZIGZAG, zigzag_phase=1.5)
         self.assertEqual(alien.zigzag_phase, 1.5)
+
+
+class TestCollectibleCoins(unittest.TestCase):
+    """Step 62: Collectible coins/gems dropped by aliens."""
+
+    def test_collectible_types_defined(self):
+        """COLLECTIBLE_TYPES has bronze, silver, gold."""
+        self.assertIn("bronze", COLLECTIBLE_TYPES)
+        self.assertIn("silver", COLLECTIBLE_TYPES)
+        self.assertIn("gold", COLLECTIBLE_TYPES)
+
+    def test_collectible_points(self):
+        """Each collectible type has increasing point values."""
+        self.assertLess(COLLECTIBLE_TYPES["bronze"]["points"], COLLECTIBLE_TYPES["silver"]["points"])
+        self.assertLess(COLLECTIBLE_TYPES["silver"]["points"], COLLECTIBLE_TYPES["gold"]["points"])
+
+    def test_collectible_dataclass(self):
+        """Collectible has x, y, coin_type, points, char properties."""
+        c = Collectible(x=10, y=5.0, coin_type="gold", spawn_time=time.time())
+        self.assertEqual(c.points, 50)
+        self.assertEqual(c.char, "$")
+
+    def test_collectible_expiry(self):
+        """Collectible expires after COLLECTIBLE_EXPIRY seconds."""
+        c = Collectible(x=10, y=5.0, coin_type="bronze", spawn_time=time.time() - COLLECTIBLE_EXPIRY - 1)
+        self.assertTrue(c.is_expired(time.time()))
+
+    def test_collectible_not_expired_when_fresh(self):
+        """Fresh collectible is not expired."""
+        c = Collectible(x=10, y=5.0, coin_type="bronze", spawn_time=time.time())
+        self.assertFalse(c.is_expired(time.time()))
+
+    def test_collectibles_list_initialized(self):
+        """Game starts with empty collectibles list."""
+        game = Game(test_mode=True)
+        self.assertEqual(len(game.collectibles), 0)
+
+    def test_collect_awards_score(self):
+        """Collecting a collectible adds points to score."""
+        game = Game(test_mode=True)
+        game.collectibles.append(
+            Collectible(x=game.player.x + 1, y=float(game.player.y), coin_type="gold", spawn_time=time.time())
+        )
+        old_score = game.score
+        game._update_collectibles(time.time())
+        self.assertEqual(game.score, old_score + 50)
+        self.assertEqual(len(game.collectibles), 0)
+
+    def test_expired_collectible_removed(self):
+        """Expired collectibles are removed during update."""
+        game = Game(test_mode=True)
+        game.collectibles.append(
+            Collectible(x=5, y=5.0, coin_type="bronze", spawn_time=time.time() - COLLECTIBLE_EXPIRY - 1)
+        )
+        game._update_collectibles(time.time())
+        self.assertEqual(len(game.collectibles), 0)
+
+    def test_get_collectibles_info(self):
+        """get_collectibles_info returns collectible state."""
+        game = Game(test_mode=True)
+        game.collectibles.append(
+            Collectible(x=5, y=5.0, coin_type="silver", spawn_time=time.time())
+        )
+        info = game.get_collectibles_info()
+        self.assertEqual(len(info), 1)
+        self.assertEqual(info[0]["type"], "silver")
+        self.assertEqual(info[0]["points"], 25)
+
+    def test_collectible_drop_chance_defined(self):
+        """COLLECTIBLE_DROP_CHANCE is between 0 and 1."""
+        self.assertGreater(COLLECTIBLE_DROP_CHANCE, 0)
+        self.assertLess(COLLECTIBLE_DROP_CHANCE, 1)
 
 
 if __name__ == "__main__":
