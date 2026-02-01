@@ -767,6 +767,7 @@ class Game:
         # Screen dimensions (defaults for test mode)
         self.width = 80
         self.height = 24
+        self.too_small = False  # True when terminal is below minimum size
 
         # Initialize player at center-bottom
         self.player = Player(lives=self.config.player_start_lives)
@@ -1307,6 +1308,45 @@ class Game:
                 self.mystery_score_display = (x, y, pts, end + pause_duration)
             self.state = GameState.PLAYING
 
+    def handle_resize(self, new_width: int, new_height: int) -> None:
+        """Handle terminal resize by recalculating positions and checking bounds.
+
+        Args:
+            new_width: New terminal width.
+            new_height: New terminal height.
+        """
+        self.width = new_width
+        self.height = new_height
+
+        # Check minimum size
+        self.too_small = (
+            new_width < self.config.min_width or
+            new_height < self.config.min_height
+        )
+
+        if self.too_small:
+            return
+
+        # Clamp player position to new bounds
+        self.player.x = max(0, min(self.player.x, self.width - 3))
+        self.player.y = self.height - 2
+        self._initial_player_x = self.width // 2 - 1
+
+        # Remove projectiles that are now outside bounds
+        self.player_projectiles = [
+            p for p in self.player_projectiles
+            if 0 <= p.x < self.width and 0 <= p.y < self.height
+        ]
+        self.alien_projectiles = [
+            p for p in self.alien_projectiles
+            if 0 <= p.x < self.width and 0 <= p.y < self.height
+        ]
+
+        # Clamp alien positions
+        for alien in self.aliens:
+            alien.x = max(0, min(alien.x, self.width - 4))
+            alien.y = max(0, min(alien.y, self.height - 3))
+
     def handle_input(self, key: int) -> bool:
         """
         Handle keyboard input.
@@ -1316,6 +1356,13 @@ class Game:
         """
         if key == ord('q') or key == ord('Q'):
             return False
+
+        # Handle terminal resize
+        if key == curses.KEY_RESIZE:
+            if self.screen:
+                new_h, new_w = self.screen.getmaxyx()
+                self.handle_resize(new_w, new_h)
+            return True
 
         if self.state == GameState.MENU:
             if key == ord(' ') or key == ord('\n'):
@@ -1358,6 +1405,16 @@ class Game:
             return
 
         self.screen.clear()
+
+        # Show warning if terminal is too small
+        if self.too_small:
+            warning = f"Terminal too small! Need {self.config.min_width}x{self.config.min_height}"
+            try:
+                self.screen.addstr(0, 0, warning[:self.width - 1])
+            except curses.error:
+                pass
+            self.screen.refresh()
+            return
 
         # Handle flash effect
         if self.flash_active:

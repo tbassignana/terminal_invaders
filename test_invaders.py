@@ -1947,6 +1947,81 @@ class TestSpatialGrid(unittest.TestCase):
         self.assertLess(len(game.aliens), 200)
 
 
+class TestTerminalResize(unittest.TestCase):
+    """Step 19: Tests for terminal resize handling."""
+
+    def test_handle_resize_updates_dimensions(self):
+        """Verify resize updates width and height."""
+        game = Game(test_mode=True)
+        game.handle_resize(100, 40)
+        self.assertEqual(game.width, 100)
+        self.assertEqual(game.height, 40)
+
+    def test_handle_resize_too_small_flag(self):
+        """Verify too_small flag is set when below minimum."""
+        game = Game(test_mode=True)
+        game.handle_resize(30, 10)
+        self.assertTrue(game.too_small)
+
+    def test_handle_resize_adequate_size(self):
+        """Verify too_small is False when size is adequate."""
+        game = Game(test_mode=True)
+        game.handle_resize(80, 24)
+        self.assertFalse(game.too_small)
+
+    def test_handle_resize_clamps_player_position(self):
+        """Verify player is clamped to new bounds on resize."""
+        game = Game(test_mode=True)
+        game.player.x = 70
+        game.handle_resize(65, 25)  # Above minimum size
+        self.assertLessEqual(game.player.x, 62)  # width - 3
+
+    def test_handle_resize_removes_out_of_bounds_projectiles(self):
+        """Verify projectiles outside new bounds are removed."""
+        game = Game(test_mode=True)
+        game.player_projectiles = [
+            Projectile(x=75, y=10.0, direction=-1),  # Will be out of bounds
+            Projectile(x=20, y=10.0, direction=-1),   # Will stay
+        ]
+        game.alien_projectiles = [
+            Projectile(x=10, y=30.0, direction=1),  # Will be out of bounds (height)
+            Projectile(x=10, y=10.0, direction=1),   # Will stay
+        ]
+        game.handle_resize(65, 25)  # Above minimum size
+        self.assertEqual(len(game.player_projectiles), 1)
+        self.assertEqual(len(game.alien_projectiles), 1)
+
+    def test_handle_resize_clamps_aliens(self):
+        """Verify aliens are clamped to new bounds."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=70, y=20)]
+        game.handle_resize(65, 25)  # Above minimum size
+        self.assertLessEqual(game.aliens[0].x, 61)  # width - 4
+
+    def test_handle_resize_key_in_input(self):
+        """Verify KEY_RESIZE is handled in handle_input."""
+        import curses
+        game = Game(test_mode=True)
+        # Without a screen, KEY_RESIZE should just return True
+        result = game.handle_input(curses.KEY_RESIZE)
+        self.assertTrue(result)
+
+    def test_resize_player_y_updated(self):
+        """Verify player Y is set to height-2 on resize."""
+        game = Game(test_mode=True)
+        game.handle_resize(80, 30)
+        self.assertEqual(game.player.y, 28)
+
+    def test_too_small_skips_position_update(self):
+        """When too small, positions are NOT recalculated."""
+        game = Game(test_mode=True)
+        old_player_x = game.player.x
+        game.handle_resize(20, 10)  # Too small
+        self.assertTrue(game.too_small)
+        # Player position unchanged because we returned early
+        self.assertEqual(game.player.x, old_player_x)
+
+
 if __name__ == '__main__':
     # Run tests with verbosity
     unittest.main(verbosity=2)
