@@ -3541,6 +3541,66 @@ class TestBunkerSmoothColorTransitions(unittest.TestCase):
         self.assertEqual(b1.color_pair, COLOR_BUNKER_LOW)    # ratio=0.333 → transitional
 
 
+class TestBottomHUDBar(unittest.TestCase):
+    """Step 44: Bottom HUD bar with game stats."""
+
+    def test_aliens_remaining_count(self):
+        """Bottom HUD shows aliens remaining / total."""
+        game = Game(test_mode=True)
+        info = game.get_bottom_hud_info()
+        total = game.config.alien_rows * game.config.alien_cols
+        self.assertEqual(info["aliens"], f"Aliens: {len(game.aliens)}/{total}")
+
+    def test_combo_inactive(self):
+        """Combo shows '--' when multiplier is 1."""
+        game = Game(test_mode=True)
+        info = game.get_bottom_hud_info()
+        self.assertEqual(info["combo"], "Combo: --")
+
+    def test_combo_active(self):
+        """Combo shows multiplier when active."""
+        game = Game(test_mode=True)
+        t = time.time()
+        game._register_kill(t)
+        game._register_kill(t + 0.5)
+        info = game.get_bottom_hud_info()
+        self.assertEqual(info["combo"], "Combo: x2")
+
+    def test_power_ups_inactive(self):
+        """Power-ups shows '--' when none active."""
+        game = Game(test_mode=True)
+        info = game.get_bottom_hud_info()
+        self.assertEqual(info["power_ups"], "PWR: --")
+
+    def test_power_ups_active(self):
+        """Power-ups shows active type labels."""
+        game = Game(test_mode=True)
+        game.active_power_ups.append(ActivePowerUp(power_type=PowerUpType.RAPID_FIRE, expires_at=time.time() + 10))
+        info = game.get_bottom_hud_info()
+        self.assertEqual(info["power_ups"], "PWR: R")
+
+    def test_hud_row_is_bottom(self):
+        """HUD row is the last row of the screen."""
+        game = Game(test_mode=True)
+        info = game.get_bottom_hud_info()
+        self.assertEqual(info["row"], game.height - 1)
+
+    def test_aliens_updates_after_kills(self):
+        """Aliens count decreases as aliens are removed."""
+        game = Game(test_mode=True)
+        initial_count = len(game.aliens)
+        game.aliens.pop()
+        info = game.get_bottom_hud_info()
+        total = game.config.alien_rows * game.config.alien_cols
+        self.assertEqual(info["aliens"], f"Aliens: {initial_count - 1}/{total}")
+
+    def test_macoss_stop_handles_exception(self):
+        """MacOSSoundBackend.stop handles subprocess exception gracefully."""
+        backend = MacOSSoundBackend()
+        with unittest.mock.patch("subprocess.run", side_effect=OSError("mocked")):
+            backend.stop()  # Should not raise
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

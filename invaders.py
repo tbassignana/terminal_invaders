@@ -2154,10 +2154,18 @@ class Game:
                 attr |= curses.A_REVERSE
             self._safe_addstr(combo_info["center_y"], combo_info["center_x"], combo_info["text"], attr)
 
-        # FPS counter (when enabled via F1 or --show-fps)
+        # Bottom HUD bar (aliens remaining, combo, power-ups)
+        hud = self.get_bottom_hud_info()
+        hud_row = hud["row"]
+        hud_attr = curses.color_pair(COLOR_TEXT) | curses.A_DIM
+        self._safe_addstr(hud_row, 2, hud["aliens"], hud_attr)
+        self._safe_addstr(hud_row, self.width // 2 - len(hud["combo"]) // 2, hud["combo"], hud_attr)
+        self._safe_addstr(hud_row, self.width - len(hud["power_ups"]) - 2, hud["power_ups"], hud_attr)
+
+        # FPS counter (when enabled via F1 or --show-fps, on row above bottom HUD)
         if self.show_fps:
             fps_text = f"FPS: {self.frame_timer.average_fps:.0f}"
-            self._safe_addstr(self.height - 1, 2, fps_text, curses.color_pair(COLOR_TEXT))
+            self._safe_addstr(self.height - 2, 2, fps_text, curses.color_pair(COLOR_TEXT))
 
     def get_powerup_hud_info(self) -> list:
         """Return list of HUD timer strings for active power-ups (testable).
@@ -2175,6 +2183,32 @@ class Game:
                 label_char = POWERUP_LABELS.get(ap.power_type, "?")
                 labels.append(f"[{label_char} {int(remaining)}s]")
         return labels
+
+    def get_bottom_hud_info(self) -> dict:
+        """Return bottom HUD bar info (testable without curses).
+
+        Returns dict with:
+            aliens: str like "Aliens: 12/25"
+            combo: str like "Combo: x3" or "Combo: --"
+            power_ups: str like "PWR: R S" or "PWR: --"
+            row: int (bottom row for rendering)
+        """
+        total = self.config.alien_rows * self.config.alien_cols
+        remaining = len(self.aliens)
+        aliens_str = f"Aliens: {remaining}/{total}"
+
+        multiplier = self.get_combo_multiplier()
+        combo_str = f"Combo: x{multiplier}" if multiplier > 1 else "Combo: --"
+
+        active_types = [POWERUP_LABELS.get(ap.power_type, "?") for ap in self.active_power_ups]
+        power_str = f"PWR: {' '.join(active_types)}" if active_types else "PWR: --"
+
+        return {
+            "aliens": aliens_str,
+            "combo": combo_str,
+            "power_ups": power_str,
+            "row": self.height - 1,
+        }
 
     def get_border_layout(self) -> list:
         """Return list of (row, col, char) tuples describing the HUD border.
