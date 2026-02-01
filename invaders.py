@@ -235,7 +235,7 @@ class Bunker:
 class Projectile:
     """Projectile fired by player or alien."""
     x: int
-    y: int
+    y: float
     direction: int  # -1 for up (player), 1 for down (alien)
 
 
@@ -456,8 +456,8 @@ class Game:
 
         # Game entities
         self.aliens: List[Alien] = []
-        self.player_projectiles: List[Dict] = []
-        self.alien_projectiles: List[Dict] = []
+        self.player_projectiles: List[Projectile] = []
+        self.alien_projectiles: List[Projectile] = []
         self.bunkers: List[Bunker] = []
 
         # Animation state
@@ -685,14 +685,14 @@ class Game:
         """Update all projectile positions."""
         # Player projectiles move up (faster)
         for proj in self.player_projectiles[:]:
-            proj['y'] -= self.config.player_projectile_speed
-            if proj['y'] < 0:
+            proj.y -= self.config.player_projectile_speed
+            if proj.y < 0:
                 self.player_projectiles.remove(proj)
 
         # Alien projectiles move down (slower for easier dodging)
         for proj in self.alien_projectiles[:]:
-            proj['y'] += self.config.alien_projectile_speed
-            if proj['y'] >= self.height:
+            proj.y += self.config.alien_projectile_speed
+            if proj.y >= self.height:
                 self.alien_projectiles.remove(proj)
 
     def _alien_fire(self) -> None:
@@ -704,18 +704,17 @@ class Game:
 
         for alien in self.aliens:
             if random.random() < fire_prob:
-                self.alien_projectiles.append({
-                    'x': alien.x + 1,
-                    'y': alien.y + 1
-                })
+                self.alien_projectiles.append(
+                    Projectile(x=alien.x + 1, y=alien.y + 1, direction=1)
+                )
 
     def _check_collisions(self) -> None:
         """Check all collision types."""
         # Player projectiles vs aliens
         for proj in self.player_projectiles[:]:
             for alien in self.aliens[:]:
-                if (abs(proj['x'] - alien.x) <= 1 and
-                    abs(proj['y'] - alien.y) <= 1):
+                if (abs(proj.x - alien.x) <= 1 and
+                    abs(proj.y - alien.y) <= 1):
                     self.aliens.remove(alien)
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
@@ -726,8 +725,8 @@ class Game:
 
         # Alien projectiles vs player
         for proj in self.alien_projectiles[:]:
-            if (abs(proj['x'] - self.player.x - 1) <= 1 and
-                proj['y'] >= self.player.y):
+            if (abs(proj.x - self.player.x - 1) <= 1 and
+                proj.y >= self.player.y):
                 self.alien_projectiles.remove(proj)
                 self.handle_player_damage()
                 break
@@ -735,7 +734,7 @@ class Game:
         # Projectiles vs bunkers
         for proj in self.player_projectiles[:]:
             for bunker in self.bunkers[:]:
-                if bunker.health > 0 and proj['x'] == bunker.x and proj['y'] == bunker.y:
+                if bunker.health > 0 and proj.x == bunker.x and proj.y == bunker.y:
                     bunker.hit()
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
@@ -743,7 +742,7 @@ class Game:
 
         for proj in self.alien_projectiles[:]:
             for bunker in self.bunkers[:]:
-                if bunker.health > 0 and proj['x'] == bunker.x and proj['y'] == bunker.y:
+                if bunker.health > 0 and proj.x == bunker.x and proj.y == bunker.y:
                     bunker.hit()
                     if proj in self.alien_projectiles:
                         self.alien_projectiles.remove(proj)
@@ -795,10 +794,9 @@ class Game:
             elif key == ord(' '):
                 # Fire projectile
                 if len(self.player_projectiles) < 3:  # Limit active projectiles
-                    self.player_projectiles.append({
-                        'x': self.player.x + 1,
-                        'y': self.player.y - 1
-                    })
+                    self.player_projectiles.append(
+                        Projectile(x=self.player.x + 1, y=self.player.y - 1, direction=-1)
+                    )
                     if self.sfx:
                         self.sfx.play_shoot()
 
@@ -880,11 +878,11 @@ class Game:
 
         # Render projectiles
         for proj in self.player_projectiles:
-            self._safe_addstr(proj['y'], proj['x'], self.config.projectile_player,
+            self._safe_addstr(proj.y, proj.x, self.config.projectile_player,
                              curses.color_pair(COLOR_PROJECTILE))
 
         for proj in self.alien_projectiles:
-            self._safe_addstr(proj['y'], proj['x'], self.config.projectile_alien,
+            self._safe_addstr(proj.y, proj.x, self.config.projectile_alien,
                              curses.color_pair(COLOR_GAME_OVER))
 
     def _render_game_over(self) -> None:

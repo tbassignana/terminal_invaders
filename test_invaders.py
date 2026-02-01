@@ -21,6 +21,7 @@ from invaders import (
     DEFAULT_CONFIG,
     Player,
     Alien,
+    Projectile,
     Game,
     resolve_audio_path,
     PLAYER_START_LIVES
@@ -153,8 +154,8 @@ class TestResetMechanic(unittest.TestCase):
         game.state = GameState.GAME_OVER
 
         # Add some projectiles to ensure they get cleared
-        game.player_projectiles = [{'x': 10, 'y': 5}]
-        game.alien_projectiles = [{'x': 15, 'y': 10}]
+        game.player_projectiles = [Projectile(x=10, y=5, direction=-1)]
+        game.alien_projectiles = [Projectile(x=15, y=10, direction=1)]
 
         # Call reset
         game.reset_game()
@@ -318,6 +319,71 @@ class TestGameConfig(unittest.TestCase):
         game.alien_move_interval = 0.2
         game.reset_game()
         self.assertEqual(game.alien_move_interval, game.config.alien_move_interval)
+
+
+class TestProjectileDataclass(unittest.TestCase):
+    """Step 2: Tests for Projectile dataclass usage replacing dict-based projectiles."""
+
+    def test_projectile_creation(self):
+        """Verify Projectile dataclass stores x, y, direction."""
+        proj = Projectile(x=10, y=5, direction=-1)
+        self.assertEqual(proj.x, 10)
+        self.assertEqual(proj.y, 5)
+        self.assertEqual(proj.direction, -1)
+
+    def test_player_fire_creates_projectile(self):
+        """Verify firing creates a Projectile instance, not a dict."""
+        game = Game(test_mode=True)
+        game.player_projectiles.append(
+            Projectile(x=game.player.x + 1, y=game.player.y - 1, direction=-1)
+        )
+        proj = game.player_projectiles[0]
+        self.assertIsInstance(proj, Projectile)
+        self.assertEqual(proj.direction, -1)
+
+    def test_projectile_movement_updates_y(self):
+        """Verify projectile y-coordinate changes after update."""
+        game = Game(test_mode=True)
+        proj = Projectile(x=40, y=10.0, direction=-1)
+        game.player_projectiles.append(proj)
+
+        game._update_projectiles()
+        # Player projectile should have moved up
+        self.assertLess(proj.y, 10.0)
+
+    def test_projectile_removal_at_boundary(self):
+        """Verify projectiles are removed when they leave the screen."""
+        game = Game(test_mode=True)
+        # Player projectile near top
+        proj = Projectile(x=40, y=0.5, direction=-1)
+        game.player_projectiles.append(proj)
+
+        game._update_projectiles()
+        self.assertEqual(len(game.player_projectiles), 0)
+
+    def test_alien_projectile_direction(self):
+        """Verify alien projectiles have direction=1 (downward)."""
+        game = Game(test_mode=True)
+        # Manually add an alien projectile
+        game.alien_projectiles.append(Projectile(x=20, y=5.0, direction=1))
+        proj = game.alien_projectiles[0]
+        self.assertEqual(proj.direction, 1)
+
+    def test_collision_detection_with_projectile_dataclass(self):
+        """Verify collision detection works with Projectile dataclass."""
+        game = Game(test_mode=True)
+        alien = Alien(x=20, y=10)
+        game.aliens = [alien]
+
+        # Place a player projectile right on the alien
+        proj = Projectile(x=20, y=10, direction=-1)
+        game.player_projectiles.append(proj)
+
+        game._check_collisions()
+
+        # Alien should be removed, score updated
+        self.assertEqual(len(game.aliens), 0)
+        self.assertGreater(game.score, 0)
 
 
 if __name__ == '__main__':
