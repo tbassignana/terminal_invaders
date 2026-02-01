@@ -19,7 +19,7 @@
 - [x] **Step 9:** Add a pause system with `PAUSED` game state
 - [x] **Step 10:** Implement power-ups dropped by aliens (rapid fire, shield, wide shot)
 - [x] **Step 11:** Add combo scoring system with time-windowed multiplier
-- [ ] **Step 12:** Implement difficulty scaling per level (speed, rows, bunker health)
+- [x] **Step 12:** Implement difficulty scaling per level (speed, rows, bunker health)
 - [ ] **Step 13:** Add screen shake effect on player death
 
 ## Testing & Quality

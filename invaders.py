@@ -793,12 +793,13 @@ class Game:
         self._initial_player_x = self.player.x
 
     def _init_aliens(self) -> None:
-        """Create the initial alien grid."""
+        """Create the initial alien grid (rows scaled by level)."""
         self.aliens = []
         cfg = self.config
+        rows = self.get_scaled_alien_rows()
         start_x = (self.width - (cfg.alien_cols * cfg.alien_spacing_x)) // 2
 
-        for row in range(cfg.alien_rows):
+        for row in range(rows):
             alien_type = row // 2  # Different types per rows
             for col in range(cfg.alien_cols):
                 x = start_x + col * cfg.alien_spacing_x
@@ -806,17 +807,18 @@ class Game:
                 self.aliens.append(Alien(x=x, y=y, alien_type=alien_type % 3))
 
     def _init_bunkers(self) -> None:
-        """Create defensive bunkers."""
+        """Create defensive bunkers (health scaled by level)."""
         self.bunkers = []
         bunker_y = self.height - 6
         bunker_spacing = self.width // 5
+        health = self.get_scaled_bunker_health()
 
         for i in range(4):
             bunker_x = bunker_spacing * (i + 1) - 2
             # Create bunker block (3x2)
             for dx in range(-1, 2):
                 for dy in range(2):
-                    self.bunkers.append(Bunker(x=bunker_x + dx, y=bunker_y + dy))
+                    self.bunkers.append(Bunker(x=bunker_x + dx, y=bunker_y + dy, health=health))
 
     def get_alien_fire_probability(self) -> float:
         """
@@ -1169,6 +1171,16 @@ class Game:
                         self.player_projectiles.remove(proj)
                     break
 
+    def get_scaled_alien_rows(self) -> int:
+        """Return alien rows for the current level (extra row every 3 levels, max 8)."""
+        extra = (self.level - 1) // 3
+        return min(self.config.alien_rows + extra, 8)
+
+    def get_scaled_bunker_health(self) -> int:
+        """Return starting bunker health for the current level (reduced every 5 levels, min 1)."""
+        reduction = (self.level - 1) // 5
+        return max(1, 3 - reduction)
+
     def _next_level(self) -> None:
         """Advance to next level and award bonus lives."""
         # Award lives based on level completed (level 1 = +1, level 2 = +2, etc.)
@@ -1187,8 +1199,9 @@ class Game:
         self._init_aliens()
         self._init_bunkers()
 
-        # Speed up aliens slightly each level (mutable instance state, not global)
-        self.alien_move_interval = max(0.1, self.alien_move_interval - 0.05)
+        # Difficulty scaling: speed up aliens (+10% per level)
+        scale = 0.9 ** (self.level - 1)  # Each level multiplies interval by 0.9
+        self.alien_move_interval = max(0.1, self.config.alien_move_interval * scale)
 
     def _toggle_pause(self) -> None:
         """Toggle between PLAYING and PAUSED states, adjusting timers."""

@@ -653,6 +653,59 @@ class TestMysteryShip(unittest.TestCase):
         self.assertEqual(game.mystery_score_display[2], 150)
 
 
+class TestDifficultyScaling(unittest.TestCase):
+    """Step 12: Tests for difficulty scaling per level."""
+
+    def test_alien_speed_increases_with_level(self):
+        """Verify alien_move_interval decreases each level."""
+        game = Game(test_mode=True)
+        intervals = []
+        for _ in range(3):
+            intervals.append(game.alien_move_interval)
+            game.aliens = []  # trigger next level
+            game._next_level()
+        self.assertGreater(intervals[0], intervals[1])
+        self.assertGreater(intervals[1], intervals[2])
+
+    def test_alien_rows_increase_every_3_levels(self):
+        """Verify extra alien row added every 3 levels."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.get_scaled_alien_rows(), 5)
+        game.level = 4
+        self.assertEqual(game.get_scaled_alien_rows(), 6)
+        game.level = 7
+        self.assertEqual(game.get_scaled_alien_rows(), 7)
+
+    def test_alien_rows_cap_at_8(self):
+        """Verify alien rows cap at 8."""
+        game = Game(test_mode=True)
+        game.level = 100
+        self.assertEqual(game.get_scaled_alien_rows(), 8)
+
+    def test_bunker_health_decreases_every_5_levels(self):
+        """Verify bunker health reduces every 5 levels."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.get_scaled_bunker_health(), 3)
+        game.level = 6
+        self.assertEqual(game.get_scaled_bunker_health(), 2)
+        game.level = 11
+        self.assertEqual(game.get_scaled_bunker_health(), 1)
+
+    def test_bunker_health_min_is_1(self):
+        """Verify bunker health never goes below 1."""
+        game = Game(test_mode=True)
+        game.level = 100
+        self.assertEqual(game.get_scaled_bunker_health(), 1)
+
+    def test_speed_floor(self):
+        """Verify alien_move_interval never goes below 0.1."""
+        game = Game(test_mode=True)
+        game.level = 100
+        game.aliens = []
+        game._next_level()
+        self.assertGreaterEqual(game.alien_move_interval, 0.1)
+
+
 class TestComboScoring(unittest.TestCase):
     """Step 11: Tests for the combo scoring system."""
 
