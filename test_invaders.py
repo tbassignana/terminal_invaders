@@ -4322,6 +4322,101 @@ class TestHighScoresDisplay(unittest.TestCase):
         mock_screen.clear.assert_called()
 
 
+class TestOptionsMenuScreen(unittest.TestCase):
+    """Tests for options/settings menu screen (Step 53)."""
+
+    def test_get_options_display_defaults(self):
+        """Options display shows default values."""
+        game = Game(test_mode=True)
+        opts = game.get_options_display()
+        self.assertEqual(opts["title"], "OPTIONS")
+        self.assertEqual(len(opts["items"]), 4)
+        self.assertEqual(opts["items"][0]["label"], "Sound Effects")
+        self.assertEqual(opts["items"][0]["value"], "ON")
+        self.assertEqual(opts["items"][1]["label"], "Music")
+        self.assertEqual(opts["items"][1]["value"], "ON")
+        self.assertEqual(opts["items"][2]["label"], "Show FPS")
+        self.assertEqual(opts["items"][2]["value"], "OFF")
+
+    def test_toggle_sound(self):
+        """Toggling sound option changes sound_enabled."""
+        game = Game(test_mode=True)
+        self.assertTrue(game.sound_enabled)
+        game.toggle_option(0)
+        self.assertFalse(game.sound_enabled)
+        opts = game.get_options_display()
+        self.assertEqual(opts["items"][0]["value"], "OFF")
+
+    def test_toggle_music(self):
+        """Toggling music option changes music_enabled."""
+        game = Game(test_mode=True)
+        self.assertTrue(game.music_enabled)
+        game.toggle_option(1)
+        self.assertFalse(game.music_enabled)
+
+    def test_toggle_fps(self):
+        """Toggling FPS option changes show_fps."""
+        game = Game(test_mode=True)
+        self.assertFalse(game.show_fps)
+        game.toggle_option(2)
+        self.assertTrue(game.show_fps)
+
+    def test_options_navigation(self):
+        """Arrow keys navigate options selection."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.OPTIONS
+        game.handle_input(curses.KEY_DOWN)
+        self.assertEqual(game.options_selection, 1)
+        game.handle_input(curses.KEY_UP)
+        self.assertEqual(game.options_selection, 0)
+
+    def test_options_enter_toggles(self):
+        """Enter key toggles the selected option."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.OPTIONS
+        game.options_selection = 2  # Show FPS
+        game.handle_input(ord("\n"))
+        self.assertTrue(game.show_fps)
+
+    def test_options_escape_returns(self):
+        """Escape returns to main menu from options."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.OPTIONS
+        game.handle_input(27)
+        self.assertEqual(game.menu_screen, MenuScreen.MAIN)
+
+    def test_options_selection_wraps(self):
+        """Selection wraps around at boundaries."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.OPTIONS
+        game.options_selection = 0
+        game.handle_input(curses.KEY_UP)
+        self.assertEqual(game.options_selection, 3)
+
+    def test_get_current_difficulty(self):
+        """_get_current_difficulty returns the right difficulty name."""
+        game = Game(test_mode=True)
+        # Default config should be "Normal"
+        self.assertEqual(game._get_current_difficulty(), "Normal")
+
+    def test_render_options_with_mock_screen(self):
+        """_render_options_screen renders with mock screen."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.OPTIONS
+        mock_screen = unittest.mock.MagicMock()
+        mock_screen.getmaxyx.return_value = (30, 80)
+        game.screen = mock_screen
+        with unittest.mock.patch("curses.color_pair", return_value=0):
+            game.render()
+        mock_screen.clear.assert_called()
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

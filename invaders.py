@@ -1133,6 +1133,9 @@ class Game:
         self.state = GameState.PLAYING if test_mode else GameState.MENU
         self.menu_screen: MenuScreen = MenuScreen.MAIN
         self.menu_selection: int = 0  # Index into MENU_ITEMS
+        self.options_selection: int = 0  # Index into options items
+        self.sound_enabled: bool = True
+        self.music_enabled: bool = True
         self.score_manager = ScoreManager() if not test_mode else None
         self.score = 0
         self.level = 1
@@ -2008,6 +2011,15 @@ class Game:
                         return False
                     elif target is not None:
                         self.menu_screen = target
+            elif self.menu_screen == MenuScreen.OPTIONS:
+                if key == 27 or key == curses.KEY_BACKSPACE or key == 127:
+                    self.menu_screen = MenuScreen.MAIN
+                elif key == curses.KEY_UP or key == ord("w"):
+                    self.options_selection = (self.options_selection - 1) % 4
+                elif key == curses.KEY_DOWN or key == ord("s"):
+                    self.options_selection = (self.options_selection + 1) % 4
+                elif key == ord(" ") or key == ord("\n") or key == curses.KEY_LEFT or key == curses.KEY_RIGHT:
+                    self.toggle_option(self.options_selection)
             else:
                 # Sub-screen: Escape or Backspace returns to main menu
                 if key == 27 or key == curses.KEY_BACKSPACE or key == 127:
@@ -2169,6 +2181,55 @@ class Game:
             "selection": self.menu_selection,
         }
 
+    def get_options_display(self) -> dict:
+        """Return options screen display data (testable without curses).
+
+        Returns dict with:
+            title: "OPTIONS"
+            items: list of dicts with label, value, selected
+            selection: current selection index
+        """
+        items = [
+            {"label": "Sound Effects", "value": "ON" if self.sound_enabled else "OFF",
+             "selected": self.options_selection == 0},
+            {"label": "Music", "value": "ON" if self.music_enabled else "OFF",
+             "selected": self.options_selection == 1},
+            {"label": "Show FPS", "value": "ON" if self.show_fps else "OFF",
+             "selected": self.options_selection == 2},
+            {"label": "Difficulty", "value": self._get_current_difficulty(),
+             "selected": self.options_selection == 3},
+        ]
+        return {
+            "title": "OPTIONS",
+            "items": items,
+            "selection": self.options_selection,
+        }
+
+    def _get_current_difficulty(self) -> str:
+        """Return the current difficulty name based on config values."""
+        for name, preset in DIFFICULTY_PRESETS.items():
+            if not preset:
+                continue
+            if all(getattr(self.config, k, None) == v for k, v in preset.items()):
+                return name.capitalize()
+        return "Normal"
+
+    def toggle_option(self, index: int) -> None:
+        """Toggle the option at the given index."""
+        if index == 0:
+            self.sound_enabled = not self.sound_enabled
+            if self.sfx:
+                self.sfx.enabled = self.sound_enabled
+        elif index == 1:
+            self.music_enabled = not self.music_enabled
+            if self.audio:
+                if self.music_enabled:
+                    self.audio.start()
+                else:
+                    self.audio.stop()
+        elif index == 2:
+            self.show_fps = not self.show_fps
+
     def _render_menu(self) -> None:
         """Render the animated title screen with ASCII art and color cycling."""
         layout = self.get_title_layout()
@@ -2196,15 +2257,21 @@ class Game:
         else:
             if self.menu_screen == MenuScreen.HIGH_SCORES:
                 self._render_high_scores_screen()
+            elif self.menu_screen == MenuScreen.OPTIONS:
+                self._render_options_screen()
             else:
-                # Sub-screen placeholder (implemented in steps 53-55)
+                # Sub-screen placeholder (implemented in steps 54-55)
                 screen_name = self.menu_screen.name.replace("_", " ").title()
                 text = f"[ {screen_name} ]"
                 self._safe_addstr(self.height // 2, (self.width - len(text)) // 2, text, curses.color_pair(COLOR_TEXT))
             back_text = "Press ESC to return"
+            back_y = self.height // 2 + 2
+            if self.menu_screen == MenuScreen.HIGH_SCORES:
+                back_y += 11
+            elif self.menu_screen == MenuScreen.OPTIONS:
+                back_y += 6
             self._safe_addstr(
-                self.height // 2 + 2 + (11 if self.menu_screen == MenuScreen.HIGH_SCORES else 0),
-                (self.width - len(back_text)) // 2,
+                back_y, (self.width - len(back_text)) // 2,
                 back_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM
             )
 
@@ -2228,6 +2295,20 @@ class Game:
                 if row["rank"] == 1:
                     attr |= curses.A_BOLD
                 self._safe_addstr(r, (self.width - len(line)) // 2, line, attr)
+
+    def _render_options_screen(self) -> None:
+        """Render the options/settings screen."""
+        opts = self.get_options_display()
+        center_y = self.height // 2 - 3
+        title = opts["title"]
+        self._safe_addstr(center_y, (self.width - len(title)) // 2, title, curses.color_pair(COLOR_TEXT) | curses.A_BOLD)
+
+        for i, item in enumerate(opts["items"]):
+            prefix = "> " if item["selected"] else "  "
+            line = f"{prefix}{item['label']}: {item['value']}"
+            row = center_y + 2 + i
+            attr = curses.color_pair(COLOR_TEXT) | curses.A_BOLD if item["selected"] else curses.color_pair(COLOR_TEXT)
+            self._safe_addstr(row, (self.width - len(line)) // 2, line, attr)
 
     def _render_game(self) -> None:
         """Render the main gameplay."""
