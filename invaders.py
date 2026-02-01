@@ -1605,6 +1605,26 @@ class Game:
             return 1
         return min(self.combo_count, self.combo_max)
 
+    def get_shield_aura_info(self) -> Optional[dict]:
+        """Return shield aura display info (testable without curses).
+
+        Returns None if shield is not active, otherwise:
+            left_bracket: "(" char at player.x - 1
+            right_bracket: ")" char at player.x + 3 (after 3-char sprite)
+            player_x: player x position
+            player_y: player y position
+            pulse: bool (alternating for visual pulse effect)
+        """
+        if not self.has_power_up(PowerUpType.SHIELD):
+            return None
+        return {
+            "left_bracket": "(",
+            "right_bracket": ")",
+            "player_x": self.player.x,
+            "player_y": self.player.y,
+            "pulse": self.thrust_frame == 0,
+        }
+
     def get_combo_display(self) -> Optional[dict]:
         """Return combo text display info (testable without curses).
 
@@ -2122,6 +2142,15 @@ class Game:
             player_visible = int(time.time() * 8) % 2 == 0
         if player_visible:
             self._safe_addstr(self.player.y, self.player.x, self.config.player_char, curses.color_pair(COLOR_PLAYER))
+
+        # Render shield aura (pulsing cyan brackets when shield active)
+        aura = self.get_shield_aura_info()
+        if aura:
+            aura_attr = curses.color_pair(COLOR_ALIEN_TYPE_0)  # Cyan
+            if aura["pulse"]:
+                aura_attr |= curses.A_BOLD
+            self._safe_addstr(aura["player_y"], aura["player_x"] - 1, aura["left_bracket"], aura_attr)
+            self._safe_addstr(aura["player_y"], aura["player_x"] + 3, aura["right_bracket"], aura_attr)
 
         # Render player thrust/engine animation
         thrust_y = self.player.y + 1

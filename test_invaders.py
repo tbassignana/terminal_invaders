@@ -3750,6 +3750,56 @@ class TestLevelTransitionCountdown(unittest.TestCase):
         self.assertEqual(info["lives_awarded"], 2)
 
 
+class TestShieldVisualAura(unittest.TestCase):
+    """Step 47: Shield visual aura around player (pulsing brackets in cyan)."""
+
+    def test_no_aura_without_shield(self):
+        """get_shield_aura_info() returns None when shield is not active."""
+        game = Game(test_mode=True)
+        self.assertIsNone(game.get_shield_aura_info())
+
+    def test_aura_active_with_shield(self):
+        """get_shield_aura_info() returns info when shield is active."""
+        game = Game(test_mode=True)
+        game.active_power_ups.append(ActivePowerUp(power_type=PowerUpType.SHIELD, expires_at=time.time() + 999))
+        info = game.get_shield_aura_info()
+        self.assertIsNotNone(info)
+        self.assertEqual(info["left_bracket"], "(")
+        self.assertEqual(info["right_bracket"], ")")
+
+    def test_aura_position_matches_player(self):
+        """Aura brackets are positioned relative to player."""
+        game = Game(test_mode=True)
+        game.active_power_ups.append(ActivePowerUp(power_type=PowerUpType.SHIELD, expires_at=time.time() + 999))
+        info = game.get_shield_aura_info()
+        self.assertEqual(info["player_x"], game.player.x)
+        self.assertEqual(info["player_y"], game.player.y)
+
+    def test_aura_pulse_alternates(self):
+        """Pulse alternates based on thrust_frame."""
+        game = Game(test_mode=True)
+        game.active_power_ups.append(ActivePowerUp(power_type=PowerUpType.SHIELD, expires_at=time.time() + 999))
+        game.thrust_frame = 0
+        self.assertTrue(game.get_shield_aura_info()["pulse"])
+        game.thrust_frame = 1
+        self.assertFalse(game.get_shield_aura_info()["pulse"])
+
+    def test_aura_disappears_after_shield_consumed(self):
+        """Aura disappears when shield is consumed by a hit."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.active_power_ups.append(ActivePowerUp(power_type=PowerUpType.SHIELD, expires_at=time.time() + 999))
+        self.assertIsNotNone(game.get_shield_aura_info())
+        game.handle_player_damage()  # Shield absorbs hit
+        self.assertIsNone(game.get_shield_aura_info())
+
+    def test_macoss_is_available_handles_exception(self):
+        """MacOSSoundBackend.is_available returns False on exception."""
+        backend = MacOSSoundBackend()
+        with unittest.mock.patch("subprocess.run", side_effect=OSError("mocked")):
+            self.assertFalse(backend.is_available())
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)
