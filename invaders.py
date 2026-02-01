@@ -688,6 +688,50 @@ class SoundEffects:
 
 
 # ============================================================================
+# SPATIAL PARTITIONING
+# ============================================================================
+
+class SpatialGrid:
+    """Grid-based spatial index for efficient collision detection.
+
+    Divides the screen into cells and allows querying entities in the same
+    or adjacent cells, reducing collision checks from O(n*m) to roughly O(n+m).
+    """
+
+    def __init__(self, width: int, height: int, cell_size: int = 4):
+        self.cell_size = cell_size
+        self.cols = max(1, width // cell_size + 1)
+        self.rows = max(1, height // cell_size + 1)
+        self.grid: Dict[Tuple[int, int], List] = {}
+
+    def clear(self) -> None:
+        """Remove all entities from the grid."""
+        self.grid.clear()
+
+    def _cell(self, x: float, y: float) -> Tuple[int, int]:
+        """Return the grid cell coordinates for a given position."""
+        return (int(x) // self.cell_size, int(y) // self.cell_size)
+
+    def insert(self, entity, x: float, y: float) -> None:
+        """Insert an entity at the given position."""
+        cell = self._cell(x, y)
+        if cell not in self.grid:
+            self.grid[cell] = []
+        self.grid[cell].append(entity)
+
+    def query_nearby(self, x: float, y: float) -> List:
+        """Return all entities in the same cell or adjacent cells."""
+        cx, cy = self._cell(x, y)
+        result = []
+        for dx in range(-1, 2):
+            for dy in range(-1, 2):
+                key = (cx + dx, cy + dy)
+                if key in self.grid:
+                    result.extend(self.grid[key])
+        return result
+
+
+# ============================================================================
 # MAIN GAME CLASS
 # ============================================================================
 
@@ -1134,11 +1178,30 @@ class Game:
                 )
 
     def _check_collisions(self) -> None:
-        """Check all collision types."""
+        """Check all collision types using spatial partitioning.
+
+        Uses a SpatialGrid to reduce collision checks from O(n*m) to
+        roughly O(n+m) by only checking entities in nearby grid cells.
+        """
         current_time = time.time()
-        # Player projectiles vs aliens
+
+        # Build spatial grid for aliens
+        alien_grid = SpatialGrid(self.width, self.height, cell_size=4)
+        for alien in self.aliens:
+            alien_grid.insert(alien, alien.x, alien.y)
+
+        # Build spatial grid for bunkers (only alive ones)
+        bunker_grid = SpatialGrid(self.width, self.height, cell_size=4)
+        for bunker in self.bunkers:
+            if bunker.health > 0:
+                bunker_grid.insert(bunker, bunker.x, bunker.y)
+
+        # Player projectiles vs aliens (spatial lookup)
         for proj in self.player_projectiles[:]:
-            for alien in self.aliens[:]:
+            nearby_aliens = alien_grid.query_nearby(proj.x, proj.y)
+            for alien in nearby_aliens:
+                if alien not in self.aliens:
+                    continue
                 if (abs(proj.x - alien.x) <= 1 and
                     abs(proj.y - alien.y) <= 1):
                     self.aliens.remove(alien)
@@ -1150,7 +1213,7 @@ class Game:
                     self.event_bus.publish(GameEvent.ALIEN_KILLED, alien_type=alien.alien_type)
                     break
 
-        # Alien projectiles vs player
+        # Alien projectiles vs player (single entity, no grid needed)
         for proj in self.alien_projectiles[:]:
             if (abs(proj.x - self.player.x - 1) <= 1 and
                 proj.y >= self.player.y):
@@ -1158,24 +1221,27 @@ class Game:
                 self.handle_player_damage()
                 break
 
-        # Projectiles vs bunkers
+        # Player projectiles vs bunkers (spatial lookup)
         for proj in self.player_projectiles[:]:
-            for bunker in self.bunkers[:]:
+            nearby_bunkers = bunker_grid.query_nearby(proj.x, proj.y)
+            for bunker in nearby_bunkers:
                 if bunker.health > 0 and proj.x == bunker.x and proj.y == bunker.y:
                     bunker.hit()
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
                     break
 
+        # Alien projectiles vs bunkers (spatial lookup)
         for proj in self.alien_projectiles[:]:
-            for bunker in self.bunkers[:]:
+            nearby_bunkers = bunker_grid.query_nearby(proj.x, proj.y)
+            for bunker in nearby_bunkers:
                 if bunker.health > 0 and proj.x == bunker.x and proj.y == bunker.y:
                     bunker.hit()
                     if proj in self.alien_projectiles:
                         self.alien_projectiles.remove(proj)
                     break
 
-        # Player projectiles vs mystery ship
+        # Player projectiles vs mystery ship (single entity, no grid needed)
         if self.mystery_ship and self.mystery_ship.active:
             for proj in self.player_projectiles[:]:
                 if (abs(proj.x - self.mystery_ship.x) <= 2 and

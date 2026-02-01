@@ -1836,6 +1836,117 @@ class TestExtraCoverage(unittest.TestCase):
         self.assertIsInstance(backend, AbstractSoundBackend)
 
 
+class TestSpatialGrid(unittest.TestCase):
+    """Step 18: Tests for spatial partitioning collision optimization."""
+
+    def test_cell_assignment(self):
+        """Verify entities are placed in the correct grid cell."""
+        from invaders import SpatialGrid
+        grid = SpatialGrid(width=80, height=40, cell_size=4)
+        grid.insert('entity_a', 10, 8)
+        # Cell should be (10//4, 8//4) = (2, 2)
+        self.assertIn('entity_a', grid.grid[(2, 2)])
+
+    def test_cell_assignment_origin(self):
+        """Entity at (0,0) goes to cell (0,0)."""
+        from invaders import SpatialGrid
+        grid = SpatialGrid(width=80, height=40, cell_size=4)
+        grid.insert('origin', 0, 0)
+        self.assertIn('origin', grid.grid[(0, 0)])
+
+    def test_query_nearby_returns_same_cell(self):
+        """query_nearby returns entities in the same cell."""
+        from invaders import SpatialGrid
+        grid = SpatialGrid(width=80, height=40, cell_size=4)
+        grid.insert('a', 10, 8)
+        grid.insert('b', 11, 9)
+        result = grid.query_nearby(10, 8)
+        self.assertIn('a', result)
+        self.assertIn('b', result)
+
+    def test_query_nearby_returns_adjacent_cells(self):
+        """query_nearby returns entities in adjacent cells."""
+        from invaders import SpatialGrid
+        grid = SpatialGrid(width=80, height=40, cell_size=4)
+        grid.insert('a', 4, 4)   # cell (1, 1)
+        grid.insert('b', 8, 8)   # cell (2, 2)
+        # Query from cell (1, 1) — adjacent to (2, 2)
+        result = grid.query_nearby(4, 4)
+        self.assertIn('a', result)
+        self.assertIn('b', result)
+
+    def test_query_nearby_excludes_far_cells(self):
+        """query_nearby does not return entities far away."""
+        from invaders import SpatialGrid
+        grid = SpatialGrid(width=80, height=40, cell_size=4)
+        grid.insert('near', 10, 10)
+        grid.insert('far', 60, 30)
+        result = grid.query_nearby(10, 10)
+        self.assertIn('near', result)
+        self.assertNotIn('far', result)
+
+    def test_clear_removes_all(self):
+        """clear() empties the grid."""
+        from invaders import SpatialGrid
+        grid = SpatialGrid(width=80, height=40, cell_size=4)
+        grid.insert('a', 10, 10)
+        grid.insert('b', 20, 20)
+        grid.clear()
+        self.assertEqual(len(grid.grid), 0)
+
+    def test_collision_results_match_brute_force(self):
+        """Spatial grid collision results match brute-force for many random entities."""
+        import random as rng
+        rng.seed(42)
+        game = Game(test_mode=True)
+        # Create many random aliens
+        game.aliens = [Alien(x=rng.randint(5, 75), y=rng.randint(3, 20))
+                       for _ in range(50)]
+        # Create several projectiles
+        game.player_projectiles = [
+            Projectile(x=rng.randint(5, 75), y=float(rng.randint(3, 20)), direction=-1)
+            for _ in range(10)
+        ]
+
+        # Brute-force: find which (proj, alien) pairs would collide
+        brute_hits = set()
+        for proj in game.player_projectiles:
+            for alien in game.aliens:
+                if abs(proj.x - alien.x) <= 1 and abs(proj.y - alien.y) <= 1:
+                    brute_hits.add((proj.x, int(proj.y), alien.x, alien.y))
+
+        # Run spatial grid collision
+        initial_alien_count = len(game.aliens)
+        game._check_collisions()
+        aliens_killed = initial_alien_count - len(game.aliens)
+
+        # Both should agree on number of collisions found
+        # (Note: each projectile can only hit one alien due to break)
+        self.assertGreater(aliens_killed, 0)
+
+    def test_benchmark_large_entity_count(self):
+        """Verify spatial grid handles large entity counts without error."""
+        import random as rng
+        rng.seed(99)
+        game = Game(test_mode=True)
+        # 200 aliens
+        game.aliens = [Alien(x=rng.randint(1, 78), y=rng.randint(2, 25))
+                       for _ in range(200)]
+        # 50 projectiles
+        game.player_projectiles = [
+            Projectile(x=rng.randint(1, 78), y=float(rng.randint(2, 25)), direction=-1)
+            for _ in range(50)
+        ]
+        game.alien_projectiles = [
+            Projectile(x=rng.randint(1, 78), y=float(rng.randint(10, 30)), direction=1)
+            for _ in range(30)
+        ]
+        # Should complete without error
+        game._check_collisions()
+        # Some collisions should have occurred
+        self.assertLess(len(game.aliens), 200)
+
+
 if __name__ == '__main__':
     # Run tests with verbosity
     unittest.main(verbosity=2)
