@@ -6435,6 +6435,140 @@ class TestEndlessMode(unittest.TestCase):
         self.assertGreaterEqual(game.alien_move_interval, 0.08)
 
 
+class TestTwoPlayerMode(unittest.TestCase):
+    """Tests for two-player alternating turns mode."""
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_two_player_mode_enum(self, _mock_cp):
+        """GameMode.TWO_PLAYER exists."""
+        self.assertIsNotNone(GameMode.TWO_PLAYER)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_default_current_player(self, _mock_cp):
+        """Current player starts at 1."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.current_player, 1)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_get_two_player_info_defaults(self, _mock_cp):
+        """get_two_player_info() returns expected defaults."""
+        game = Game(test_mode=True)
+        info = game.get_two_player_info()
+        self.assertFalse(info["is_two_player"])
+        self.assertEqual(info["current_player"], 1)
+        self.assertEqual(info["player_scores"], {})
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_two_player_info_when_set(self, _mock_cp):
+        """get_two_player_info() reflects TWO_PLAYER mode."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.TWO_PLAYER
+        info = game.get_two_player_info()
+        self.assertTrue(info["is_two_player"])
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_save_player_turn(self, _mock_cp):
+        """_save_player_turn stores current player's stats."""
+        game = Game(test_mode=True)
+        game.score = 1000
+        game.level = 3
+        game.total_kills = 20
+        game.total_shots = 30
+        game._save_player_turn()
+        self.assertIn(1, game.player_scores)
+        self.assertEqual(game.player_scores[1]["score"], 1000)
+        self.assertEqual(game.player_scores[1]["level"], 3)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_switch_to_player2(self, _mock_cp):
+        """_switch_to_player2 resets game state for Player 2."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.TWO_PLAYER
+        game.score = 500
+        game.level = 2
+        game._switch_to_player2()
+        self.assertEqual(game.current_player, 2)
+        self.assertEqual(game.score, 0)
+        self.assertEqual(game.level, 1)
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_p1_death_switches_to_p2(self, _mock_cp):
+        """Player 1 dying in two-player mode switches to Player 2."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.TWO_PLAYER
+        game.score = 300
+        game.player.lives = 1  # One hit left
+        game.handle_player_damage()
+        self.assertEqual(game.current_player, 2)
+        self.assertEqual(game.state, GameState.PLAYING)
+        self.assertIn(1, game.player_scores)
+        self.assertEqual(game.player_scores[1]["score"], 300)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_p2_death_is_game_over(self, _mock_cp):
+        """Player 2 dying in two-player mode triggers GAME_OVER."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.TWO_PLAYER
+        game.current_player = 2
+        game.score = 200
+        game.player.lives = 1
+        game.handle_player_damage()
+        self.assertEqual(game.state, GameState.GAME_OVER)
+        self.assertIn(2, game.player_scores)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_both_scores_recorded(self, _mock_cp):
+        """Both players' scores are recorded after full game."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.TWO_PLAYER
+        game.score = 500
+        game.player.lives = 1
+        game.handle_player_damage()  # P1 dies -> switch to P2
+        game.score = 800
+        game.player.lives = 1
+        game.handle_player_damage()  # P2 dies -> game over
+        self.assertEqual(game.player_scores[1]["score"], 500)
+        self.assertEqual(game.player_scores[2]["score"], 800)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_reset_clears_two_player_state(self, _mock_cp):
+        """Game reset clears two-player state."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.TWO_PLAYER
+        game.current_player = 2
+        game.player_scores = {1: {"score": 100}, 2: {"score": 200}}
+        game.reset_game()
+        self.assertEqual(game.current_player, 1)
+        self.assertEqual(game.player_scores, {})
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_campaign_mode_no_turn_switch(self, _mock_cp):
+        """Campaign mode death goes straight to GAME_OVER (no turn switch)."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.CAMPAIGN
+        game.player.lives = 1
+        game.handle_player_damage()
+        self.assertEqual(game.state, GameState.GAME_OVER)
+        self.assertEqual(game.current_player, 1)  # No switch
+
+    def test_cli_two_player_argument(self):
+        """CLI parser accepts --two-player argument."""
+        parser = build_argument_parser()
+        args = parser.parse_args(["--two-player"])
+        self.assertTrue(args.two_player)
+
+    @unittest.mock.patch("curses.color_pair", return_value=0)
+    def test_p2_has_fresh_aliens(self, _mock_cp):
+        """Player 2 gets a fresh set of aliens."""
+        game = Game(test_mode=True)
+        game.game_mode = GameMode.TWO_PLAYER
+        game.aliens.clear()  # P1 cleared all aliens
+        game.player.lives = 1
+        game.handle_player_damage()  # Switch to P2
+        self.assertGreater(len(game.aliens), 0)
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)

@@ -171,6 +171,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fps", type=int, default=None, help="Target FPS (default: 60)")
     parser.add_argument("--show-fps", action="store_true", help="Display FPS counter during gameplay")
     parser.add_argument("--endless", action="store_true", help="Start in endless/survival mode")
+    parser.add_argument("--two-player", action="store_true", help="Start in two-player alternating turns mode")
     parser.add_argument("--record", type=str, default=None, metavar="FILE", help="Record replay to FILE (JSON)")
     parser.add_argument("--replay", type=str, default=None, metavar="FILE", help="Play back a recorded replay from FILE")
     parser.add_argument("--version", action="version", version=f"Terminal Invaders {__version__}")
@@ -437,6 +438,7 @@ class GameMode(Enum):
 
     CAMPAIGN = auto()
     ENDLESS = auto()
+    TWO_PLAYER = auto()
 
 
 class GameState(Enum):
@@ -1659,6 +1661,10 @@ class Game:
         self.replay_player: Optional[ReplayPlayer] = None
         self.replay_frame: int = 0
 
+        # Two-player mode (alternating turns)
+        self.current_player: int = 1  # 1 or 2
+        self.player_scores: Dict[int, dict] = {}  # Player -> {score, level, kills, shots}
+
         # Achievement system
         self.achievement_manager: Optional[AchievementManager] = None
         self.power_ups_collected: int = 0  # Count per game for achievement
@@ -1917,8 +1923,17 @@ class Game:
         self.event_bus.publish(GameEvent.PLAYER_HIT)
 
         if self.player.lives <= 0:
+            # Two-player mode: save score and switch turns
+            if self.game_mode == GameMode.TWO_PLAYER and self.current_player == 1:
+                self._save_player_turn()
+                self._switch_to_player2()
+                return
+
             self.state = GameState.GAME_OVER
             self.game_over_time = time.time()
+            # Save final player's turn in two-player mode
+            if self.game_mode == GameMode.TWO_PLAYER:
+                self._save_player_turn()
             # Record lifetime stats
             if self.stats_manager:
                 play_time = time.time() - self.game_start_time
@@ -1956,8 +1971,16 @@ class Game:
         player_y = self.player.y
         for alien in self.aliens:
             if alien.y >= player_y:
+                # Two-player mode: switch turns instead of game over for P1
+                if self.game_mode == GameMode.TWO_PLAYER and self.current_player == 1:
+                    self._save_player_turn()
+                    self._switch_to_player2()
+                    return
+
                 self.state = GameState.GAME_OVER
                 self.game_over_time = time.time()
+                if self.game_mode == GameMode.TWO_PLAYER:
+                    self._save_player_turn()
                 if self.stats_manager:
                     play_time = time.time() - self.game_start_time
                     self.stats_manager.record_game(
@@ -1966,6 +1989,47 @@ class Game:
                         play_time=play_time,
                     )
                 return
+
+    def _save_player_turn(self) -> None:
+        """Save the current player's turn data."""
+        self.player_scores[self.current_player] = {
+            "score": self.score,
+            "level": self.level,
+            "kills": self.total_kills,
+            "shots": self.total_shots,
+        }
+
+    def _switch_to_player2(self) -> None:
+        """Switch from Player 1 to Player 2 in two-player mode."""
+        self.current_player = 2
+        self.score = 0
+        self.level = 1
+        self.total_shots = 0
+        self.total_kills = 0
+        self.player.lives = self.config.player_start_lives
+        self.player.x = self._initial_player_x
+        self.player_projectiles.clear()
+        self.alien_projectiles.clear()
+        self.power_ups.clear()
+        self.active_power_ups.clear()
+        self.diving_aliens.clear()
+        self.milestones_reached.clear()
+        self.weapon_level = 1
+        self.current_wave = 1
+        self.alien_direction = 1
+        self.alien_move_interval = self.config.alien_move_interval
+        self.invincible_until = 0
+        self.combo_count = 0
+        self._init_aliens()
+        self.state = GameState.PLAYING
+
+    def get_two_player_info(self) -> dict:
+        """Return two-player mode state for display/testing."""
+        return {
+            "is_two_player": self.game_mode == GameMode.TWO_PLAYER,
+            "current_player": self.current_player,
+            "player_scores": dict(self.player_scores),
+        }
 
     def reset_game(self) -> None:
         """
@@ -1983,6 +2047,8 @@ class Game:
         self.initials_submitted = False
         self.milestones_reached.clear()
         self.endless_wave = 0
+        self.current_player = 1
+        self.player_scores.clear()
         self.power_ups_collected = 0
         self.coins_collected = 0
         self.level_took_damage = False
@@ -4080,6 +4146,8 @@ def main():
         game.show_fps = True
     if args.endless:
         game.game_mode = GameMode.ENDLESS
+    if args.two_player:
+        game.game_mode = GameMode.TWO_PLAYER
 
     # Replay system CLI integration
     if args.record:
