@@ -22,6 +22,7 @@ import atexit
 import curses
 import json
 import logging
+import math
 import os
 import random
 import signal
@@ -393,6 +394,69 @@ class ActivePowerUp:
 
     power_type: PowerUpType
     expires_at: float
+
+
+# ============================================================================
+# PARTICLE SYSTEM
+# ============================================================================
+
+
+@dataclass
+class Particle:
+    """A single visual particle for effects like explosions and trails."""
+
+    x: float
+    y: float
+    dx: float  # horizontal velocity (chars/sec)
+    dy: float  # vertical velocity (chars/sec)
+    char: str
+    color_pair: int
+    lifetime: float  # total lifetime in seconds
+    age: float = 0.0  # current age in seconds
+
+
+class ParticleSystem:
+    """Manages a collection of particles: spawning, updating, culling, and rendering."""
+
+    def __init__(self) -> None:
+        self.particles: List[Particle] = []
+
+    def spawn(
+        self,
+        x: float,
+        y: float,
+        count: int,
+        chars: str = "*+.'`",
+        color_pair: int = 0,
+        speed_range: Tuple[float, float] = (2.0, 8.0),
+        lifetime_range: Tuple[float, float] = (0.3, 0.5),
+    ) -> None:
+        """Spawn a burst of particles at (x, y) spreading in random directions."""
+        for _ in range(count):
+            angle = random.uniform(0, 2 * math.pi)
+            speed = random.uniform(speed_range[0], speed_range[1])
+            dx = math.cos(angle) * speed
+            dy = math.sin(angle) * speed
+            char = random.choice(chars)
+            lt = random.uniform(lifetime_range[0], lifetime_range[1])
+            self.particles.append(
+                Particle(x=x, y=y, dx=dx, dy=dy, char=char, color_pair=color_pair, lifetime=lt)
+            )
+
+    def update(self, dt: float) -> None:
+        """Advance all particles by dt seconds, cull expired ones."""
+        alive = []
+        for p in self.particles:
+            p.age += dt
+            if p.age < p.lifetime:
+                p.x += p.dx * dt
+                p.y += p.dy * dt
+                alive.append(p)
+        self.particles = alive
+
+    def clear(self) -> None:
+        """Remove all particles."""
+        self.particles.clear()
 
 
 # ============================================================================
@@ -874,6 +938,10 @@ class Game:
         self.combo_window: float = 2.0  # seconds
         self.combo_max: int = 5
 
+        # Particle system (visual-only, skipped in test_mode)
+        self.particle_system = ParticleSystem()
+        self._last_update_time: float = time.time()
+
         # Event bus
         self.event_bus = EventBus()
 
@@ -1045,6 +1113,9 @@ class Game:
         self.combo_count = 0
         self.combo_last_kill_time = 0
 
+        # Clear particles
+        self.particle_system.clear()
+
         # Set state to playing
         self.state = GameState.PLAYING
 
@@ -1093,6 +1164,12 @@ class Game:
 
         # Update power-ups
         self._update_power_ups(current_time)
+
+        # Update particles
+        dt = current_time - self._last_update_time
+        self._last_update_time = current_time
+        if not self.test_mode:
+            self.particle_system.update(dt)
 
         # Check invasion
         self.check_invasion()
@@ -1521,6 +1598,14 @@ class Game:
 
         for proj in self.alien_projectiles:
             self._safe_addstr(proj.y, proj.x, self.config.projectile_alien, curses.color_pair(COLOR_GAME_OVER))
+
+        # Render particles
+        for p in self.particle_system.particles:
+            attr = curses.color_pair(p.color_pair)
+            # Dim particles in the last half of their lifetime for fade-out
+            if p.age > p.lifetime * 0.5:
+                attr |= curses.A_DIM
+            self._safe_addstr(int(p.y), int(p.x), p.char, attr)
 
         # FPS counter (when enabled via F1 or --show-fps)
         if self.show_fps:

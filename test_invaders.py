@@ -40,6 +40,8 @@ from invaders import (
     MacOSSoundBackend,
     MysteryShip,
     NullSoundBackend,
+    Particle,
+    ParticleSystem,
     Player,
     PowerUp,
     PowerUpType,
@@ -2313,6 +2315,127 @@ class TestVersionAndChangelog(unittest.TestCase):
         self.assertIn("[0.1.0]", content)
         self.assertIn("Step 1:", content)
         self.assertIn("Step 25:", content)
+
+
+class TestParticleSystem(unittest.TestCase):
+    """Tests for the Particle dataclass and ParticleSystem manager (Step 26)."""
+
+    def test_particle_creation_defaults(self):
+        """Verify Particle dataclass initializes with correct defaults."""
+        p = Particle(x=10.0, y=5.0, dx=1.0, dy=-1.0, char="*", color_pair=1, lifetime=0.5)
+        self.assertEqual(p.x, 10.0)
+        self.assertEqual(p.y, 5.0)
+        self.assertEqual(p.dx, 1.0)
+        self.assertEqual(p.dy, -1.0)
+        self.assertEqual(p.char, "*")
+        self.assertEqual(p.color_pair, 1)
+        self.assertEqual(p.lifetime, 0.5)
+        self.assertEqual(p.age, 0.0, "Age should default to 0.0")
+
+    def test_particle_aging(self):
+        """Verify particles age correctly when updated."""
+        ps = ParticleSystem()
+        ps.particles.append(
+            Particle(x=5.0, y=5.0, dx=0.0, dy=0.0, char="*", color_pair=0, lifetime=1.0)
+        )
+        ps.update(0.3)
+        self.assertAlmostEqual(ps.particles[0].age, 0.3)
+        ps.update(0.3)
+        self.assertAlmostEqual(ps.particles[0].age, 0.6)
+
+    def test_particle_expiration_culling(self):
+        """Verify expired particles are removed from the system."""
+        ps = ParticleSystem()
+        ps.particles.append(
+            Particle(x=5.0, y=5.0, dx=0.0, dy=0.0, char="*", color_pair=0, lifetime=0.5)
+        )
+        ps.particles.append(
+            Particle(x=10.0, y=10.0, dx=0.0, dy=0.0, char="+", color_pair=0, lifetime=1.0)
+        )
+        self.assertEqual(len(ps.particles), 2)
+
+        # After 0.6s, the first particle (lifetime=0.5) should be culled
+        ps.update(0.6)
+        self.assertEqual(len(ps.particles), 1, "Expired particle should be culled")
+        self.assertEqual(ps.particles[0].char, "+", "Only the long-lived particle should remain")
+
+    def test_particle_position_updates(self):
+        """Verify particle positions update based on velocity and dt."""
+        ps = ParticleSystem()
+        ps.particles.append(
+            Particle(x=0.0, y=0.0, dx=10.0, dy=-5.0, char="*", color_pair=0, lifetime=2.0)
+        )
+        ps.update(0.1)
+        self.assertAlmostEqual(ps.particles[0].x, 1.0, places=5)
+        self.assertAlmostEqual(ps.particles[0].y, -0.5, places=5)
+
+    def test_burst_spawning_count(self):
+        """Verify spawn() creates the requested number of particles."""
+        ps = ParticleSystem()
+        ps.spawn(x=20.0, y=10.0, count=7)
+        self.assertEqual(len(ps.particles), 7)
+
+    def test_burst_spawning_position(self):
+        """Verify all spawned particles start at the specified position."""
+        ps = ParticleSystem()
+        ps.spawn(x=15.0, y=8.0, count=5)
+        for p in ps.particles:
+            self.assertEqual(p.x, 15.0)
+            self.assertEqual(p.y, 8.0)
+
+    def test_burst_spawning_color_pair(self):
+        """Verify spawned particles use the specified color pair."""
+        ps = ParticleSystem()
+        ps.spawn(x=10.0, y=10.0, count=3, color_pair=4)
+        for p in ps.particles:
+            self.assertEqual(p.color_pair, 4)
+
+    def test_burst_spawning_chars_from_set(self):
+        """Verify spawned particle chars come from the provided character set."""
+        ps = ParticleSystem()
+        chars = "AB"
+        ps.spawn(x=0.0, y=0.0, count=20, chars=chars)
+        for p in ps.particles:
+            self.assertIn(p.char, chars)
+
+    def test_burst_spawning_lifetime_range(self):
+        """Verify spawned particles have lifetimes within the specified range."""
+        ps = ParticleSystem()
+        ps.spawn(x=0.0, y=0.0, count=50, lifetime_range=(0.2, 0.4))
+        for p in ps.particles:
+            self.assertGreaterEqual(p.lifetime, 0.2)
+            self.assertLessEqual(p.lifetime, 0.4)
+
+    def test_burst_spawning_speed_range(self):
+        """Verify spawned particles have speeds within the expected range."""
+        ps = ParticleSystem()
+        ps.spawn(x=0.0, y=0.0, count=50, speed_range=(1.0, 3.0))
+        for p in ps.particles:
+            speed = (p.dx**2 + p.dy**2) ** 0.5
+            self.assertGreaterEqual(speed, 0.99, "Speed should be at least the min range")
+            self.assertLessEqual(speed, 3.01, "Speed should be at most the max range")
+
+    def test_clear_removes_all_particles(self):
+        """Verify clear() empties the particle list."""
+        ps = ParticleSystem()
+        ps.spawn(x=0.0, y=0.0, count=10)
+        self.assertEqual(len(ps.particles), 10)
+        ps.clear()
+        self.assertEqual(len(ps.particles), 0)
+
+    def test_game_has_particle_system(self):
+        """Verify the Game object initializes with a ParticleSystem."""
+        game = Game(test_mode=True)
+        self.assertIsInstance(game.particle_system, ParticleSystem)
+        self.assertEqual(len(game.particle_system.particles), 0)
+
+    def test_game_reset_clears_particles(self):
+        """Verify reset_game clears the particle system."""
+        game = Game(test_mode=True)
+        game.particle_system.spawn(x=5.0, y=5.0, count=5)
+        self.assertEqual(len(game.particle_system.particles), 5)
+        game.reset_game()
+        self.assertEqual(len(game.particle_system.particles), 0)
 
 
 if __name__ == "__main__":
