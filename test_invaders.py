@@ -44,6 +44,8 @@ from invaders import (
     DEFAULT_CONFIG,
     MYSTERY_SHIP_CHAR,
     PLAYER_START_LIVES,
+    POWERUP_CHARS,
+    POWERUP_LABELS,
     TITLE_ART,
     TITLE_COLOR_CYCLE,
     AbstractSoundBackend,
@@ -3065,6 +3067,118 @@ class TestMysteryShipVisualEffects(unittest.TestCase):
         game.player_projectiles = [Projectile(x=13, y=2, direction=-1)]
         game._check_collisions()
         self.assertIsNone(game.mystery_ship, "Ship at range 3 should be hit")
+
+
+class TestPowerUpVisualIndicators(unittest.TestCase):
+    """Tests for power-up visual indicators (Step 38)."""
+
+    def test_powerup_chars_defined_for_all_types(self):
+        """Verify POWERUP_CHARS has entries for all PowerUpType values."""
+        for pt in PowerUpType:
+            self.assertIn(pt, POWERUP_CHARS, f"Missing char for {pt}")
+
+    def test_powerup_chars_are_distinct(self):
+        """Verify each power-up type has a unique display character."""
+        chars = list(POWERUP_CHARS.values())
+        self.assertEqual(len(chars), len(set(chars)), "Power-up chars should be distinct")
+
+    def test_powerup_labels_match_rsw(self):
+        """Verify power-up labels are R, S, W."""
+        self.assertEqual(POWERUP_LABELS[PowerUpType.RAPID_FIRE], "R")
+        self.assertEqual(POWERUP_LABELS[PowerUpType.SHIELD], "S")
+        self.assertEqual(POWERUP_LABELS[PowerUpType.WIDE_SHOT], "W")
+
+    def test_hud_timer_shows_remaining_seconds(self):
+        """Verify get_powerup_hud_info() returns timer strings with remaining time."""
+        game = Game(test_mode=True)
+        game.active_power_ups = [
+            ActivePowerUp(power_type=PowerUpType.RAPID_FIRE, expires_at=time.time() + 3.5),
+        ]
+        labels = game.get_powerup_hud_info()
+        self.assertEqual(len(labels), 1)
+        self.assertIn("R", labels[0])
+        self.assertIn("s]", labels[0])
+
+    def test_hud_timer_shows_on_for_shield(self):
+        """Verify shield (expires_at=999) shows [S ON] instead of seconds."""
+        game = Game(test_mode=True)
+        game.active_power_ups = [
+            ActivePowerUp(power_type=PowerUpType.SHIELD, expires_at=time.time() + 999),
+        ]
+        labels = game.get_powerup_hud_info()
+        self.assertEqual(len(labels), 1)
+        self.assertIn("[S ON]", labels[0])
+
+    def test_hud_timer_multiple_active_powerups(self):
+        """Verify HUD shows timers for multiple active power-ups."""
+        game = Game(test_mode=True)
+        now = time.time()
+        game.active_power_ups = [
+            ActivePowerUp(power_type=PowerUpType.RAPID_FIRE, expires_at=now + 3.0),
+            ActivePowerUp(power_type=PowerUpType.WIDE_SHOT, expires_at=now + 5.0),
+        ]
+        labels = game.get_powerup_hud_info()
+        self.assertEqual(len(labels), 2)
+        chars = "".join(labels)
+        self.assertIn("R", chars)
+        self.assertIn("W", chars)
+
+    def test_falling_powerup_has_display_char(self):
+        """Verify each PowerUpType maps to a single display character."""
+        for pt in PowerUpType:
+            char = POWERUP_CHARS[pt]
+            self.assertEqual(len(char), 1, f"{pt} should have a single char")
+
+    def test_powerup_collection_activates_effect(self):
+        """Verify collecting a power-up activates it."""
+        game = Game(test_mode=True)
+        # Place a power-up at the player's position
+        game.power_ups = [PowerUp(x=game.player.x + 1, y=float(game.player.y), power_type=PowerUpType.RAPID_FIRE)]
+        game._update_power_ups(time.time())
+        self.assertTrue(game.has_power_up(PowerUpType.RAPID_FIRE))
+        self.assertEqual(len(game.power_ups), 0, "Collected power-up should be removed")
+
+    def test_update_with_particles_and_stars(self):
+        """Verify update() processes particles and star scrolling when test_mode=False."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        # Add a particle and stars
+        game.particle_system.spawn(x=10.0, y=10.0, count=1, chars="*", color_pair=1)
+        game.stars = [(5.0, 5.0, ".")]
+        # Temporarily enable non-test paths
+        game.test_mode = False
+        game.update()
+        game.test_mode = True
+        # Particle should have aged
+        if game.particle_system.particles:
+            self.assertGreater(game.particle_system.particles[0].age, 0)
+        # Stars should have scrolled
+        if game.stars:
+            self.assertNotEqual(game.stars[0][1], 5.0)
+
+    def test_mystery_ship_large_explosion_spawns_particles(self):
+        """Verify mystery ship hit spawns large explosion particles."""
+        game = Game(test_mode=True)
+        game.test_mode = False  # Enable particles
+        game.mystery_ship = MysteryShip(x=10.0, y=2, points=150)
+        game.player_projectiles = [Projectile(x=10, y=2, direction=-1)]
+        game._check_collisions()
+        game.test_mode = True
+        # Should spawn 10-15 particles
+        count = len(game.particle_system.particles)
+        self.assertGreaterEqual(count, 10)
+        self.assertLessEqual(count, 15)
+
+    def test_bunker_hit_spawns_debris_particles(self):
+        """Verify bunker hit spawns debris particles when test_mode=False."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game.bunkers = [Bunker(x=10, y=15, health=3)]
+        game.alien_projectiles = [Projectile(x=10, y=15, direction=1)]
+        game._check_collisions()
+        game.test_mode = True
+        count = len(game.particle_system.particles)
+        self.assertGreaterEqual(count, 1, "Should spawn debris particles on bunker hit")
 
 
 if __name__ == "__main__":

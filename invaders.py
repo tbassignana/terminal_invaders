@@ -226,6 +226,7 @@ COLOR_ALIEN_TYPE_0 = 9     # Cyan for top-row aliens
 COLOR_ALIEN_TYPE_1 = 10    # Magenta for middle-row aliens
 COLOR_ALIEN_TYPE_2 = 11    # Yellow for bottom-row aliens
 COLOR_BORDER = 12          # Dim cyan for HUD border
+COLOR_POWERUP = 13         # Bright white for power-up pickups
 
 # Box-drawing characters for HUD border
 BORDER_H = "─"   # Horizontal line
@@ -512,6 +513,21 @@ class PowerUpType(Enum):
     RAPID_FIRE = auto()
     SHIELD = auto()
     WIDE_SHOT = auto()
+
+
+# Distinct display characters for each power-up type
+POWERUP_CHARS = {
+    PowerUpType.RAPID_FIRE: "R",
+    PowerUpType.SHIELD: "S",
+    PowerUpType.WIDE_SHOT: "W",
+}
+
+# Short labels for HUD timer display
+POWERUP_LABELS = {
+    PowerUpType.RAPID_FIRE: "R",
+    PowerUpType.SHIELD: "S",
+    PowerUpType.WIDE_SHOT: "W",
+}
 
 
 @dataclass
@@ -1923,6 +1939,20 @@ class Game:
                     attr |= curses.A_REVERSE  # White flash effect
                 self._safe_addstr(bunker.y, bunker.x, bunker.char, attr)
 
+        # Render falling power-ups (blink effect with distinct type chars)
+        for pu in self.power_ups:
+            char = POWERUP_CHARS.get(pu.power_type, "?")
+            attr = curses.color_pair(COLOR_POWERUP) | curses.A_BOLD
+            # Blink: visible 4 out of 6 frames based on thrust_frame counter
+            if self.thrust_frame == 0:
+                attr |= curses.A_REVERSE  # Alternate visual emphasis
+            self._safe_addstr(int(pu.y), pu.x, char, attr)
+
+        # Render active power-up HUD timers (top-right area, below lives)
+        hud_info = self.get_powerup_hud_info()
+        for i, label in enumerate(hud_info):
+            self._safe_addstr(0, self.width - 30 - i * 8, label, curses.color_pair(COLOR_POWERUP) | curses.A_BOLD)
+
         # Render player
         self._safe_addstr(self.player.y, self.player.x, self.config.player_char, curses.color_pair(COLOR_PLAYER))
 
@@ -1976,6 +2006,23 @@ class Game:
         if self.show_fps:
             fps_text = f"FPS: {self.frame_timer.average_fps:.0f}"
             self._safe_addstr(self.height - 1, 2, fps_text, curses.color_pair(COLOR_TEXT))
+
+    def get_powerup_hud_info(self) -> list:
+        """Return list of HUD timer strings for active power-ups (testable).
+
+        Example: ["[R 3s]", "[S 5s]"]
+        """
+        current = time.time()
+        labels = []
+        for ap in self.active_power_ups:
+            remaining = max(0, ap.expires_at - current)
+            if remaining > 900:  # Shield has ~999s, show as active
+                label_char = POWERUP_LABELS.get(ap.power_type, "?")
+                labels.append(f"[{label_char} ON]")
+            else:
+                label_char = POWERUP_LABELS.get(ap.power_type, "?")
+                labels.append(f"[{label_char} {int(remaining)}s]")
+        return labels
 
     def get_border_layout(self) -> list:
         """Return list of (row, col, char) tuples describing the HUD border.
@@ -2101,6 +2148,7 @@ class Game:
             curses.init_pair(COLOR_ALIEN_TYPE_1, curses.COLOR_MAGENTA, -1)
             curses.init_pair(COLOR_ALIEN_TYPE_2, curses.COLOR_YELLOW, -1)
             curses.init_pair(COLOR_BORDER, curses.COLOR_CYAN, -1)
+            curses.init_pair(COLOR_POWERUP, curses.COLOR_WHITE, -1)
 
             # Get screen dimensions
             self.height, self.width = stdscr.getmaxyx()
