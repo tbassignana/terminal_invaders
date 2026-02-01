@@ -15,6 +15,7 @@ Author: Claude AI
 License: MIT
 """
 
+import argparse
 import curses
 import json
 import logging
@@ -133,6 +134,47 @@ class GameConfig:
 
 # Default config instance used for module-level backward-compatible constants
 DEFAULT_CONFIG = GameConfig()
+
+# Difficulty presets — each overrides specific GameConfig fields
+DIFFICULTY_PRESETS = {
+    'easy': {
+        'player_start_lives': 7,
+        'alien_move_interval': 0.7,
+        'base_fire_probability': 0.001,
+        'max_fire_probability': 0.01,
+        'player_projectile_speed': 1.2,
+        'alien_projectile_speed': 0.3,
+    },
+    'normal': {},  # Use all defaults
+    'hard': {
+        'player_start_lives': 3,
+        'alien_move_interval': 0.35,
+        'base_fire_probability': 0.002,
+        'max_fire_probability': 0.02,
+        'player_projectile_speed': 0.8,
+        'alien_projectile_speed': 0.6,
+    },
+}
+
+
+def build_argument_parser() -> argparse.ArgumentParser:
+    """Create the CLI argument parser."""
+    parser = argparse.ArgumentParser(description='Terminal Invaders — Space Invaders in your terminal')
+    parser.add_argument('--no-sound', action='store_true', help='Disable sound effects')
+    parser.add_argument('--no-music', action='store_true', help='Disable background music')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging to invaders.log')
+    parser.add_argument('--difficulty', choices=['easy', 'normal', 'hard'], default='normal',
+                        help='Difficulty preset (default: normal)')
+    parser.add_argument('--fps', type=int, default=None, help='Target FPS (default: 60)')
+    return parser
+
+
+def config_from_args(args: argparse.Namespace) -> GameConfig:
+    """Build a GameConfig from parsed CLI arguments."""
+    overrides = dict(DIFFICULTY_PRESETS.get(args.difficulty, {}))
+    if args.fps is not None:
+        overrides['target_fps'] = args.fps
+    return GameConfig(**overrides)
 
 # Legacy module-level constants (kept for backward compatibility)
 PLAYER_START_LIVES = DEFAULT_CONFIG.player_start_lives
@@ -1209,10 +1251,20 @@ class Game:
 
 def main():
     """Main entry point for the game."""
-    debug = '--debug' in sys.argv
-    setup_logging(debug=debug)
-    logger.debug("Game starting with debug logging enabled")
-    game = Game()
+    parser = build_argument_parser()
+    args = parser.parse_args()
+
+    setup_logging(debug=args.debug)
+    logger.debug("Game starting with args: %s", args)
+
+    config = config_from_args(args)
+    game = Game(config=config)
+
+    if args.no_sound and game.sfx:
+        game.sfx.enabled = False
+    if args.no_music:
+        game.audio = None  # Prevent audio manager from starting
+
     game.run()
 
 

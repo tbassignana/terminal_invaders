@@ -23,6 +23,9 @@ from invaders import (
     EventBus,
     GameConfig,
     DEFAULT_CONFIG,
+    DIFFICULTY_PRESETS,
+    build_argument_parser,
+    config_from_args,
     Player,
     Alien,
     Projectile,
@@ -599,6 +602,52 @@ class TestSoundBackend(unittest.TestCase):
         backend = NullSoundBackend()
         sfx = SoundEffects(backend=backend)
         self.assertIs(sfx.backend, backend)
+
+
+class TestCLIArgParser(unittest.TestCase):
+    """Step 7: Tests for CLI argument parsing and difficulty presets."""
+
+    def test_argument_parsing_defaults(self):
+        """Verify default arguments parse correctly."""
+        parser = build_argument_parser()
+        args = parser.parse_args([])
+        self.assertFalse(args.no_sound)
+        self.assertFalse(args.no_music)
+        self.assertFalse(args.debug)
+        self.assertEqual(args.difficulty, 'normal')
+        self.assertIsNone(args.fps)
+
+    def test_difficulty_easy_preset_values(self):
+        """Verify easy difficulty overrides are applied."""
+        parser = build_argument_parser()
+        args = parser.parse_args(['--difficulty', 'easy'])
+        cfg = config_from_args(args)
+        self.assertEqual(cfg.player_start_lives, 7)
+        self.assertGreater(cfg.alien_move_interval, DEFAULT_CONFIG.alien_move_interval)
+
+    def test_difficulty_hard_preset_values(self):
+        """Verify hard difficulty overrides are applied."""
+        parser = build_argument_parser()
+        args = parser.parse_args(['--difficulty', 'hard'])
+        cfg = config_from_args(args)
+        self.assertEqual(cfg.player_start_lives, 3)
+        self.assertLess(cfg.alien_move_interval, DEFAULT_CONFIG.alien_move_interval)
+
+    def test_fps_override(self):
+        """Verify --fps overrides target_fps in config."""
+        parser = build_argument_parser()
+        args = parser.parse_args(['--fps', '30'])
+        cfg = config_from_args(args)
+        self.assertEqual(cfg.target_fps, 30)
+
+    def test_config_integration(self):
+        """Verify config_from_args produces valid GameConfig for Game."""
+        parser = build_argument_parser()
+        args = parser.parse_args(['--difficulty', 'hard', '--fps', '45'])
+        cfg = config_from_args(args)
+        game = Game(test_mode=True, config=cfg)
+        self.assertEqual(game.config.target_fps, 45)
+        self.assertEqual(game.player.lives, 3)
 
 
 if __name__ == '__main__':
