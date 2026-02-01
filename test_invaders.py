@@ -17,6 +17,11 @@ import tempfile
 import time
 import unittest
 
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
 from hypothesis import given
 from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
@@ -2149,8 +2154,6 @@ class TestPyprojectToml(unittest.TestCase):
 
     def test_pyproject_has_version(self):
         """Verify pyproject.toml has a version field."""
-        import tomllib
-
         toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
         with open(toml_path, "rb") as f:
             data = tomllib.load(f)
@@ -2159,8 +2162,6 @@ class TestPyprojectToml(unittest.TestCase):
 
     def test_pyproject_has_scripts_entry(self):
         """Verify pyproject.toml has invaders entry point."""
-        import tomllib
-
         toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
         with open(toml_path, "rb") as f:
             data = tomllib.load(f)
@@ -2261,8 +2262,6 @@ class TestPreCommitAndRuff(unittest.TestCase):
 
     def test_pyproject_has_ruff_config(self):
         """Verify pyproject.toml has [tool.ruff] configuration."""
-        import tomllib
-
         toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
         with open(toml_path, "rb") as f:
             data = tomllib.load(f)
@@ -2281,8 +2280,6 @@ class TestVersionAndChangelog(unittest.TestCase):
 
     def test_version_matches_pyproject(self):
         """Verify __version__ matches version in pyproject.toml."""
-        import tomllib
-
         import invaders
 
         toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
