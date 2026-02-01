@@ -225,6 +225,15 @@ COLOR_BUNKER_CRITICAL = 8  # Red for critical bunkers
 COLOR_ALIEN_TYPE_0 = 9     # Cyan for top-row aliens
 COLOR_ALIEN_TYPE_1 = 10    # Magenta for middle-row aliens
 COLOR_ALIEN_TYPE_2 = 11    # Yellow for bottom-row aliens
+COLOR_BORDER = 12          # Dim cyan for HUD border
+
+# Box-drawing characters for HUD border
+BORDER_H = "─"   # Horizontal line
+BORDER_V = "│"   # Vertical line
+BORDER_TL = "┌"  # Top-left corner
+BORDER_TR = "┐"  # Top-right corner
+BORDER_BL = "└"  # Bottom-left corner
+BORDER_BR = "┘"  # Bottom-right corner
 
 # Map alien type (0, 1, 2) to its color pair
 ALIEN_TYPE_COLORS = {
@@ -1730,6 +1739,9 @@ class Game:
         self._safe_addstr(0, self.width // 2 - len(level_text) // 2, level_text, curses.color_pair(COLOR_TEXT))
         self._safe_addstr(0, self.width - len(lives_display) - 2, lives_display, curses.color_pair(COLOR_TEXT))
 
+        # Render HUD separator and decorative border
+        self._render_hud_border()
+
         # Render aliens (color per type, bold in frenzy mode)
         total_aliens = self.config.alien_rows * self.config.alien_cols
         frenzy = len(self.aliens) < total_aliens * 0.3
@@ -1795,6 +1807,42 @@ class Game:
         if self.show_fps:
             fps_text = f"FPS: {self.frame_timer.average_fps:.0f}"
             self._safe_addstr(self.height - 1, 2, fps_text, curses.color_pair(COLOR_TEXT))
+
+    def get_border_layout(self) -> list:
+        """Return list of (row, col, char) tuples describing the HUD border.
+
+        This method computes the border layout without curses, making it testable.
+        """
+        elements = []
+        w = self.width
+        h = self.height
+
+        # HUD separator row (row 1, below the score/level/lives header)
+        hud_sep_row = 1
+        elements.append((hud_sep_row, 0, BORDER_V))
+        for col in range(1, max(1, w - 2)):
+            elements.append((hud_sep_row, col, BORDER_H))
+        elements.append((hud_sep_row, max(0, w - 2), BORDER_V))
+
+        # Left and right vertical borders (rows 2 through h-2)
+        for row in range(2, h - 1):
+            elements.append((row, 0, BORDER_V))
+            elements.append((row, max(0, w - 2), BORDER_V))
+
+        # Bottom border
+        bottom_row = h - 1
+        elements.append((bottom_row, 0, BORDER_BL))
+        for col in range(1, max(1, w - 2)):
+            elements.append((bottom_row, col, BORDER_H))
+        elements.append((bottom_row, max(0, w - 2), BORDER_BR))
+
+        return elements
+
+    def _render_hud_border(self) -> None:
+        """Render HUD separator line and decorative border using box-drawing chars."""
+        border_attr = curses.color_pair(COLOR_BORDER) | curses.A_DIM
+        for row, col, char in self.get_border_layout():
+            self._safe_addstr(row, col, char, border_attr)
 
     def _render_pause_overlay(self) -> None:
         """Render pause overlay on top of the game."""
@@ -1883,6 +1931,7 @@ class Game:
             curses.init_pair(COLOR_ALIEN_TYPE_0, curses.COLOR_CYAN, -1)
             curses.init_pair(COLOR_ALIEN_TYPE_1, curses.COLOR_MAGENTA, -1)
             curses.init_pair(COLOR_ALIEN_TYPE_2, curses.COLOR_YELLOW, -1)
+            curses.init_pair(COLOR_BORDER, curses.COLOR_CYAN, -1)
 
             # Get screen dimensions
             self.height, self.width = stdscr.getmaxyx()

@@ -28,9 +28,14 @@ from hypothesis import strategies as st
 
 from invaders import (
     ALIEN_TYPE_COLORS,
+    BORDER_BL,
+    BORDER_BR,
+    BORDER_H,
+    BORDER_V,
     COLOR_ALIEN_TYPE_0,
     COLOR_ALIEN_TYPE_1,
     COLOR_ALIEN_TYPE_2,
+    COLOR_BORDER,
     COLOR_BUNKER,
     COLOR_BUNKER_CRITICAL,
     COLOR_BUNKER_DAMAGED,
@@ -2836,6 +2841,58 @@ class TestColorPerAlienType(unittest.TestCase):
         game.update()
         self.assertEqual(b.flash_frames, 1, "Flash should decrement by 1")
         self.assertEqual(da.frame, 1, "Dying alien should advance one frame")
+
+
+class TestHUDBorder(unittest.TestCase):
+    """Tests for HUD separator line and decorative border (Step 34)."""
+
+    def test_border_layout_has_separator_at_row_1(self):
+        """Verify HUD separator line is placed at row 1."""
+        game = Game(test_mode=True)
+        layout = game.get_border_layout()
+        row1_elements = [(r, c, ch) for r, c, ch in layout if r == 1]
+        self.assertGreater(len(row1_elements), 0, "Should have elements at row 1")
+        # Check horizontal line characters fill the separator
+        h_chars = [ch for r, c, ch in row1_elements if ch == BORDER_H]
+        self.assertGreater(len(h_chars), 0, "Separator should contain horizontal line chars")
+
+    def test_border_layout_has_vertical_edges(self):
+        """Verify left and right vertical borders exist for game area rows."""
+        game = Game(test_mode=True)
+        layout = game.get_border_layout()
+        # Check rows 2 through height-2 have left (col 0) and right (col w-2) borders
+        for row in range(2, game.height - 1):
+            left = [(r, c, ch) for r, c, ch in layout if r == row and c == 0]
+            right = [(r, c, ch) for r, c, ch in layout if r == row and c == game.width - 2]
+            self.assertEqual(len(left), 1, f"Row {row} should have left border")
+            self.assertEqual(left[0][2], BORDER_V)
+            self.assertEqual(len(right), 1, f"Row {row} should have right border")
+            self.assertEqual(right[0][2], BORDER_V)
+
+    def test_border_layout_has_bottom_corners(self):
+        """Verify bottom border has corner characters."""
+        game = Game(test_mode=True)
+        layout = game.get_border_layout()
+        bottom_row = game.height - 1
+        bottom_elements = {(c, ch) for r, c, ch in layout if r == bottom_row}
+        self.assertIn((0, BORDER_BL), bottom_elements, "Bottom-left corner missing")
+        self.assertIn((game.width - 2, BORDER_BR), bottom_elements, "Bottom-right corner missing")
+
+    def test_border_color_constant_exists(self):
+        """Verify COLOR_BORDER constant is defined."""
+        self.assertEqual(COLOR_BORDER, 12)
+
+    def test_border_layout_element_count(self):
+        """Verify total border element count is reasonable for screen dimensions."""
+        game = Game(test_mode=True)
+        layout = game.get_border_layout()
+        w = game.width
+        h = game.height
+        # Separator row: 1 left V + (w-3) H chars + 1 right V = w-1
+        # Vertical borders: (h-3) rows * 2 = 2*(h-3)
+        # Bottom row: 1 BL + (w-3) H chars + 1 BR = w-1
+        expected = (w - 1) + 2 * (h - 3) + (w - 1)
+        self.assertEqual(len(layout), expected, f"Expected {expected} border elements for {w}x{h}")
 
 
 if __name__ == "__main__":
