@@ -699,6 +699,7 @@ class Projectile:
     y: float
     direction: int  # -1 for up (player), 1 for down (alien)
     trail: list = None  # Position history for trail effect (last 3 positions)
+    proj_type: str = "normal"  # "normal", "fast", or "heavy"
 
     def __post_init__(self) -> None:
         if self.trail is None:
@@ -710,6 +711,15 @@ class Projectile:
         if len(self.trail) > 3:
             self.trail.pop(0)
 
+
+# Alien projectile types: char, speed multiplier, bunker damage
+ALIEN_PROJ_TYPES = {
+    "normal": {"char": "!", "speed_mult": 1.0, "bunker_damage": 1},
+    "fast": {"char": "v", "speed_mult": 1.8, "bunker_damage": 1},
+    "heavy": {"char": "#", "speed_mult": 0.7, "bunker_damage": 3},  # Bunker-breaker
+}
+# Weighted probabilities for random selection (normal=60%, fast=25%, heavy=15%)
+ALIEN_PROJ_WEIGHTS = {"normal": 60, "fast": 25, "heavy": 15}
 
 MYSTERY_SHIP_CHAR = "=<UFO>="  # Wider 7-char sprite
 
@@ -2056,7 +2066,8 @@ class Game:
 
         # Alien projectiles move down (slower for easier dodging)
         for proj in self.alien_projectiles[:]:
-            proj.y += self.config.alien_projectile_speed
+            speed_mult = ALIEN_PROJ_TYPES.get(proj.proj_type, ALIEN_PROJ_TYPES["normal"])["speed_mult"]
+            proj.y += self.config.alien_projectile_speed * speed_mult
             if proj.y >= self.height:
                 self.alien_projectiles.remove(proj)
 
@@ -2066,10 +2077,15 @@ class Game:
             return
 
         fire_prob = self.get_alien_fire_probability()
+        proj_types = list(ALIEN_PROJ_WEIGHTS.keys())
+        proj_weights = list(ALIEN_PROJ_WEIGHTS.values())
 
         for alien in self.aliens:
             if random.random() < fire_prob:
-                self.alien_projectiles.append(Projectile(x=alien.x + 1, y=alien.y + 1, direction=1))
+                pt = random.choices(proj_types, weights=proj_weights, k=1)[0]
+                self.alien_projectiles.append(
+                    Projectile(x=alien.x + 1, y=alien.y + 1, direction=1, proj_type=pt)
+                )
 
     def _update_boss(self, current_time: float) -> None:
         """Update boss alien movement and firing."""
@@ -2186,7 +2202,10 @@ class Game:
             nearby_bunkers = bunker_grid.query_nearby(proj.x, proj.y)
             for bunker in nearby_bunkers:
                 if bunker.health > 0 and proj.x == bunker.x and proj.y == bunker.y:
-                    bunker.hit()
+                    damage = ALIEN_PROJ_TYPES.get(proj.proj_type, ALIEN_PROJ_TYPES["normal"])["bunker_damage"]
+                    for _ in range(damage):
+                        if bunker.health > 0:
+                            bunker.hit()
                     # Spawn debris particles falling downward
                     if not self.test_mode:
                         self.particle_system.spawn(
@@ -3049,7 +3068,11 @@ class Game:
                     self._safe_addstr(int(ty), int(tx), trail_chars[i], curses.color_pair(COLOR_PROJECTILE) | curses.A_DIM)
 
         for proj in self.alien_projectiles:
-            self._safe_addstr(proj.y, proj.x, self.config.projectile_alien, curses.color_pair(COLOR_GAME_OVER))
+            proj_info = ALIEN_PROJ_TYPES.get(proj.proj_type, ALIEN_PROJ_TYPES["normal"])
+            proj_attr = curses.color_pair(COLOR_GAME_OVER)
+            if proj.proj_type == "heavy":
+                proj_attr |= curses.A_BOLD
+            self._safe_addstr(proj.y, proj.x, proj_info["char"], proj_attr)
 
         # Render particles
         for p in self.particle_system.particles:

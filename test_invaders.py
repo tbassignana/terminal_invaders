@@ -34,6 +34,8 @@ from invaders import (
     ALIEN_BEHAVIOR_SHIELDED,
     ALIEN_BEHAVIOR_ZIGZAG,
     ALIEN_EXPLOSION_CONFIGS,
+    ALIEN_PROJ_TYPES,
+    ALIEN_PROJ_WEIGHTS,
     ALIEN_TYPE_COLORS,
     BORDER_BL,
     BORDER_BR,
@@ -5346,6 +5348,100 @@ class TestLastStandMechanic(unittest.TestCase):
         self.assertTrue(game.is_last_stand())
         game.player.lives = 2
         self.assertFalse(game.is_last_stand())
+
+
+class TestAlienProjectileVariety(unittest.TestCase):
+    """Tests for alien projectile types (normal, fast, heavy)."""
+
+    def _make_game(self):
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        return game
+
+    def test_proj_types_defined(self):
+        """All three projectile types are defined with required fields."""
+        for pt in ["normal", "fast", "heavy"]:
+            self.assertIn(pt, ALIEN_PROJ_TYPES)
+            info = ALIEN_PROJ_TYPES[pt]
+            self.assertIn("char", info)
+            self.assertIn("speed_mult", info)
+            self.assertIn("bunker_damage", info)
+
+    def test_proj_chars(self):
+        """Each projectile type has a distinct character."""
+        self.assertEqual(ALIEN_PROJ_TYPES["normal"]["char"], "!")
+        self.assertEqual(ALIEN_PROJ_TYPES["fast"]["char"], "v")
+        self.assertEqual(ALIEN_PROJ_TYPES["heavy"]["char"], "#")
+
+    def test_fast_proj_faster_than_normal(self):
+        """Fast projectile has higher speed multiplier than normal."""
+        self.assertGreater(
+            ALIEN_PROJ_TYPES["fast"]["speed_mult"],
+            ALIEN_PROJ_TYPES["normal"]["speed_mult"],
+        )
+
+    def test_heavy_proj_slower_than_normal(self):
+        """Heavy projectile has lower speed multiplier than normal."""
+        self.assertLess(
+            ALIEN_PROJ_TYPES["heavy"]["speed_mult"],
+            ALIEN_PROJ_TYPES["normal"]["speed_mult"],
+        )
+
+    def test_heavy_proj_more_bunker_damage(self):
+        """Heavy projectile does more bunker damage than normal."""
+        self.assertGreater(
+            ALIEN_PROJ_TYPES["heavy"]["bunker_damage"],
+            ALIEN_PROJ_TYPES["normal"]["bunker_damage"],
+        )
+
+    def test_weights_defined(self):
+        """Projectile weights are defined for all types."""
+        for pt in ALIEN_PROJ_TYPES:
+            self.assertIn(pt, ALIEN_PROJ_WEIGHTS)
+
+    def test_projectile_default_type(self):
+        """Projectile defaults to 'normal' type."""
+        proj = Projectile(x=5, y=10, direction=1)
+        self.assertEqual(proj.proj_type, "normal")
+
+    def test_projectile_custom_type(self):
+        """Projectile can be created with a custom type."""
+        proj = Projectile(x=5, y=10, direction=1, proj_type="fast")
+        self.assertEqual(proj.proj_type, "fast")
+
+    def test_alien_fire_assigns_proj_type(self):
+        """Alien fire creates projectiles with a valid proj_type."""
+        game = self._make_game()
+        game.aliens = [Alien(x=10, y=5, alien_type=0)]
+        # Force fire by setting very high probability
+        random.seed(42)
+        with unittest.mock.patch.object(game, "get_alien_fire_probability", return_value=1.0):
+            game._alien_fire()
+        self.assertTrue(len(game.alien_projectiles) > 0)
+        for proj in game.alien_projectiles:
+            self.assertIn(proj.proj_type, ALIEN_PROJ_TYPES)
+
+    def test_fast_proj_moves_faster(self):
+        """Fast projectile moves further per update than normal."""
+        game = self._make_game()
+        game.height = 50
+        normal_proj = Projectile(x=10, y=5.0, direction=1, proj_type="normal")
+        fast_proj = Projectile(x=10, y=5.0, direction=1, proj_type="fast")
+        game.alien_projectiles = [normal_proj, fast_proj]
+        game._update_projectiles()
+        self.assertGreater(fast_proj.y, normal_proj.y)
+
+    def test_heavy_proj_extra_bunker_damage(self):
+        """Heavy projectile destroys bunker faster (3 damage)."""
+        game = self._make_game()
+        bunker = Bunker(x=10, y=15, health=3)
+        game.bunkers = [bunker]
+        game.alien_projectiles = [
+            Projectile(x=10, y=15, direction=1, proj_type="heavy")
+        ]
+        game._check_collisions()
+        # Heavy does 3 damage to a 3-HP bunker → destroyed
+        self.assertEqual(bunker.health, 0)
 
 
 if __name__ == "__main__":

@@ -107,7 +107,7 @@
 - [x] **Step 62:** Add collectible coins/gems dropped by aliens (bronze/silver/gold with timed expiry)
 - [x] **Step 63:** Add progressive alien speed increase within a level (original SI acceleration)
 - [x] **Step 64:** Add "last stand" mechanic (buffs at 1 life: speed boost, double fire slots)
-- [ ] **Step 65:** Add alien projectile variety (normal `!`, fast `v`, heavy `#` bunker-breaker)
+- [x] **Step 65:** Add alien projectile variety (normal `!`, fast `v`, heavy `#` bunker-breaker)
 - [ ] **Step 66:** Add screen-clearing bomb power-up (B pickup, destroys all alien projectiles)
 - [ ] **Step 67:** Add alien dive-bomb attack (break formation, diagonal dive toward player)
 - [ ] **Step 68:** Add score threshold milestones with bonus life rewards (1K, 2.5K, 5K, 10K, 25K, 50K)
