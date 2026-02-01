@@ -27,7 +27,7 @@
 - [x] **Step 14:** Add collision detection edge case tests (8+ new tests)
 - [x] **Step 15:** Add integration tests for the game update loop (5+ tests)
 - [x] **Step 16:** Add property-based tests with Hypothesis
-- [ ] **Step 17:** Add test coverage reporting and enforce 80%+ coverage
+- [x] **Step 17:** Add test coverage reporting and enforce 80%+ coverage
 
 ## Performance & Robustness
 

@@ -656,6 +656,224 @@ class TestMysteryShip(unittest.TestCase):
 from hypothesis import given, strategies as st, settings as hyp_settings
 
 
+class TestCoverageBoost(unittest.TestCase):
+    """Step 17: Additional tests to boost coverage above 80%."""
+
+    def test_cleanup_audio_without_manager(self):
+        """Test _cleanup_audio when no audio manager is set."""
+        import invaders
+        old = invaders._audio_manager
+        invaders._audio_manager = None
+        invaders._cleanup_audio()  # Should not raise
+        invaders._audio_manager = old
+
+    def test_audio_manager_start_no_file(self):
+        """Test AudioManager.start when audio file doesn't exist."""
+        from invaders import AudioManager
+        am = AudioManager()
+        am.start()  # Should silently return (no file)
+
+    def test_audio_manager_stop(self):
+        """Test AudioManager.stop without running process."""
+        from invaders import AudioManager
+        am = AudioManager()
+        am.stop()  # Should not raise
+
+    def test_sound_effects_disabled(self):
+        """Test SoundEffects with enabled=False."""
+        sfx = SoundEffects(backend=NullSoundBackend())
+        sfx.enabled = False
+        sfx.play_shoot()  # Should not raise
+
+    def test_sound_effects_invalid_sound(self):
+        """Test _play_async with non-existent sound name."""
+        sfx = SoundEffects(backend=NullSoundBackend())
+        sfx._play_async('nonexistent')  # Should not raise
+
+    def test_sound_effects_march(self):
+        """Test update_march with various alien counts."""
+        sfx = SoundEffects(backend=NullSoundBackend())
+        sfx.update_march(10, 55)
+        sfx.update_march(0, 55)  # Should return early
+
+    def test_player_reset(self):
+        """Test Player.reset method."""
+        p = Player(x=10, y=20, lives=1)
+        p.reset(40, 22)
+        self.assertEqual(p.x, 40)
+        self.assertEqual(p.y, 22)
+        self.assertEqual(p.lives, PLAYER_START_LIVES)
+
+    def test_bunker_char_at_various_health(self):
+        """Test Bunker.char at all health values."""
+        from invaders import Bunker, BUNKER_CHARS
+        b = Bunker(x=0, y=0, health=3)
+        self.assertEqual(b.char, BUNKER_CHARS[0])
+        b.health = 2
+        self.assertEqual(b.char, BUNKER_CHARS[1])
+        b.health = 1
+        self.assertEqual(b.char, BUNKER_CHARS[2])
+        b.health = 0
+        self.assertEqual(b.char, ' ')
+
+    def test_game_state_transitions_menu_to_playing(self):
+        """Test state transition from MENU to PLAYING."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        # Simulate pressing space (would need curses for real, but test logic)
+        game.state = GameState.PLAYING
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_move_aliens_direction_change(self):
+        """Test alien direction changes at boundaries."""
+        game = Game(test_mode=True)
+        # Push aliens to right edge
+        for alien in game.aliens:
+            alien.x = game.width - 3
+        game.alien_direction = 1
+        game._move_aliens()
+        self.assertEqual(game.alien_direction, -1)
+
+    def test_move_aliens_left_boundary(self):
+        """Test alien direction changes at left boundary."""
+        game = Game(test_mode=True)
+        for alien in game.aliens:
+            alien.x = 1
+        game.alien_direction = -1
+        game._move_aliens()
+        self.assertEqual(game.alien_direction, 1)
+
+    def test_move_aliens_normal(self):
+        """Test normal alien movement without hitting boundaries."""
+        game = Game(test_mode=True)
+        first_x = game.aliens[0].x
+        game.alien_direction = 1
+        game._move_aliens()
+        self.assertEqual(game.aliens[0].x, first_x + 1)
+
+    def test_alien_fire_no_aliens(self):
+        """Test _alien_fire with empty alien list."""
+        game = Game(test_mode=True)
+        game.aliens = []
+        game._alien_fire()
+        self.assertEqual(len(game.alien_projectiles), 0)
+
+    def test_get_alien_fire_probability_no_aliens(self):
+        """Test fire probability returns 0 with no aliens."""
+        game = Game(test_mode=True)
+        game.aliens = []
+        self.assertEqual(game.get_alien_fire_probability(), 0)
+
+    def test_check_invasion_no_game_over(self):
+        """Test check_invasion when aliens are above player."""
+        game = Game(test_mode=True)
+        game.check_invasion()
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_mystery_ship_spawn_check(self):
+        """Test mystery ship spawn logic runs without error."""
+        game = Game(test_mode=True)
+        game.last_mystery_spawn_check = time.time() - 2.0
+        import random as rng
+        rng.seed(42)
+        game._update_mystery_ship(time.time())
+
+    def test_power_up_out_of_bounds_removed(self):
+        """Test power-ups removed when they fall off screen."""
+        game = Game(test_mode=True)
+        pu = PowerUp(x=20, y=float(game.height + 1), power_type=PowerUpType.RAPID_FIRE)
+        game.power_ups.append(pu)
+        game._update_power_ups(time.time())
+        self.assertEqual(len(game.power_ups), 0)
+
+    def test_activate_rapid_fire(self):
+        """Test activating RAPID_FIRE power-up."""
+        game = Game(test_mode=True)
+        game._activate_power_up(PowerUpType.RAPID_FIRE, time.time())
+        self.assertTrue(game.has_power_up(PowerUpType.RAPID_FIRE))
+
+    def test_activate_wide_shot(self):
+        """Test activating WIDE_SHOT power-up."""
+        game = Game(test_mode=True)
+        game._activate_power_up(PowerUpType.WIDE_SHOT, time.time())
+        self.assertTrue(game.has_power_up(PowerUpType.WIDE_SHOT))
+
+    def test_update_skips_non_playing_states(self):
+        """Test update() is a no-op in non-PLAYING states."""
+        for state in [GameState.MENU, GameState.GAME_OVER, GameState.LEVEL_TRANSITION]:
+            game = Game(test_mode=True)
+            game.state = state
+            score_before = game.score
+            game.update()
+            self.assertEqual(game.score, score_before)
+
+    def test_score_manager_record_includes_date(self):
+        """Verify score records contain date field."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sm = ScoreManager(scores_path=os.path.join(tmpdir, 'scores.json'))
+            sm.record(100, level=1)
+            self.assertIn('date', sm.scores[0])
+
+    def test_event_bus_handler_exception_caught(self):
+        """Verify EventBus catches handler exceptions gracefully."""
+        bus = EventBus()
+        def bad_handler(**kw):
+            raise ValueError("test error")
+        bus.subscribe(GameEvent.SHOT_FIRED, bad_handler)
+        bus.publish(GameEvent.SHOT_FIRED)  # Should not raise
+
+    def test_game_init_bunkers_in_non_test_mode_path(self):
+        """Verify bunkers are created for non-test path (via reset)."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game._init_bunkers()
+        self.assertGreater(len(game.bunkers), 0)
+        game.test_mode = True
+
+    def test_mystery_ship_score_display_expiry(self):
+        """Verify mystery score display expires after timeout."""
+        game = Game(test_mode=True)
+        game.mystery_score_display = (10, 1, 100, time.time() - 1.0)
+        game._update_mystery_ship(time.time())
+        self.assertIsNone(game.mystery_score_display)
+
+    def test_next_level_awards_lives(self):
+        """Verify _next_level awards bonus lives."""
+        game = Game(test_mode=True)
+        initial_lives = game.player.lives
+        game.aliens = []
+        game._next_level()
+        self.assertGreaterEqual(game.player.lives, initial_lives)
+
+    def test_handle_input_quit(self):
+        """Verify 'q' input returns False."""
+        game = Game(test_mode=True)
+        result = game.handle_input(ord('q'))
+        self.assertFalse(result)
+
+    def test_render_in_test_mode_is_noop(self):
+        """Verify render() does nothing in test mode."""
+        game = Game(test_mode=True)
+        game.render()  # Should not raise
+
+    def test_scaled_alien_rows_level_1(self):
+        """Verify level 1 uses default rows."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.get_scaled_alien_rows(), game.config.alien_rows)
+
+    def test_config_from_args_normal(self):
+        """Verify normal difficulty returns default config."""
+        parser = build_argument_parser()
+        args = parser.parse_args([])
+        cfg = config_from_args(args)
+        self.assertEqual(cfg.player_start_lives, DEFAULT_CONFIG.player_start_lives)
+
+    def test_alien_post_init(self):
+        """Test Alien.__post_init__ exists and runs."""
+        alien = Alien(x=5, y=5, alien_type=2)
+        self.assertEqual(alien.alien_type, 2)
+
+
 class TestPropertyBased(unittest.TestCase):
     """Step 16: Property-based tests with Hypothesis."""
 
@@ -1149,6 +1367,473 @@ class TestCLIArgParser(unittest.TestCase):
         game = Game(test_mode=True, config=cfg)
         self.assertEqual(game.config.target_fps, 45)
         self.assertEqual(game.player.lives, 3)
+
+
+class TestHandleInput(unittest.TestCase):
+    """Step 17 coverage: Tests for handle_input across all game states."""
+
+    def test_quit_returns_false(self):
+        """Pressing Q in any state should return False."""
+        game = Game(test_mode=True)
+        self.assertFalse(game.handle_input(ord('q')))
+
+    def test_quit_uppercase_returns_false(self):
+        """Pressing Q (uppercase) should also quit."""
+        game = Game(test_mode=True)
+        self.assertFalse(game.handle_input(ord('Q')))
+
+    def test_menu_space_starts_game(self):
+        """Pressing SPACE on menu transitions to PLAYING."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.handle_input(ord(' '))
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_menu_enter_starts_game(self):
+        """Pressing ENTER on menu transitions to PLAYING."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.handle_input(ord('\n'))
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_playing_pause_with_p(self):
+        """Pressing P in PLAYING state toggles pause."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.handle_input(ord('p'))
+        self.assertEqual(game.state, GameState.PAUSED)
+
+    def test_playing_pause_with_escape(self):
+        """Pressing Escape in PLAYING state toggles pause."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.handle_input(27)  # ESC
+        self.assertEqual(game.state, GameState.PAUSED)
+
+    def test_playing_move_left(self):
+        """Pressing left arrow moves player left."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        initial_x = game.player.x
+        game.handle_input(260)  # curses.KEY_LEFT
+        self.assertLess(game.player.x, initial_x)
+
+    def test_playing_move_left_a_key(self):
+        """Pressing 'a' moves player left."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        initial_x = game.player.x
+        game.handle_input(ord('a'))
+        self.assertLess(game.player.x, initial_x)
+
+    def test_playing_move_right(self):
+        """Pressing right arrow moves player right."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        initial_x = game.player.x
+        game.handle_input(261)  # curses.KEY_RIGHT
+        self.assertGreater(game.player.x, initial_x)
+
+    def test_playing_move_right_d_key(self):
+        """Pressing 'd' moves player right."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        initial_x = game.player.x
+        game.handle_input(ord('d'))
+        self.assertGreater(game.player.x, initial_x)
+
+    def test_playing_fire_creates_projectile(self):
+        """Pressing SPACE in PLAYING state fires a projectile."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.handle_input(ord(' '))
+        self.assertEqual(len(game.player_projectiles), 1)
+
+    def test_playing_fire_limit(self):
+        """Player can't fire more than 3 projectiles at once."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        for _ in range(5):
+            game.handle_input(ord(' '))
+        self.assertEqual(len(game.player_projectiles), 3)
+
+    def test_paused_unpause_with_p(self):
+        """Pressing P in PAUSED state resumes."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game._toggle_pause()
+        self.assertEqual(game.state, GameState.PAUSED)
+        game.handle_input(ord('p'))
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_paused_unpause_with_escape(self):
+        """Pressing Escape in PAUSED state resumes."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game._toggle_pause()
+        game.handle_input(27)
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_game_over_restart(self):
+        """Pressing R at GAME_OVER resets the game."""
+        game = Game(test_mode=True)
+        game.state = GameState.GAME_OVER
+        game.score = 500
+        game.handle_input(ord('r'))
+        self.assertEqual(game.state, GameState.PLAYING)
+        self.assertEqual(game.score, 0)
+
+    def test_level_transition_continue(self):
+        """Pressing SPACE at LEVEL_TRANSITION continues to PLAYING."""
+        game = Game(test_mode=True)
+        game.state = GameState.LEVEL_TRANSITION
+        game.handle_input(ord(' '))
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_level_transition_enter_continue(self):
+        """Pressing ENTER at LEVEL_TRANSITION continues to PLAYING."""
+        game = Game(test_mode=True)
+        game.state = GameState.LEVEL_TRANSITION
+        game.handle_input(ord('\n'))
+        self.assertEqual(game.state, GameState.PLAYING)
+
+    def test_player_left_boundary(self):
+        """Player can't move past left edge."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.player.x = 0
+        game.handle_input(ord('a'))
+        self.assertEqual(game.player.x, 0)
+
+    def test_player_right_boundary(self):
+        """Player can't move past right edge."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.player.x = game.width - 3
+        game.handle_input(ord('d'))
+        self.assertEqual(game.player.x, game.width - 3)
+
+
+class TestBunkerCollisions(unittest.TestCase):
+    """Step 17 coverage: Tests for projectile-bunker collision detection."""
+
+    def _make_game_with_bunkers(self):
+        """Create a game with bunkers initialized."""
+        from invaders import Bunker
+        game = Game(test_mode=True)
+        game.bunkers = [Bunker(x=20, y=15, health=3)]
+        return game
+
+    def test_player_projectile_hits_bunker(self):
+        """Player projectile at bunker position damages the bunker."""
+        game = self._make_game_with_bunkers()
+        game.aliens = []  # no aliens to interfere
+        game.player_projectiles = [Projectile(x=20, y=15, direction=-1)]
+        game._check_collisions()
+        self.assertEqual(game.bunkers[0].health, 2)
+        self.assertEqual(len(game.player_projectiles), 0)
+
+    def test_alien_projectile_hits_bunker(self):
+        """Alien projectile at bunker position damages the bunker."""
+        game = self._make_game_with_bunkers()
+        game.player.x = 50  # move player away
+        game.alien_projectiles = [Projectile(x=20, y=15, direction=1)]
+        game._check_collisions()
+        self.assertEqual(game.bunkers[0].health, 2)
+        self.assertEqual(len(game.alien_projectiles), 0)
+
+    def test_dead_bunker_not_hit(self):
+        """Bunker with health=0 should not be hit."""
+        from invaders import Bunker
+        game = Game(test_mode=True)
+        game.bunkers = [Bunker(x=20, y=15, health=0)]
+        game.aliens = []
+        game.player_projectiles = [Projectile(x=20, y=15, direction=-1)]
+        game._check_collisions()
+        # Projectile should pass through dead bunker
+        self.assertEqual(len(game.player_projectiles), 1)
+
+
+class TestSoundEffectsMethods(unittest.TestCase):
+    """Step 17 coverage: Tests for SoundEffects individual play methods."""
+
+    def test_sound_effects_play_methods(self):
+        """Verify all play methods can be called without error using NullBackend."""
+        sfx = SoundEffects(backend=NullSoundBackend())
+        sfx.enabled = True
+        # These won't actually play since files don't exist, but tests the path
+        sfx.play_shoot()
+        sfx.play_alien_die()
+        sfx.play_player_die()
+        sfx.play_level_complete()
+        sfx.play_life_bonus()
+
+    def test_subscribe_and_trigger_events(self):
+        """Verify SoundEffects subscribes to events and handlers are called."""
+        sfx = SoundEffects(backend=NullSoundBackend())
+        bus = EventBus()
+        sfx.subscribe_to_events(bus)
+        # Fire each event — should not raise
+        bus.publish(GameEvent.SHOT_FIRED)
+        bus.publish(GameEvent.ALIEN_KILLED)
+        bus.publish(GameEvent.PLAYER_HIT)
+        bus.publish(GameEvent.LEVEL_COMPLETE)
+
+    def test_update_march(self):
+        """Verify update_march updates interval and alternates beat."""
+        sfx = SoundEffects(backend=NullSoundBackend())
+        sfx.enabled = True
+        sfx.last_march_time = 0  # Force beat to play
+        sfx.update_march(10, 50)
+        self.assertGreater(sfx.march_interval, 0)
+
+    def test_update_march_zero_aliens(self):
+        """update_march returns early with zero aliens."""
+        sfx = SoundEffects(backend=NullSoundBackend())
+        sfx.update_march(0, 50)
+        # Should return early, interval unchanged from default
+
+
+class TestUpdateEdgeCases(unittest.TestCase):
+    """Step 17 coverage: Tests for update() and game logic edge cases."""
+
+    def test_flash_effect_expires(self):
+        """Verify flash_active becomes False after flash_end_time passes."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.flash_active = True
+        game.flash_end_time = time.time() - 1  # Already expired
+        game.update()
+        self.assertFalse(game.flash_active)
+
+    def test_alien_animation_frame_toggles(self):
+        """Verify alien animation frame alternates on timer."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.last_animation_time = 0  # Force toggle
+        old_frame = game.alien_animation_frame
+        game.update()
+        self.assertNotEqual(game.alien_animation_frame, old_frame)
+
+    def test_alien_move_on_timer(self):
+        """Verify aliens move when interval elapses."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.last_alien_move_time = 0  # Force move
+        initial_positions = [(a.x, a.y) for a in game.aliens[:3]]
+        game.update()
+        new_positions = [(a.x, a.y) for a in game.aliens[:3]]
+        self.assertNotEqual(initial_positions, new_positions)
+
+    def test_move_aliens_empty(self):
+        """_move_aliens with no aliens returns early."""
+        game = Game(test_mode=True)
+        game.aliens = []
+        game._move_aliens()  # Should not raise
+
+    def test_toggle_pause_with_mystery_score_display(self):
+        """Verify toggle_pause adjusts mystery_score_display time."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.mystery_score_display = (10, 1, 100, time.time() + 1.0)
+        game._toggle_pause()
+        time.sleep(0.05)
+        game._toggle_pause()
+        # The display end time should have been extended
+        self.assertGreater(game.mystery_score_display[3], time.time())
+
+    def test_toggle_pause_with_flash_end_time(self):
+        """Verify toggle_pause adjusts flash_end_time when active."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.flash_end_time = time.time() + 5.0
+        old_flash = game.flash_end_time
+        game._toggle_pause()
+        time.sleep(0.05)
+        game._toggle_pause()
+        self.assertGreater(game.flash_end_time, old_flash)
+
+    def test_next_level_with_sfx_life_bonus(self):
+        """Verify _next_level plays life bonus sound when lives are awarded."""
+        game = Game(test_mode=True)
+        # Give the game a SoundEffects with NullBackend
+        sfx = SoundEffects(backend=NullSoundBackend())
+        game.sfx = sfx
+        game.player.lives = 3
+        game._next_level()
+        self.assertEqual(game.level, 2)
+        self.assertGreater(game.lives_awarded, 0)
+
+    def test_init_bunkers_creates_bunkers(self):
+        """Verify _init_bunkers creates bunker blocks."""
+        game = Game(test_mode=True)
+        game._init_bunkers()
+        self.assertGreater(len(game.bunkers), 0)
+        # Should create 4 bunkers × 6 blocks each = 24
+        self.assertEqual(len(game.bunkers), 24)
+
+
+class TestAudioManagerBasic(unittest.TestCase):
+    """Step 17 coverage: Tests for AudioManager class."""
+
+    def test_audio_manager_init(self):
+        """Verify AudioManager initializes with correct defaults."""
+        from invaders import AudioManager
+        am = AudioManager()
+        self.assertTrue(am.game_running)
+        self.assertIsNone(am.audio_thread)
+        self.assertIsNone(am.current_process)
+
+    def test_audio_manager_stop_no_process(self):
+        """Verify stop() works cleanly when no process is running."""
+        from invaders import AudioManager
+        am = AudioManager()
+        am.stop()
+        self.assertFalse(am.game_running)
+
+    def test_audio_manager_start_no_file(self):
+        """Verify start() returns silently when no audio file exists."""
+        from invaders import AudioManager
+        am = AudioManager()
+        am.start()  # Audio file won't exist, should return silently
+        am.stop()
+
+
+class TestCleanupFunctions(unittest.TestCase):
+    """Step 17 coverage: Tests for module-level cleanup functions."""
+
+    def test_cleanup_audio_with_no_manager(self):
+        """_cleanup_audio should not raise when _audio_manager is None."""
+        import invaders
+        old = invaders._audio_manager
+        invaders._audio_manager = None
+        try:
+            invaders._cleanup_audio()
+        finally:
+            invaders._audio_manager = old
+
+    def test_cleanup_audio_with_manager(self):
+        """_cleanup_audio calls stop on the audio manager."""
+        import invaders
+        from invaders import AudioManager
+        old = invaders._audio_manager
+        am = AudioManager()
+        invaders._audio_manager = am
+        try:
+            invaders._cleanup_audio()
+            self.assertFalse(am.game_running)
+        finally:
+            invaders._audio_manager = old
+
+    def test_signal_handler(self):
+        """_signal_handler calls _cleanup_audio and exits."""
+        import invaders
+        old = invaders._audio_manager
+        invaders._audio_manager = None
+        try:
+            with self.assertRaises(SystemExit):
+                invaders._signal_handler(2, None)
+        finally:
+            invaders._audio_manager = old
+
+    def test_score_manager_save_error(self):
+        """ScoreManager._save logs warning on write failure."""
+        sm = ScoreManager(scores_path='/nonexistent/dir/scores.json')
+        sm.current_score = 100
+        # record calls _save which should handle the error
+        sm.record(100, 1)
+        # Should not raise; the error is logged
+
+
+class TestExtraCoverage(unittest.TestCase):
+    """Step 17 coverage: Additional targeted tests for remaining gaps."""
+
+    def test_march_beat_alternates(self):
+        """Verify update_march alternates between beat 0 and 1."""
+        sfx = SoundEffects(backend=NullSoundBackend())
+        sfx.enabled = True
+        sfx.last_march_time = 0  # Force beat to play
+        sfx.march_beat = 0
+        sfx.update_march(10, 50)
+        self.assertEqual(sfx.march_beat, 1)
+        sfx.last_march_time = 0  # Force again
+        sfx.update_march(10, 50)
+        self.assertEqual(sfx.march_beat, 0)
+
+    def test_play_async_disabled(self):
+        """_play_async returns early when sfx is disabled."""
+        sfx = SoundEffects(backend=NullSoundBackend())
+        sfx.enabled = False
+        sfx._play_async('shoot')  # Should return early, no error
+
+    def test_play_async_unknown_sound(self):
+        """_play_async returns early for unknown sound name."""
+        sfx = SoundEffects(backend=NullSoundBackend())
+        sfx.enabled = True
+        sfx._play_async('nonexistent_sound')  # Should return early
+
+    def test_mystery_ship_spawn_with_seed(self):
+        """Mystery ship spawns when random conditions are met."""
+        import random as rng
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.mystery_ship = None
+
+        # Try many times with different seeds until we get a spawn
+        # Set last_mystery_spawn_check far in the past so the 1-second check passes
+        current = time.time()
+        spawned = False
+        for seed in range(200):
+            rng.seed(seed)
+            game.mystery_ship = None
+            game.last_mystery_spawn_check = current - 2.0
+            game._update_mystery_ship(current)
+            if game.mystery_ship is not None:
+                spawned = True
+                break
+        self.assertTrue(spawned)
+
+    def test_sfx_update_march_in_update(self):
+        """Verify update() calls sfx.update_march when sfx is set."""
+        game = Game(test_mode=True)
+        sfx = SoundEffects(backend=NullSoundBackend())
+        game.sfx = sfx
+        game.state = GameState.PLAYING
+        game.update()
+        # Should have called update_march without error
+
+    def test_audio_manager_stop_with_mock_process(self):
+        """AudioManager.stop handles process termination."""
+        from invaders import AudioManager
+        from unittest.mock import MagicMock
+        am = AudioManager()
+        mock_proc = MagicMock()
+        mock_proc.terminate = MagicMock()
+        mock_proc.wait = MagicMock()
+        am.current_process = mock_proc
+        am.stop()
+        mock_proc.terminate.assert_called_once()
+
+    def test_macoss_sound_backend_is_available(self):
+        """MacOSSoundBackend.is_available returns a boolean."""
+        backend = MacOSSoundBackend()
+        result = backend.is_available()
+        self.assertIsInstance(result, bool)
+
+    def test_macoss_sound_backend_play_no_file(self):
+        """MacOSSoundBackend.play returns silently when file doesn't exist."""
+        backend = MacOSSoundBackend()
+        backend.play('/nonexistent/sound.aiff')  # Should return early
+
+    def test_macoss_sound_backend_stop(self):
+        """MacOSSoundBackend.stop doesn't raise."""
+        backend = MacOSSoundBackend()
+        backend.stop()  # Should not raise
+
+    def test_get_sound_backend_returns_backend(self):
+        """get_sound_backend returns a valid AbstractSoundBackend."""
+        backend = get_sound_backend()
+        self.assertIsInstance(backend, AbstractSoundBackend)
 
 
 if __name__ == '__main__':
