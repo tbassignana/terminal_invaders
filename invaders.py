@@ -719,6 +719,19 @@ BOSS_HP_PER_LEVEL = 5  # HP per boss level tier (level 5=5HP, level 10=10HP, etc
 BOSS_POINTS = 500  # Base points for defeating a boss
 BOSS_FIRE_INTERVAL = 1.5  # Seconds between boss shots
 
+# Weapon upgrade system: kills needed for each level, projectile offsets, speed multiplier
+WEAPON_MAX_LEVEL = 5
+WEAPON_KILLS_PER_LEVEL = 15  # Kills to reach next weapon level
+# Projectile x-offsets relative to player center (player.x + 1) for each weapon level
+WEAPON_PATTERNS = {
+    1: [(0, 0)],                            # Single: center
+    2: [(-1, 0), (1, 0)],                   # Dual: left + right
+    3: [(-1, 0), (0, 0), (1, 0)],           # Triple: left + center + right
+    4: [(-2, 0), (-1, 0), (1, 0), (2, 0)],  # Quad: wide spread
+    5: [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)],  # Quad+ (5 shots + speed boost for level 5 is handled separately)
+}
+WEAPON_SPEED_BONUS = {1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.3}  # Level 5 = 30% faster
+
 
 @dataclass
 class BossAlien:
@@ -1294,6 +1307,7 @@ class Game:
         self.initial_alien_count: int = 0  # Set by _init_aliens()
         self.current_wave: int = 1  # Sub-wave within a level (1-3)
         self.max_waves: int = 3  # Waves per level
+        self.weapon_level: int = 1  # Weapon upgrade level (1-5)
 
         # Game stats tracking (for game over screen)
         self.total_shots: int = 0
@@ -1695,6 +1709,9 @@ class Game:
         # Check collisions
         self._check_collisions()
 
+        # Update weapon level based on kills
+        self._update_weapon_level()
+
         # Update power-ups
         self._update_power_ups(current_time)
 
@@ -1906,10 +1923,11 @@ class Game:
 
     def _update_projectiles(self) -> None:
         """Update all projectile positions."""
-        # Player projectiles move up (faster)
+        # Player projectiles move up (faster with weapon speed bonus)
+        speed_mult = WEAPON_SPEED_BONUS.get(self.weapon_level, 1.0)
         for proj in self.player_projectiles[:]:
             proj.record_position()
-            proj.y -= self.config.player_projectile_speed
+            proj.y -= self.config.player_projectile_speed * speed_mult
             if proj.y < 0:
                 self.player_projectiles.remove(proj)
 
@@ -2144,6 +2162,24 @@ class Game:
             "is_final_wave": self.current_wave >= self.max_waves,
         }
 
+    def get_weapon_info(self) -> dict:
+        """Return weapon upgrade state for display/testing."""
+        kills_for_next = WEAPON_KILLS_PER_LEVEL * self.weapon_level
+        pattern = WEAPON_PATTERNS.get(self.weapon_level, WEAPON_PATTERNS[1])
+        return {
+            "level": self.weapon_level,
+            "max_level": WEAPON_MAX_LEVEL,
+            "shots_per_fire": len(pattern),
+            "speed_bonus": WEAPON_SPEED_BONUS.get(self.weapon_level, 1.0),
+            "kills_to_next": max(0, kills_for_next - self.total_kills),
+            "is_maxed": self.weapon_level >= WEAPON_MAX_LEVEL,
+        }
+
+    def _update_weapon_level(self) -> None:
+        """Recalculate weapon level based on total kills."""
+        new_level = min(WEAPON_MAX_LEVEL, 1 + self.total_kills // WEAPON_KILLS_PER_LEVEL)
+        self.weapon_level = max(1, new_level)
+
     def get_scaled_bunker_health(self) -> int:
         """Return starting bunker health for the current level (reduced every 5 levels, min 1)."""
         reduction = (self.level - 1) // 5
@@ -2330,9 +2366,15 @@ class Game:
                 self.player.x = min(self.width - 3, self.player.x + self.config.player_speed)
                 self.player_move_direction = 1
             elif key == ord(" "):
-                # Fire projectile
-                if len(self.player_projectiles) < 3:  # Limit active projectiles
-                    self.player_projectiles.append(Projectile(x=self.player.x + 1, y=self.player.y - 1, direction=-1))
+                # Fire projectile(s) based on weapon level
+                max_proj = 3 + self.weapon_level  # Higher weapon = more active projectiles allowed
+                if len(self.player_projectiles) < max_proj:
+                    pattern = WEAPON_PATTERNS.get(self.weapon_level, WEAPON_PATTERNS[1])
+                    cx = self.player.x + 1
+                    for dx, dy in pattern:
+                        self.player_projectiles.append(
+                            Projectile(x=cx + dx, y=self.player.y - 1 + dy, direction=-1)
+                        )
                     self.total_shots += 1
                     self.event_bus.publish(GameEvent.SHOT_FIRED)
 

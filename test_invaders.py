@@ -64,6 +64,10 @@ from invaders import (
     POWERUP_LABELS,
     TITLE_ART,
     TITLE_COLOR_CYCLE,
+    WEAPON_KILLS_PER_LEVEL,
+    WEAPON_MAX_LEVEL,
+    WEAPON_PATTERNS,
+    WEAPON_SPEED_BONUS,
     AbstractSoundBackend,
     ActivePowerUp,
     Alien,
@@ -1496,12 +1500,13 @@ class TestHandleInput(unittest.TestCase):
         self.assertEqual(len(game.player_projectiles), 1)
 
     def test_playing_fire_limit(self):
-        """Player can't fire more than 3 projectiles at once."""
+        """Player can't fire more than max projectiles at once."""
         game = Game(test_mode=True)
         game.state = GameState.PLAYING
-        for _ in range(5):
+        max_proj = 3 + game.weapon_level  # Weapon level affects max
+        for _ in range(max_proj + 5):
             game.handle_input(ord(" "))
-        self.assertEqual(len(game.player_projectiles), 3)
+        self.assertEqual(len(game.player_projectiles), max_proj)
 
     def test_paused_unpause_with_p(self):
         """Pressing P in PAUSED state resumes."""
@@ -4947,6 +4952,74 @@ class TestWaveSubLevels(unittest.TestCase):
         game.aliens = []
         game.update()  # Should trigger _next_level
         self.assertEqual(game.current_wave, 1)
+
+
+class TestWeaponUpgradeSystem(unittest.TestCase):
+    """Step 60: Player weapon upgrade system."""
+
+    def test_initial_weapon_level(self):
+        """Game starts at weapon level 1."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.weapon_level, 1)
+
+    def test_weapon_patterns_defined(self):
+        """WEAPON_PATTERNS has entries for levels 1-5."""
+        for level in range(1, 6):
+            self.assertIn(level, WEAPON_PATTERNS)
+
+    def test_weapon_level_1_fires_single(self):
+        """Weapon level 1 fires a single projectile."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.handle_input(ord(" "))
+        self.assertEqual(len(game.player_projectiles), 1)
+
+    def test_weapon_level_2_fires_dual(self):
+        """Weapon level 2 fires two projectiles."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.weapon_level = 2
+        game.handle_input(ord(" "))
+        self.assertEqual(len(game.player_projectiles), 2)
+
+    def test_weapon_level_3_fires_triple(self):
+        """Weapon level 3 fires three projectiles."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.weapon_level = 3
+        game.handle_input(ord(" "))
+        self.assertEqual(len(game.player_projectiles), 3)
+
+    def test_weapon_level_increases_with_kills(self):
+        """Weapon level increases after enough kills."""
+        game = Game(test_mode=True)
+        game.total_kills = WEAPON_KILLS_PER_LEVEL
+        game._update_weapon_level()
+        self.assertEqual(game.weapon_level, 2)
+
+    def test_weapon_level_capped_at_max(self):
+        """Weapon level doesn't exceed WEAPON_MAX_LEVEL."""
+        game = Game(test_mode=True)
+        game.total_kills = 1000
+        game._update_weapon_level()
+        self.assertEqual(game.weapon_level, WEAPON_MAX_LEVEL)
+
+    def test_get_weapon_info(self):
+        """get_weapon_info returns expected keys."""
+        game = Game(test_mode=True)
+        info = game.get_weapon_info()
+        self.assertEqual(info["level"], 1)
+        self.assertEqual(info["max_level"], WEAPON_MAX_LEVEL)
+        self.assertEqual(info["shots_per_fire"], 1)
+        self.assertFalse(info["is_maxed"])
+
+    def test_weapon_level_5_speed_bonus(self):
+        """Level 5 weapon has speed bonus > 1.0."""
+        self.assertGreater(WEAPON_SPEED_BONUS[5], 1.0)
+
+    def test_weapon_level_1_no_speed_bonus(self):
+        """Level 1 weapon has no speed bonus."""
+        self.assertEqual(WEAPON_SPEED_BONUS[1], 1.0)
 
 
 if __name__ == "__main__":
