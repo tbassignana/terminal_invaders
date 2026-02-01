@@ -227,6 +227,8 @@ COLOR_ALIEN_TYPE_1 = 10    # Magenta for middle-row aliens
 COLOR_ALIEN_TYPE_2 = 11    # Yellow for bottom-row aliens
 COLOR_BORDER = 12          # Dim cyan for HUD border
 COLOR_POWERUP = 13         # Bright white for power-up pickups
+COLOR_BUNKER_HIGH = 14     # Bright green (high health, between full and damaged)
+COLOR_BUNKER_LOW = 15      # Dark red/yellow (low health, between damaged and critical)
 
 # Box-drawing characters for HUD border
 BORDER_H = "─"   # Horizontal line
@@ -468,6 +470,7 @@ class Bunker:
     x: int
     y: int
     health: int = 3  # 3=full, 2=damaged, 1=critical, 0=destroyed
+    max_health: int = 3  # Starting health for ratio-based color gradient
     flash_frames: int = 0  # Frames remaining for white flash on hit
 
     @property
@@ -478,15 +481,30 @@ class Bunker:
         return BUNKER_CHARS[3 - self.health]
 
     @property
+    def health_ratio(self) -> float:
+        """Return health as a 0.0-1.0 ratio (current / max)."""
+        if self.max_health <= 0:
+            return 0.0
+        return self.health / self.max_health
+
+    @property
     def color_pair(self) -> int:
-        """Return color pair based on health: green(3) → yellow(2) → red(1)."""
+        """Return color pair based on health ratio: green → green-yellow → yellow → yellow-red → red.
+
+        Uses 5-tier gradient for smooth visual transitions as bunker degrades.
+        """
         if self.flash_frames > 0:
             return COLOR_TEXT  # White flash
-        if self.health >= 3:
-            return COLOR_BUNKER  # Green (full)
-        if self.health == 2:
-            return COLOR_BUNKER_DAMAGED  # Yellow (damaged)
-        return COLOR_BUNKER_CRITICAL  # Red (critical)
+        ratio = self.health_ratio
+        if ratio > 0.8:
+            return COLOR_BUNKER  # Full green
+        if ratio > 0.6:
+            return COLOR_BUNKER_HIGH  # Bright green (transitioning)
+        if ratio > 0.4:
+            return COLOR_BUNKER_DAMAGED  # Yellow
+        if ratio > 0.2:
+            return COLOR_BUNKER_LOW  # Dark yellow/red (transitioning)
+        return COLOR_BUNKER_CRITICAL  # Red
 
     def hit(self) -> bool:
         """
@@ -1218,7 +1236,7 @@ class Game:
             # Create bunker block (3x2)
             for dx in range(-1, 2):
                 for dy in range(2):
-                    self.bunkers.append(Bunker(x=bunker_x + dx, y=bunker_y + dy, health=health))
+                    self.bunkers.append(Bunker(x=bunker_x + dx, y=bunker_y + dy, health=health, max_health=health))
 
     def get_alien_fire_probability(self) -> float:
         """
@@ -2283,6 +2301,8 @@ class Game:
             curses.init_pair(COLOR_ALIEN_TYPE_2, curses.COLOR_YELLOW, -1)
             curses.init_pair(COLOR_BORDER, curses.COLOR_CYAN, -1)
             curses.init_pair(COLOR_POWERUP, curses.COLOR_WHITE, -1)
+            curses.init_pair(COLOR_BUNKER_HIGH, curses.COLOR_GREEN, -1)
+            curses.init_pair(COLOR_BUNKER_LOW, curses.COLOR_YELLOW, -1)
 
             # Get screen dimensions
             self.height, self.width = stdscr.getmaxyx()

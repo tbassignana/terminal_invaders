@@ -40,6 +40,8 @@ from invaders import (
     COLOR_BUNKER,
     COLOR_BUNKER_CRITICAL,
     COLOR_BUNKER_DAMAGED,
+    COLOR_BUNKER_HIGH,
+    COLOR_BUNKER_LOW,
     COLOR_GAME_OVER,
     COLOR_PLAYER,
     COLOR_TEXT,
@@ -2668,18 +2670,18 @@ class TestBunkerDamageVisualEffects(unittest.TestCase):
         self.assertEqual(bunker.flash_frames, 2, "Flash should last 2 frames after hit")
 
     def test_bunker_color_full_health(self):
-        """Verify bunker uses green color at full health (3)."""
-        bunker = Bunker(x=10, y=20, health=3)
+        """Verify bunker uses green color at full health."""
+        bunker = Bunker(x=10, y=20, health=3, max_health=3)
         self.assertEqual(bunker.color_pair, COLOR_BUNKER)
 
     def test_bunker_color_damaged(self):
-        """Verify bunker uses yellow color when damaged (health=2)."""
-        bunker = Bunker(x=10, y=20, health=2)
+        """Verify bunker uses yellow color at mid health (ratio ~0.4-0.6)."""
+        bunker = Bunker(x=10, y=20, health=3, max_health=5)
         self.assertEqual(bunker.color_pair, COLOR_BUNKER_DAMAGED)
 
     def test_bunker_color_critical(self):
-        """Verify bunker uses red color when critical (health=1)."""
-        bunker = Bunker(x=10, y=20, health=1)
+        """Verify bunker uses red color at very low health (ratio ≤0.2)."""
+        bunker = Bunker(x=10, y=20, health=1, max_health=5)
         self.assertEqual(bunker.color_pair, COLOR_BUNKER_CRITICAL)
 
     def test_bunker_flash_overrides_color(self):
@@ -3488,6 +3490,55 @@ class TestComboTextEffect(unittest.TestCase):
         game.combo_text = ComboText(text="COMBO x4!")
         game.reset_game()
         self.assertIsNone(game.combo_text)
+
+
+class TestBunkerSmoothColorTransitions(unittest.TestCase):
+    """Step 43: Smooth color transitions for bunker health (green→yellow→red)."""
+
+    def test_full_health_is_green(self):
+        """Ratio > 0.8 returns COLOR_BUNKER (full green)."""
+        bunker = Bunker(x=0, y=0, health=5, max_health=5)
+        self.assertEqual(bunker.color_pair, COLOR_BUNKER)
+
+    def test_high_health_is_bright_green(self):
+        """Ratio 0.6-0.8 returns COLOR_BUNKER_HIGH (transitional green)."""
+        bunker = Bunker(x=0, y=0, health=4, max_health=5)
+        self.assertAlmostEqual(bunker.health_ratio, 0.8)
+        self.assertEqual(bunker.color_pair, COLOR_BUNKER_HIGH)
+
+    def test_mid_health_is_yellow(self):
+        """Ratio 0.4-0.6 returns COLOR_BUNKER_DAMAGED (yellow)."""
+        bunker = Bunker(x=0, y=0, health=3, max_health=5)
+        self.assertEqual(bunker.color_pair, COLOR_BUNKER_DAMAGED)
+
+    def test_low_health_is_dark_yellow(self):
+        """Ratio 0.2-0.4 returns COLOR_BUNKER_LOW (transitional)."""
+        bunker = Bunker(x=0, y=0, health=2, max_health=5)
+        self.assertEqual(bunker.color_pair, COLOR_BUNKER_LOW)
+
+    def test_critical_health_is_red(self):
+        """Ratio ≤ 0.2 returns COLOR_BUNKER_CRITICAL (red)."""
+        bunker = Bunker(x=0, y=0, health=1, max_health=5)
+        self.assertEqual(bunker.color_pair, COLOR_BUNKER_CRITICAL)
+
+    def test_health_ratio_property(self):
+        """health_ratio correctly computes current / max."""
+        bunker = Bunker(x=0, y=0, health=2, max_health=4)
+        self.assertAlmostEqual(bunker.health_ratio, 0.5)
+
+    def test_health_ratio_zero_max(self):
+        """health_ratio returns 0.0 when max_health is 0."""
+        bunker = Bunker(x=0, y=0, health=0, max_health=0)
+        self.assertEqual(bunker.health_ratio, 0.0)
+
+    def test_five_tier_gradient_with_max_health_3(self):
+        """With max_health=3, verify tiers used (green, bright green, low)."""
+        b3 = Bunker(x=0, y=0, health=3, max_health=3)
+        b2 = Bunker(x=0, y=0, health=2, max_health=3)
+        b1 = Bunker(x=0, y=0, health=1, max_health=3)
+        self.assertEqual(b3.color_pair, COLOR_BUNKER)       # ratio=1.0 → green
+        self.assertEqual(b2.color_pair, COLOR_BUNKER_HIGH)   # ratio=0.667 → bright green
+        self.assertEqual(b1.color_pair, COLOR_BUNKER_LOW)    # ratio=0.333 → transitional
 
 
 if __name__ == "__main__":
