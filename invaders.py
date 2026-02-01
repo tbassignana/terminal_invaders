@@ -295,6 +295,35 @@ TITLE_COLOR_CYCLE = [
     COLOR_GAME_OVER,      # Red
 ]
 
+# Credits screen text lines (scrolls upward)
+CREDITS_LINES = [
+    "TERMINAL INVADERS",
+    "",
+    f"Version {__version__}",
+    "",
+    "---",
+    "",
+    "A curses-based Space Invaders clone",
+    "for macOS terminals",
+    "",
+    "---",
+    "",
+    "Developed with Claude AI",
+    "",
+    "github.com/tbassignana/terminal_invaders",
+    "",
+    "---",
+    "",
+    "Inspired by the original",
+    "Space Invaders (1978)",
+    "by Tomohiro Nishikado",
+    "",
+    "---",
+    "",
+    "Thanks for playing!",
+    "",
+]
+
 
 # ============================================================================
 # ENUMS
@@ -1134,6 +1163,7 @@ class Game:
         self.menu_screen: MenuScreen = MenuScreen.MAIN
         self.menu_selection: int = 0  # Index into MENU_ITEMS
         self.options_selection: int = 0  # Index into options items
+        self.credits_scroll_offset: float = 0.0  # Scrolls upward over time
         self.sound_enabled: bool = True
         self.music_enabled: bool = True
         self.score_manager = ScoreManager() if not test_mode else None
@@ -1450,6 +1480,12 @@ class Game:
         # Title screen color cycling runs in MENU state
         if self.state == GameState.MENU:
             self.title_color_frame += 1
+            # Scroll credits when on credits screen
+            if self.menu_screen == MenuScreen.CREDITS:
+                self.credits_scroll_offset += 0.05
+                # Reset when all lines have scrolled past
+                if self.credits_scroll_offset > len(CREDITS_LINES) + self.height // 2:
+                    self.credits_scroll_offset = 0.0
             return
 
         # Auto-advance level transition countdown
@@ -2011,6 +2047,8 @@ class Game:
                         return False
                     elif target is not None:
                         self.menu_screen = target
+                        if target == MenuScreen.CREDITS:
+                            self.credits_scroll_offset = 0.0
             elif self.menu_screen == MenuScreen.OPTIONS:
                 if key == 27 or key == curses.KEY_BACKSPACE or key == 127:
                     self.menu_screen = MenuScreen.MAIN
@@ -2230,6 +2268,24 @@ class Game:
         elif index == 2:
             self.show_fps = not self.show_fps
 
+    def get_credits_display(self) -> dict:
+        """Return credits screen data (testable without curses).
+
+        Returns dict with:
+            lines: list of (row, text) tuples for visible credit lines
+            scroll_offset: current scroll position
+        """
+        visible = []
+        center_y = self.height // 2
+        for i, line in enumerate(CREDITS_LINES):
+            y = center_y + i - int(self.credits_scroll_offset)
+            if 0 <= y < self.height:
+                visible.append((y, line))
+        return {
+            "lines": visible,
+            "scroll_offset": self.credits_scroll_offset,
+        }
+
     def get_controls_display(self) -> dict:
         """Return controls help screen data (testable without curses).
 
@@ -2290,17 +2346,17 @@ class Game:
                 self._render_options_screen()
             elif self.menu_screen == MenuScreen.CONTROLS:
                 self._render_controls_screen()
-            else:
-                # Sub-screen placeholder (implemented in step 55)
-                screen_name = self.menu_screen.name.replace("_", " ").title()
-                text = f"[ {screen_name} ]"
-                self._safe_addstr(self.height // 2, (self.width - len(text)) // 2, text, curses.color_pair(COLOR_TEXT))
+            elif self.menu_screen == MenuScreen.CREDITS:
+                self._render_credits_screen()
             back_text = "Press ESC to return"
-            back_y = self.height // 2 + 2
-            if self.menu_screen == MenuScreen.HIGH_SCORES:
-                back_y += 11
+            if self.menu_screen == MenuScreen.CREDITS:
+                back_y = self.height - 2  # Fixed at bottom for scrolling credits
+            elif self.menu_screen == MenuScreen.HIGH_SCORES:
+                back_y = self.height // 2 + 13
             elif self.menu_screen in (MenuScreen.OPTIONS, MenuScreen.CONTROLS):
-                back_y += 8
+                back_y = self.height // 2 + 10
+            else:
+                back_y = self.height // 2 + 4
             self._safe_addstr(
                 back_y, (self.width - len(back_text)) // 2,
                 back_text, curses.color_pair(COLOR_TEXT) | curses.A_DIM
@@ -2360,6 +2416,16 @@ class Game:
         for i, (name, sprite, pts) in enumerate(ctrl["alien_points"]):
             line = f"  {sprite}  {name:<12} {pts}"
             self._safe_addstr(pts_y + 1 + i, (self.width - 30) // 2, line, curses.color_pair(COLOR_TEXT))
+
+    def _render_credits_screen(self) -> None:
+        """Render the credits screen with scrolling text."""
+        creds = self.get_credits_display()
+        for row, text in creds["lines"]:
+            attr = curses.color_pair(COLOR_TEXT)
+            if text.startswith("TERMINAL") or text.startswith("---"):
+                attr |= curses.A_BOLD
+            col = (self.width - len(text)) // 2
+            self._safe_addstr(row, col, text, attr)
 
     def _render_game(self) -> None:
         """Render the main gameplay."""

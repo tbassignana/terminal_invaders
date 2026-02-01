@@ -49,6 +49,7 @@ from invaders import (
     COLOR_GAME_OVER,
     COLOR_PLAYER,
     COLOR_TEXT,
+    CREDITS_LINES,
     DEATH_ANIM_CHARS,
     DEFAULT_CONFIG,
     DEFAULT_EXPLOSION_CONFIG,
@@ -4468,6 +4469,76 @@ class TestControlsHelpScreen(unittest.TestCase):
         game.test_mode = False
         game.state = GameState.MENU
         game.menu_screen = MenuScreen.CONTROLS
+        mock_screen = unittest.mock.MagicMock()
+        mock_screen.getmaxyx.return_value = (30, 80)
+        game.screen = mock_screen
+        with unittest.mock.patch("curses.color_pair", return_value=0):
+            game.render()
+        mock_screen.clear.assert_called()
+
+
+class TestCreditsScreen(unittest.TestCase):
+    """Tests for credits screen with scrolling text animation (Step 55)."""
+
+    def test_credits_lines_defined(self):
+        """CREDITS_LINES contains expected content."""
+        self.assertGreater(len(CREDITS_LINES), 5)
+        self.assertIn("TERMINAL INVADERS", CREDITS_LINES)
+        # Contains version
+        version_line = [line for line in CREDITS_LINES if "Version" in line]
+        self.assertGreater(len(version_line), 0)
+
+    def test_credits_scroll_offset_initial(self):
+        """Credits scroll offset starts at 0."""
+        game = Game(test_mode=True)
+        self.assertEqual(game.credits_scroll_offset, 0.0)
+
+    def test_credits_scroll_advances_on_update(self):
+        """Credits scroll offset advances when on credits screen."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.CREDITS
+        game.update()
+        self.assertGreater(game.credits_scroll_offset, 0.0)
+
+    def test_credits_scroll_resets_on_overflow(self):
+        """Credits scroll resets when all lines have scrolled past."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.CREDITS
+        game.credits_scroll_offset = len(CREDITS_LINES) + game.height
+        game.update()
+        self.assertEqual(game.credits_scroll_offset, 0.0)
+
+    def test_get_credits_display_visible_lines(self):
+        """get_credits_display returns only visible lines."""
+        game = Game(test_mode=True)
+        creds = game.get_credits_display()
+        self.assertIsInstance(creds["lines"], list)
+        # All lines should have y within screen bounds
+        for y, text in creds["lines"]:
+            self.assertGreaterEqual(y, 0)
+            self.assertLess(y, game.height)
+
+    def test_credits_reset_on_enter(self):
+        """Entering credits screen resets scroll offset."""
+        game = Game(test_mode=True)
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.MAIN
+        game.credits_scroll_offset = 10.0
+        # Find credits index
+        credits_idx = next(i for i, (label, _) in enumerate(MENU_ITEMS) if label == "Credits")
+        game.menu_selection = credits_idx
+        game.handle_input(ord("\n"))
+        self.assertEqual(game.credits_scroll_offset, 0.0)
+        self.assertEqual(game.menu_screen, MenuScreen.CREDITS)
+
+    def test_render_credits_with_mock_screen(self):
+        """_render_credits_screen renders with mock screen."""
+        game = Game(test_mode=True)
+        game.test_mode = False
+        game.state = GameState.MENU
+        game.menu_screen = MenuScreen.CREDITS
         mock_screen = unittest.mock.MagicMock()
         mock_screen.getmaxyx.return_value = (30, 80)
         game.screen = mock_screen
