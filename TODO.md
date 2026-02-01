@@ -7,7 +7,7 @@
 
 - [x] **Step 1:** Extract configuration into a Config dataclass — remove global state mutation
 - [x] **Step 2:** Replace dict-based projectiles with the Projectile dataclass
-- [ ] **Step 3:** Add a logging framework with `--debug` CLI flag
+- [x] **Step 3:** Add a logging framework with `--debug` CLI flag
 - [ ] **Step 4:** Create an abstract SoundBackend interface for cross-platform audio
 - [ ] **Step 5:** Add a ScoreManager with high-score persistence to `~/.invaders_scores.json`
 - [ ] **Step 6:** Implement an EventBus for decoupled game events

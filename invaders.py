@@ -16,6 +16,7 @@ License: MIT
 """
 
 import curses
+import logging
 import os
 import sys
 import time
@@ -27,6 +28,30 @@ import signal
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+
+logger = logging.getLogger('invaders')
+
+
+def setup_logging(debug: bool = False) -> None:
+    """Configure the logging framework.
+
+    Args:
+        debug: If True, enable DEBUG-level logging to invaders.log.
+    """
+    if debug:
+        handler = logging.FileHandler('invaders.log', mode='w')
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s %(name)s: %(message)s'
+        ))
+        logger.addHandler(handler)
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.addHandler(logging.NullHandler())
+        logger.setLevel(logging.WARNING)
 
 # Global audio manager reference for cleanup on crash/exit
 _audio_manager: Optional['AudioManager'] = None
@@ -43,7 +68,7 @@ def _cleanup_audio():
                       stdout=subprocess.DEVNULL,
                       stderr=subprocess.DEVNULL)
     except Exception:
-        pass
+        logger.debug("Failed to kill stray afplay processes during cleanup", exc_info=True)
 
 
 def _signal_handler(signum, frame):
@@ -279,7 +304,8 @@ class AudioManager:
                 )
                 self.current_process.wait()
             except Exception:
-                break  # Exit on any error
+                logger.warning("Audio loop encountered an error", exc_info=True)
+                break
 
     def stop(self) -> None:
         """Stop audio playback and clean up."""
@@ -291,10 +317,11 @@ class AudioManager:
                 self.current_process.terminate()
                 self.current_process.wait(timeout=1)
             except Exception:
+                logger.debug("Failed to terminate afplay gracefully, killing", exc_info=True)
                 try:
                     self.current_process.kill()
                 except Exception:
-                    pass
+                    logger.debug("Failed to kill afplay process", exc_info=True)
 
         # Also kill any stray afplay processes
         try:
@@ -302,7 +329,7 @@ class AudioManager:
                           stdout=subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL)
         except Exception:
-            pass
+            logger.debug("Failed to kill stray afplay processes", exc_info=True)
 
 
 class SoundEffects:
@@ -361,7 +388,7 @@ class SoundEffects:
                     timeout=2
                 )
             except Exception:
-                pass
+                logger.debug("Failed to play sound '%s'", sound_name, exc_info=True)
 
         thread = threading.Thread(target=play, daemon=True)
         thread.start()
@@ -930,7 +957,7 @@ class Game:
                 if max_len > 0:
                     self.screen.addstr(y_int, x_int, text[:max_len], attr)
         except curses.error:
-            pass  # Ignore curses errors at boundaries
+            logger.debug("Curses draw error at (%d, %d)", y_int, x_int)
 
     def run(self) -> None:
         """Main game loop with curses."""
@@ -982,7 +1009,7 @@ class Game:
                         if key != -1:
                             running = self.handle_input(key)
                     except Exception:
-                        pass
+                        logger.debug("Input handling error", exc_info=True)
 
                     # Update game state
                     self.update()
@@ -1010,6 +1037,9 @@ class Game:
 
 def main():
     """Main entry point for the game."""
+    debug = '--debug' in sys.argv
+    setup_logging(debug=debug)
+    logger.debug("Game starting with debug logging enabled")
     game = Game()
     game.run()
 

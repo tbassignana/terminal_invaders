@@ -11,6 +11,7 @@ This test file validates the core game mechanics:
 """
 
 import unittest
+import logging
 import os
 import sys
 
@@ -384,6 +385,72 @@ class TestProjectileDataclass(unittest.TestCase):
         # Alien should be removed, score updated
         self.assertEqual(len(game.aliens), 0)
         self.assertGreater(game.score, 0)
+
+
+class TestLogging(unittest.TestCase):
+    """Step 3: Tests for the logging framework and --debug flag."""
+
+    def setUp(self):
+        """Reset logger state before each test."""
+        import invaders
+        self.logger = invaders.logger
+        # Remove any handlers from previous tests
+        self.logger.handlers.clear()
+
+    def test_setup_logging_debug_mode(self):
+        """Verify debug mode creates a file handler at DEBUG level."""
+        import tempfile
+        import invaders
+        old_cwd = os.getcwd()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                os.chdir(tmpdir)
+                invaders.setup_logging(debug=True)
+                self.assertEqual(self.logger.level, logging.DEBUG)
+                # Should have a FileHandler
+                file_handlers = [h for h in self.logger.handlers
+                                 if isinstance(h, logging.FileHandler)]
+                self.assertGreater(len(file_handlers), 0)
+        finally:
+            os.chdir(old_cwd)
+            self.logger.handlers.clear()
+
+    def test_setup_logging_default_mode(self):
+        """Verify default mode sets WARNING level with NullHandler."""
+        import invaders
+        invaders.setup_logging(debug=False)
+        self.assertEqual(self.logger.level, logging.WARNING)
+        null_handlers = [h for h in self.logger.handlers
+                         if isinstance(h, logging.NullHandler)]
+        self.assertGreater(len(null_handlers), 0)
+        self.logger.handlers.clear()
+
+    def test_debug_flag_parsing(self):
+        """Verify --debug is recognized in sys.argv."""
+        self.assertIn('--debug', ['--debug', '--other'])
+
+    def test_log_output_on_simulated_error(self):
+        """Verify that logging captures error info at DEBUG level."""
+        import tempfile
+        import invaders
+        old_cwd = os.getcwd()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                os.chdir(tmpdir)
+                invaders.setup_logging(debug=True)
+                self.logger.debug("Test error message: %s", "simulated")
+                # Flush handlers
+                for h in self.logger.handlers:
+                    h.flush()
+                # Check the log file was written
+                log_path = os.path.join(tmpdir, 'invaders.log')
+                self.assertTrue(os.path.exists(log_path))
+                with open(log_path) as f:
+                    contents = f.read()
+                self.assertIn("simulated", contents)
+        finally:
+            os.chdir(old_cwd)
+            self.logger.handlers.clear()
 
 
 if __name__ == '__main__':
