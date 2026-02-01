@@ -43,6 +43,8 @@ from invaders import (
     BORDER_V,
     BOSS_HP_PER_LEVEL,
     BOSS_SPRITE,
+    BULLET_TIME_DURATION,
+    BULLET_TIME_SPEED_MULT,
     COLLECTIBLE_DROP_CHANCE,
     COLLECTIBLE_EXPIRY,
     COLLECTIBLE_TYPES,
@@ -5715,6 +5717,78 @@ class TestScoreMilestones(unittest.TestCase):
         game.milestones_reached = [1000, 2500]
         game.reset_game()
         self.assertEqual(len(game.milestones_reached), 0)
+
+
+class TestBulletTimePowerUp(unittest.TestCase):
+    """Tests for the 'bullet time' slow motion power-up."""
+
+    def _make_game(self):
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.width = 80
+        game.height = 30
+        return game
+
+    def test_bullet_time_in_powerup_type(self):
+        """BULLET_TIME is a valid PowerUpType enum member."""
+        self.assertIsNotNone(PowerUpType.BULLET_TIME)
+
+    def test_bullet_time_char(self):
+        """Bullet time has 'T' display character."""
+        self.assertEqual(POWERUP_CHARS[PowerUpType.BULLET_TIME], "T")
+
+    def test_bullet_time_activation(self):
+        """Activating bullet time adds to active power-ups."""
+        game = self._make_game()
+        game._activate_power_up(PowerUpType.BULLET_TIME, time.time())
+        self.assertTrue(game.has_power_up(PowerUpType.BULLET_TIME))
+
+    def test_bullet_time_duration(self):
+        """Bullet time lasts for BULLET_TIME_DURATION seconds."""
+        game = self._make_game()
+        now = time.time()
+        game._activate_power_up(PowerUpType.BULLET_TIME, now)
+        bt = [ap for ap in game.active_power_ups if ap.power_type == PowerUpType.BULLET_TIME][0]
+        self.assertAlmostEqual(bt.expires_at - now, BULLET_TIME_DURATION, places=1)
+
+    def test_bullet_time_slows_alien_move_interval(self):
+        """Bullet time doubles the alien move interval (aliens move at 50% speed)."""
+        game = self._make_game()
+        normal_interval = game.get_effective_move_interval()
+        game._activate_power_up(PowerUpType.BULLET_TIME, time.time())
+        bt_interval = game.get_effective_move_interval()
+        self.assertAlmostEqual(bt_interval, normal_interval / BULLET_TIME_SPEED_MULT, places=4)
+
+    def test_bullet_time_slows_alien_projectiles(self):
+        """Alien projectiles move slower during bullet time."""
+        game = self._make_game()
+        # Without bullet time
+        proj1 = Projectile(x=10, y=5.0, direction=1, proj_type="normal")
+        game.alien_projectiles = [proj1]
+        game._update_projectiles()
+        normal_move = proj1.y - 5.0
+
+        # With bullet time
+        game._activate_power_up(PowerUpType.BULLET_TIME, time.time())
+        proj2 = Projectile(x=10, y=5.0, direction=1, proj_type="normal")
+        game.alien_projectiles = [proj2]
+        game._update_projectiles()
+        bt_move = proj2.y - 5.0
+
+        self.assertAlmostEqual(bt_move, normal_move * BULLET_TIME_SPEED_MULT, places=4)
+
+    def test_bullet_time_expires(self):
+        """Bullet time expires after duration and speed returns to normal."""
+        game = self._make_game()
+        past = time.time() - BULLET_TIME_DURATION - 1
+        game._activate_power_up(PowerUpType.BULLET_TIME, past)
+        game._update_power_ups(time.time())
+        self.assertFalse(game.has_power_up(PowerUpType.BULLET_TIME))
+
+    def test_bullet_time_constants(self):
+        """Bullet time constants are properly defined."""
+        self.assertEqual(BULLET_TIME_DURATION, 4.0)
+        self.assertEqual(BULLET_TIME_SPEED_MULT, 0.5)
 
 
 if __name__ == "__main__":

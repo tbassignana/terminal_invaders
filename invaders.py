@@ -836,7 +836,10 @@ class PowerUpType(Enum):
     SHIELD = auto()
     WIDE_SHOT = auto()
     BOMB = auto()
+    BULLET_TIME = auto()
 
+BULLET_TIME_DURATION = 4.0  # Seconds of slow motion
+BULLET_TIME_SPEED_MULT = 0.5  # 50% alien speed during bullet time
 
 # Distinct display characters for each power-up type
 POWERUP_CHARS = {
@@ -844,6 +847,7 @@ POWERUP_CHARS = {
     PowerUpType.SHIELD: "S",
     PowerUpType.WIDE_SHOT: "W",
     PowerUpType.BOMB: "B",
+    PowerUpType.BULLET_TIME: "T",
 }
 
 # Short labels for HUD timer display
@@ -852,6 +856,7 @@ POWERUP_LABELS = {
     PowerUpType.SHIELD: "S",
     PowerUpType.WIDE_SHOT: "W",
     PowerUpType.BOMB: "B",
+    PowerUpType.BULLET_TIME: "T",
 }
 
 
@@ -2032,6 +2037,9 @@ class Game:
         elif power_type == PowerUpType.SHIELD:
             # Shield is a one-time use, set a long expiry
             self.active_power_ups.append(ActivePowerUp(power_type=power_type, expires_at=current_time + 999))
+        elif power_type == PowerUpType.BULLET_TIME:
+            # Bullet time: 4-second slow motion
+            self.active_power_ups.append(ActivePowerUp(power_type=power_type, expires_at=current_time + BULLET_TIME_DURATION))
         else:
             # Timed effects last 5 seconds
             self.active_power_ups.append(ActivePowerUp(power_type=power_type, expires_at=current_time + 5.0))
@@ -2113,9 +2121,10 @@ class Game:
                 self.player_projectiles.remove(proj)
 
         # Alien projectiles move down (slower for easier dodging)
+        bt_mult = BULLET_TIME_SPEED_MULT if self.has_power_up(PowerUpType.BULLET_TIME) else 1.0
         for proj in self.alien_projectiles[:]:
-            speed_mult = ALIEN_PROJ_TYPES.get(proj.proj_type, ALIEN_PROJ_TYPES["normal"])["speed_mult"]
-            proj.y += self.config.alien_projectile_speed * speed_mult
+            type_speed = ALIEN_PROJ_TYPES.get(proj.proj_type, ALIEN_PROJ_TYPES["normal"])["speed_mult"]
+            proj.y += self.config.alien_projectile_speed * type_speed * bt_mult
             if proj.y >= self.height:
                 self.alien_projectiles.remove(proj)
 
@@ -2413,7 +2422,11 @@ class Game:
         ratio = remaining / total
         # Scale factor: 1.0 at full → 0.2 at nearly empty
         speed_factor = 0.2 + 0.8 * ratio
-        return max(0.05, self.alien_move_interval * speed_factor)
+        interval = max(0.05, self.alien_move_interval * speed_factor)
+        # Bullet time: stretch interval (aliens move slower)
+        if self.has_power_up(PowerUpType.BULLET_TIME):
+            interval /= BULLET_TIME_SPEED_MULT
+        return interval
 
     def get_wave_info(self) -> dict:
         """Return current wave state for display/testing."""
