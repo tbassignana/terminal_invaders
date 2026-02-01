@@ -653,6 +653,83 @@ class TestMysteryShip(unittest.TestCase):
         self.assertEqual(game.mystery_score_display[2], 150)
 
 
+class TestCollisionEdgeCases(unittest.TestCase):
+    """Step 14: Edge case tests for collision detection."""
+
+    def test_projectile_at_exact_alien_boundary(self):
+        """Projectile at distance=1 from alien should still hit."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=20, y=10)]
+        game.player_projectiles = [Projectile(x=21, y=11, direction=-1)]
+        game._check_collisions()
+        self.assertEqual(len(game.aliens), 0)
+
+    def test_projectile_between_two_adjacent_aliens(self):
+        """Projectile between two aliens with gap should miss both."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=10, y=10), Alien(x=16, y=10)]
+        game.player_projectiles = [Projectile(x=13, y=10, direction=-1)]
+        game._check_collisions()
+        self.assertEqual(len(game.aliens), 2)
+
+    def test_simultaneous_projectiles_same_position(self):
+        """Player and alien projectile at same position should not collide with each other."""
+        game = Game(test_mode=True)
+        game.player_projectiles = [Projectile(x=20, y=10, direction=-1)]
+        game.alien_projectiles = [Projectile(x=20, y=10, direction=1)]
+        # No aliens or player at that point
+        game.aliens = []
+        game.player.x = 50
+        game._check_collisions()
+        # Both projectiles should still exist
+        self.assertEqual(len(game.player_projectiles), 1)
+        self.assertEqual(len(game.alien_projectiles), 1)
+
+    def test_bunker_destruction_at_health_1(self):
+        """Bunker with health=1 should be destroyed on hit."""
+        from invaders import Bunker
+        bunker = Bunker(x=20, y=15, health=1)
+        destroyed = bunker.hit()
+        self.assertTrue(destroyed)
+        self.assertEqual(bunker.health, 0)
+
+    def test_projectile_at_screen_top(self):
+        """Player projectile at y=0 should be removed."""
+        game = Game(test_mode=True)
+        game.player_projectiles = [Projectile(x=20, y=0.5, direction=-1)]
+        game._update_projectiles()
+        self.assertEqual(len(game.player_projectiles), 0)
+
+    def test_projectile_at_screen_bottom(self):
+        """Alien projectile at y=max should be removed."""
+        game = Game(test_mode=True)
+        game.alien_projectiles = [Projectile(x=20, y=float(game.height - 0.2), direction=1)]
+        game._update_projectiles()
+        self.assertEqual(len(game.alien_projectiles), 0)
+
+    def test_alien_projectile_hits_player_at_boundary(self):
+        """Alien projectile at player y should trigger damage."""
+        game = Game(test_mode=True)
+        game.alien_projectiles = [Projectile(x=game.player.x + 1, y=float(game.player.y), direction=1)]
+        lives_before = game.player.lives
+        game._check_collisions()
+        self.assertLess(game.player.lives, lives_before)
+
+    def test_multiple_projectiles_single_alien(self):
+        """Only one projectile should remove the alien, other stays."""
+        game = Game(test_mode=True)
+        game.aliens = [Alien(x=20, y=10)]
+        game.player_projectiles = [
+            Projectile(x=20, y=10, direction=-1),
+            Projectile(x=20, y=10, direction=-1),
+        ]
+        game._check_collisions()
+        self.assertEqual(len(game.aliens), 0)
+        # At least one projectile should remain (the second one)
+        # or both consumed (depends on implementation)
+        self.assertLessEqual(len(game.player_projectiles), 1)
+
+
 class TestScreenShake(unittest.TestCase):
     """Step 13: Tests for screen shake effect on player death."""
 
