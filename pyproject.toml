@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "terminal-invaders"
+version = "0.1.0"
+description = "A curses-based Space Invaders clone for the terminal"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    {name = "Claude AI"},
+]
+
+[tool.setuptools]
+py-modules = ["invaders"]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "hypothesis>=6.0",
+]
+
+[project.scripts]
+invaders = "invaders:main"
+
+[tool.pytest.ini_options]
+addopts = "--cov=invaders --cov-report=term-missing --cov-fail-under=80"
+testpaths = ["."]
+
+[tool.coverage.run]
+source = ["invaders"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80

@@ -2111,6 +2111,45 @@ class TestFrameTimer(unittest.TestCase):
         self.assertIsInstance(game.frame_timer, FrameTimer)
 
 
+class TestPyprojectToml(unittest.TestCase):
+    """Step 21: Tests for pyproject.toml and package configuration."""
+
+    def test_pyproject_exists(self):
+        """Verify pyproject.toml exists."""
+        self.assertTrue(os.path.exists(
+            os.path.join(os.path.dirname(__file__), 'pyproject.toml')
+        ))
+
+    def test_package_importable(self):
+        """Verify invaders module is importable."""
+        import invaders
+        self.assertTrue(hasattr(invaders, 'main'))
+        self.assertTrue(hasattr(invaders, 'Game'))
+        self.assertTrue(hasattr(invaders, 'GameConfig'))
+
+    def test_entry_point_function_exists(self):
+        """Verify the main() entry point function is callable."""
+        from invaders import main as entry_main
+        self.assertTrue(callable(entry_main))
+
+    def test_pyproject_has_version(self):
+        """Verify pyproject.toml has a version field."""
+        import tomllib
+        toml_path = os.path.join(os.path.dirname(__file__), 'pyproject.toml')
+        with open(toml_path, 'rb') as f:
+            data = tomllib.load(f)
+        self.assertIn('version', data['project'])
+        self.assertEqual(data['project']['version'], '0.1.0')
+
+    def test_pyproject_has_scripts_entry(self):
+        """Verify pyproject.toml has invaders entry point."""
+        import tomllib
+        toml_path = os.path.join(os.path.dirname(__file__), 'pyproject.toml')
+        with open(toml_path, 'rb') as f:
+            data = tomllib.load(f)
+        self.assertIn('invaders', data['project']['scripts'])
+
+
 if __name__ == '__main__':
     # Run tests with verbosity
     unittest.main(verbosity=2)
