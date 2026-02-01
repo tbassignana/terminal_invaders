@@ -1088,6 +1088,11 @@ class Game:
         self.score = 0
         self.level = 1
 
+        # Game stats tracking (for game over screen)
+        self.total_shots: int = 0
+        self.total_kills: int = 0
+        self.game_over_time: float = 0  # When GAME_OVER state was entered
+
         # Mutable speed state (changes per level, not stored in frozen config)
         self.alien_move_interval = self.config.alien_move_interval
 
@@ -1292,6 +1297,7 @@ class Game:
 
         if self.player.lives <= 0:
             self.state = GameState.GAME_OVER
+            self.game_over_time = time.time()
             self.event_bus.publish(GameEvent.GAME_OVER)
         else:
             # Red flash effect for damage
@@ -1322,6 +1328,7 @@ class Game:
         for alien in self.aliens:
             if alien.y >= player_y:
                 self.state = GameState.GAME_OVER
+                self.game_over_time = time.time()
                 return
 
     def reset_game(self) -> None:
@@ -1329,8 +1336,11 @@ class Game:
         Perform a hard reset of the game state.
         Called when player presses 'R' at game over.
         """
-        # Reset score
+        # Reset score and stats
         self.score = 0
+        self.total_shots = 0
+        self.total_kills = 0
+        self.game_over_time = 0
 
         # Reset player
         self.player.lives = self.config.player_start_lives
@@ -1671,6 +1681,7 @@ class Game:
                     self.aliens.remove(alien)
                     if proj in self.player_projectiles:
                         self.player_projectiles.remove(proj)
+                    self.total_kills += 1
                     multiplier = self._register_kill(current_time)
                     points = 10 * (3 - alien.alien_type) * multiplier
                     self.score += points
@@ -1747,6 +1758,7 @@ class Game:
                 if abs(proj.x - self.mystery_ship.x) <= 3 and abs(proj.y - self.mystery_ship.y) <= 1:
                     pts = self.mystery_ship.points
                     self.score += pts
+                    self.total_kills += 1
                     # Score popup for mystery ship
                     self.score_popups.append(
                         ScorePopup(x=float(self.mystery_ship.x), y=float(self.mystery_ship.y), text=f"+{pts}")
@@ -1900,6 +1912,7 @@ class Game:
                 # Fire projectile
                 if len(self.player_projectiles) < 3:  # Limit active projectiles
                     self.player_projectiles.append(Projectile(x=self.player.x + 1, y=self.player.y - 1, direction=-1))
+                    self.total_shots += 1
                     self.event_bus.publish(GameEvent.SHOT_FIRED)
 
         elif self.state == GameState.PAUSED:
@@ -2210,6 +2223,30 @@ class Game:
             "row": self.height - 1,
         }
 
+    def get_game_over_stats(self) -> dict:
+        """Return game over statistics (testable without curses).
+
+        Returns dict with:
+            score: final score
+            level: level reached
+            kills: total aliens killed
+            shots: total shots fired
+            accuracy: str like "75%" or "N/A"
+            curtain_rows: int (number of rows to fill for curtain animation)
+        """
+        accuracy = f"{(self.total_kills / self.total_shots * 100):.0f}%" if self.total_shots > 0 else "N/A"
+        elapsed = time.time() - self.game_over_time if self.game_over_time > 0 else 0
+        # Curtain fills 1 row every 0.05s, up to full height
+        curtain_rows = min(self.height, int(elapsed / 0.05))
+        return {
+            "score": self.score,
+            "level": self.level,
+            "kills": self.total_kills,
+            "shots": self.total_shots,
+            "accuracy": accuracy,
+            "curtain_rows": curtain_rows,
+        }
+
     def get_border_layout(self) -> list:
         """Return list of (row, col, char) tuples describing the HUD border.
 
@@ -2259,21 +2296,45 @@ class Game:
         )
 
     def _render_game_over(self) -> None:
-        """Render the game over screen."""
+        """Render the game over screen with curtain fall animation and stats."""
         self._render_game()  # Show final game state
 
-        game_over_text = f"GAME OVER - Score: {self.score}"
-        restart_text = "Press 'R' to Restart or 'Q' to Quit"
+        stats = self.get_game_over_stats()
 
-        center_y = self.height // 2
+        # Curtain fall: fill rows from top with dim block chars
+        curtain_char = "░" * self.width
+        for row in range(stats["curtain_rows"]):
+            self._safe_addstr(row, 0, curtain_char, curses.color_pair(COLOR_TEXT) | curses.A_DIM)
+
+        # Game over title
+        game_over_text = "GAME OVER"
+        center_y = self.height // 2 - 3
         self._safe_addstr(
             center_y,
             (self.width - len(game_over_text)) // 2,
             game_over_text,
             curses.color_pair(COLOR_GAME_OVER) | curses.A_BOLD,
         )
+
+        # Stats block
+        stat_lines = [
+            f"Score: {stats['score']}",
+            f"Level: {stats['level']}",
+            f"Kills: {stats['kills']}  Shots: {stats['shots']}",
+            f"Accuracy: {stats['accuracy']}",
+        ]
+        for i, line in enumerate(stat_lines):
+            self._safe_addstr(
+                center_y + 2 + i,
+                (self.width - len(line)) // 2,
+                line,
+                curses.color_pair(COLOR_TEXT),
+            )
+
+        # Restart prompt
+        restart_text = "Press 'R' to Restart or 'Q' to Quit"
         self._safe_addstr(
-            center_y + 2, (self.width - len(restart_text)) // 2, restart_text, curses.color_pair(COLOR_TEXT)
+            center_y + 7, (self.width - len(restart_text)) // 2, restart_text, curses.color_pair(COLOR_TEXT)
         )
 
     def _render_level_transition(self) -> None:

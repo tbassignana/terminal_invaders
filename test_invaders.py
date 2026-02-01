@@ -3601,6 +3601,90 @@ class TestBottomHUDBar(unittest.TestCase):
             backend.stop()  # Should not raise
 
 
+class TestGameOverScreenAndStats(unittest.TestCase):
+    """Step 45: Game over screen with death animation and stats."""
+
+    def test_game_over_stats_default(self):
+        """get_game_over_stats returns correct defaults."""
+        game = Game(test_mode=True)
+        stats = game.get_game_over_stats()
+        self.assertEqual(stats["score"], 0)
+        self.assertEqual(stats["level"], 1)
+        self.assertEqual(stats["kills"], 0)
+        self.assertEqual(stats["shots"], 0)
+        self.assertEqual(stats["accuracy"], "N/A")
+
+    def test_accuracy_calculation(self):
+        """Accuracy is calculated as kills/shots percentage."""
+        game = Game(test_mode=True)
+        game.total_shots = 10
+        game.total_kills = 7
+        stats = game.get_game_over_stats()
+        self.assertEqual(stats["accuracy"], "70%")
+
+    def test_total_shots_incremented_on_fire(self):
+        """Firing a projectile increments total_shots."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.handle_input(ord(" "))
+        self.assertEqual(game.total_shots, 1)
+
+    def test_total_kills_incremented_on_alien_death(self):
+        """Killing an alien increments total_kills."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        alien = game.aliens[0]
+        game.player_projectiles.append(Projectile(x=alien.x, y=alien.y, direction=-1))
+        game._check_collisions()
+        self.assertEqual(game.total_kills, 1)
+
+    def test_game_over_time_set_on_death(self):
+        """game_over_time is set when player dies."""
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.player.lives = 1
+        before = time.time()
+        game.handle_player_damage()
+        self.assertGreaterEqual(game.game_over_time, before)
+
+    def test_curtain_rows_increases_over_time(self):
+        """Curtain animation fills more rows as time passes."""
+        game = Game(test_mode=True)
+        game.game_over_time = time.time() - 1.0  # 1 second ago
+        stats = game.get_game_over_stats()
+        self.assertGreater(stats["curtain_rows"], 0)
+
+    def test_stats_reset_on_reset_game(self):
+        """reset_game clears all stats."""
+        game = Game(test_mode=True)
+        game.total_shots = 50
+        game.total_kills = 30
+        game.game_over_time = time.time()
+        game.reset_game()
+        self.assertEqual(game.total_shots, 0)
+        self.assertEqual(game.total_kills, 0)
+        self.assertEqual(game.game_over_time, 0)
+
+    def test_audio_manager_stop_terminate_exception(self):
+        """AudioManager.stop handles terminate exception and falls back to kill."""
+        from invaders import AudioManager
+
+        am = AudioManager()
+        mock_proc = unittest.mock.MagicMock()
+        mock_proc.terminate.side_effect = OSError("mocked terminate")
+        am.current_process = mock_proc
+        am.stop()
+        mock_proc.kill.assert_called_once()
+
+    def test_audio_manager_stop_pkill_exception(self):
+        """AudioManager.stop handles pkill subprocess exception gracefully."""
+        from invaders import AudioManager
+
+        am = AudioManager()
+        with unittest.mock.patch("subprocess.run", side_effect=OSError("mocked pkill")):
+            am.stop()  # Should not raise
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)
