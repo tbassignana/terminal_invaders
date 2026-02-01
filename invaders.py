@@ -789,6 +789,9 @@ WEAPON_SPEED_BONUS = {1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.3}  # Level 5 = 30% f
 LAST_STAND_SPEED_MULT = 2  # Double movement speed
 LAST_STAND_FIRE_SLOT_MULT = 2  # Double max projectile slots
 
+# Score milestones that award bonus lives
+SCORE_MILESTONES = [1000, 2500, 5000, 10000, 25000, 50000]
+
 
 @dataclass
 class BossAlien:
@@ -1403,6 +1406,7 @@ class Game:
         self.current_wave: int = 1  # Sub-wave within a level (1-3)
         self.max_waves: int = 3  # Waves per level
         self.weapon_level: int = 1  # Weapon upgrade level (1-5)
+        self.milestones_reached: List[int] = []  # Score milestones already awarded
 
         # Game stats tracking (for game over screen)
         self.total_shots: int = 0
@@ -1704,6 +1708,7 @@ class Game:
         self.total_shots = 0
         self.total_kills = 0
         self.game_over_time = 0
+        self.milestones_reached.clear()
 
         # Reset player
         self.player.lives = self.config.player_start_lives
@@ -1836,6 +1841,9 @@ class Game:
 
         # Update weapon level based on kills
         self._update_weapon_level()
+
+        # Check score milestones for bonus lives
+        self._check_score_milestones()
 
         # Update power-ups
         self._update_power_ups(current_time)
@@ -2432,6 +2440,30 @@ class Game:
         """Recalculate weapon level based on total kills."""
         new_level = min(WEAPON_MAX_LEVEL, 1 + self.total_kills // WEAPON_KILLS_PER_LEVEL)
         self.weapon_level = max(1, new_level)
+
+    def _check_score_milestones(self) -> None:
+        """Award bonus life for each score milestone reached."""
+        for milestone in SCORE_MILESTONES:
+            if self.score >= milestone and milestone not in self.milestones_reached:
+                self.milestones_reached.append(milestone)
+                if self.player.lives < self.config.max_lives:
+                    self.player.lives += 1
+                    self.score_popups.append(
+                        ScorePopup(x=float(self.width // 2), y=float(self.height // 2), text="+1 LIFE!")
+                    )
+
+    def get_milestone_info(self) -> dict:
+        """Return milestone status for display/testing."""
+        next_milestone = None
+        for m in SCORE_MILESTONES:
+            if m not in self.milestones_reached:
+                next_milestone = m
+                break
+        return {
+            "reached": list(self.milestones_reached),
+            "next": next_milestone,
+            "total_milestones": len(SCORE_MILESTONES),
+        }
 
     def get_special_alien_counts(self) -> dict:
         """Return counts of special aliens for display/testing."""

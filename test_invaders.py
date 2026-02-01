@@ -75,6 +75,7 @@ from invaders import (
     PLAYER_START_LIVES,
     POWERUP_CHARS,
     POWERUP_LABELS,
+    SCORE_MILESTONES,
     TITLE_ART,
     TITLE_COLOR_CYCLE,
     WEAPON_KILLS_PER_LEVEL,
@@ -5625,6 +5626,95 @@ class TestAlienDiveBomb(unittest.TestCase):
         game.diving_aliens = [DivingAlien(alien=Alien(x=10, y=10, alien_type=0))]
         game.reset_game()
         self.assertEqual(len(game.diving_aliens), 0)
+
+
+class TestScoreMilestones(unittest.TestCase):
+    """Tests for score threshold milestones with bonus life rewards."""
+
+    def _make_game(self):
+        game = Game(test_mode=True)
+        game.state = GameState.PLAYING
+        game.width = 80
+        game.height = 30
+        return game
+
+    def test_milestones_defined(self):
+        """SCORE_MILESTONES contains expected thresholds."""
+        self.assertEqual(SCORE_MILESTONES, [1000, 2500, 5000, 10000, 25000, 50000])
+
+    def test_no_milestones_at_start(self):
+        """No milestones reached at game start."""
+        game = self._make_game()
+        self.assertEqual(len(game.milestones_reached), 0)
+
+    def test_first_milestone_awards_life(self):
+        """Reaching 1000 score awards a bonus life."""
+        game = self._make_game()
+        initial_lives = game.player.lives
+        game.score = 1000
+        game._check_score_milestones()
+        self.assertEqual(game.player.lives, initial_lives + 1)
+        self.assertIn(1000, game.milestones_reached)
+
+    def test_milestone_not_awarded_twice(self):
+        """Same milestone is not awarded again."""
+        game = self._make_game()
+        game.score = 1000
+        game._check_score_milestones()
+        lives_after_first = game.player.lives
+        game._check_score_milestones()
+        self.assertEqual(game.player.lives, lives_after_first)
+
+    def test_multiple_milestones_at_once(self):
+        """Skipping to high score awards all passed milestones."""
+        game = self._make_game()
+        initial_lives = game.player.lives
+        game.score = 5000  # Should hit 1000, 2500, and 5000
+        game._check_score_milestones()
+        self.assertEqual(len(game.milestones_reached), 3)
+        # Lives capped at max_lives
+        expected = min(initial_lives + 3, game.config.max_lives)
+        self.assertEqual(game.player.lives, expected)
+
+    def test_lives_capped_at_max(self):
+        """Bonus lives don't exceed max_lives."""
+        game = self._make_game()
+        game.player.lives = game.config.max_lives
+        game.score = 1000
+        game._check_score_milestones()
+        self.assertEqual(game.player.lives, game.config.max_lives)
+
+    def test_get_milestone_info(self):
+        """get_milestone_info returns correct state."""
+        game = self._make_game()
+        info = game.get_milestone_info()
+        self.assertEqual(info["reached"], [])
+        self.assertEqual(info["next"], 1000)
+        self.assertEqual(info["total_milestones"], len(SCORE_MILESTONES))
+
+    def test_get_milestone_info_after_reaching(self):
+        """get_milestone_info shows next milestone after reaching one."""
+        game = self._make_game()
+        game.score = 1000
+        game._check_score_milestones()
+        info = game.get_milestone_info()
+        self.assertEqual(info["reached"], [1000])
+        self.assertEqual(info["next"], 2500)
+
+    def test_milestone_popup_created(self):
+        """Bonus life creates a '+1 LIFE!' score popup."""
+        game = self._make_game()
+        game.score = 1000
+        game._check_score_milestones()
+        life_popups = [p for p in game.score_popups if "LIFE" in p.text]
+        self.assertTrue(len(life_popups) > 0)
+
+    def test_milestones_reset_on_game_reset(self):
+        """Milestones are cleared on game reset."""
+        game = self._make_game()
+        game.milestones_reached = [1000, 2500]
+        game.reset_game()
+        self.assertEqual(len(game.milestones_reached), 0)
 
 
 if __name__ == "__main__":

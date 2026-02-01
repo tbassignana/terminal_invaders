@@ -110,7 +110,7 @@
 - [x] **Step 65:** Add alien projectile variety (normal `!`, fast `v`, heavy `#` bunker-breaker)
 - [x] **Step 66:** Add screen-clearing bomb power-up (B pickup, destroys all alien projectiles)
 - [x] **Step 67:** Add alien dive-bomb attack (break formation, diagonal dive toward player)
-- [ ] **Step 68:** Add score threshold milestones with bonus life rewards (1K, 2.5K, 5K, 10K, 25K, 50K)
+- [x] **Step 68:** Add score threshold milestones with bonus life rewards (1K, 2.5K, 5K, 10K, 25K, 50K)
 - [ ] **Step 69:** Add "bullet time" slow motion power-up (50% alien speed for 4s, blue tint)
 - [ ] **Step 70:** Add persistent statistics tracking (lifetime stats in `~/.invaders_stats.json`)
 - [ ] **Step 71:** Add game over score submission flow (3-char initials entry, arcade style)
