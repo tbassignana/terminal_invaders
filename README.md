@@ -1,145 +1,96 @@
 # Terminal Invaders
 
-A terminal-based Space Invaders clone for macOS, built with Python curses.
+A fast, dependency-free Space Invaders arcade game for macOS terminals and zsh. Python 3.10+; also runs on Linux. Fits **60 × 24** cells and centers in larger windows.
 
-## Features
+```zsh
+python3 invaders.py
+```
 
-### Core Gameplay
-- Classic Space Invaders gameplay in your terminal
-- 60 FPS smooth rendering with frame time metrics
-- Animated aliens with color cycling and unique formation patterns
-- Erosion-based bunker defense system
-- Frenzy mode (aliens fire faster as their numbers decrease)
-- Level progression with difficulty scaling and bonus lives
-- Wave-based sub-levels (3 waves per level)
+For an installed `invaders` command:
 
-### Combat
-- Mystery Ship (UFO) for bonus points (50-300)
-- Boss aliens every 5 levels
-- Alien dive-bomb attacks (break formation, diagonal dive toward player)
-- Alien projectile variety (normal, fast, heavy bunker-breaker)
-- Aliens with special behaviors
-- Progressive alien speed increase within each level
-
-### Power-ups & Upgrades
-- Power-ups: rapid fire, shield, wide shot, bullet time (slow-mo)
-- Screen-clearing bomb pickup
-- 5-level player weapon upgrade system
-- Collectible coins and gems dropped by aliens
-- "Last stand" mechanic (buffs at 1 life: speed boost, double fire)
-
-### Scoring & Progression
-- Combo scoring with time-windowed multiplier (up to 5x)
-- Score threshold milestones with bonus life rewards
-- High-score persistence with arcade-style 3-character initials entry
-- Persistent statistics tracking to `~/.invaders_stats.json`
-- Achievement system (10 achievements with unlock popups)
-
-### Game Modes
-- **Classic** — standard level-based campaign
-- **Endless/Survival** — continuous waves with escalating intensity and separate leaderboard
-- **Two-Player** — alternating turns with independent scores and comparison scoreboard
-
-### Replay & Polish
-- Replay recording and deterministic playback via seed
-- Screen shake effect on player death
-- Particle effects
-- Configurable difficulty presets (easy, normal, hard)
-- Optional looping soundtrack and retro sound effects
-- Pause/resume with P or Escape
-- FPS counter (toggle with F1 or `--show-fps`)
-
-## Requirements
-
-- macOS (Linux works without sound)
-- Python 3.10+
-- Terminal with at least 60x24 character size
-
-## Quick Start
-
-```bash
-git clone https://github.com/tbassignana/terminal_invaders.git
-cd terminal_invaders
-pip install -e .
+```zsh
+./setup.sh
+source .venv/bin/activate
 invaders
 ```
 
-Or run directly without installing:
+The installer uses a local virtual environment and leaves your shell configuration alone. You can also install with `python3 -m pip install .` in an existing environment. `python3 -m terminal_invaders` works directly from the checkout.
 
-```bash
-python3 invaders.py
-```
+## The game
+
+- **Classic:** twelve waves, three boss encounters, and a final victory.
+- **Endless:** escalating waves without a finish line.
+- **Daily:** a shared UTC date seed at normal difficulty, with its own daily board.
+- **Duel:** two independent pilots face the same seed, alternating after each lost life.
+- Three difficulties; accelerating formations, armored enemies, diving attackers, aimed shots, and mystery ships.
+- Destructible shelters that repair between waves. Swept collisions keep fast shots from passing through targets.
+- Chain kills for up to **5×** points. Perfect waves earn bonuses; every 10,000 points grants a life, up to six.
+- Weapons improve through the campaign. Pickups grant rapid fire, spread shots, shields, slowed enemies, or shelter repairs. Unclaimed drops are collected when you clear a wave.
+- A **nova bomb** clears hostile fire and damages the fleet. Eighteen direct kills recharge a bomb, up to three. Your last life grants a short rapid-fire boost and an emergency bomb.
+- Local high scores, career statistics, eight achievements, reproducible seeds, and verified input replays.
+- Generated retro sound effects on macOS, optional music, monochrome rendering, and reduced motion. No runtime packages or network connection required.
 
 ## Controls
 
 | Key | Action |
-|-----|--------|
-| `A` / `←` | Move left |
-| `D` / `→` | Move right |
-| `Space` | Fire |
-| `P` / `Escape` | Pause / Resume |
-| `W` / `↑` | Menu navigation up |
-| `S` / `↓` | Menu navigation down |
-| `F1` | Toggle FPS counter |
-| `Q` | Quit |
-| `R` | Restart (at game over) |
+| --- | --- |
+| `←` / `→`, `A` / `D`, `H` / `L` | Move |
+| `Space`, `↑`, `W` | Fire |
+| `F` | Toggle autofire |
+| `B` / `X` | Nova bomb |
+| `P` / `Escape` | Pause or resume |
+| `M` | Toggle sound |
+| `F1` | Toggle FPS display |
+| `R` | Restart the run |
+| `Q` | Return to menu; quit from menu |
+| Arrows or `W` / `S`; `Enter` / `Space` | Navigate and select menus |
 
-## CLI Options
+Terminal keyboards report key presses and repeat events, rather than releases. Brief movement windows smooth repeats; autofire lets you concentrate on dodging. Pause and undersized windows freeze the simulation, including pickups, invulnerability, and enemy timers. Enlarging the window restores the same playfield without moving enemies or changing difficulty.
 
+## Runs and replays
+
+```zsh
+invaders --quickstart --difficulty hard --name ACE
+invaders --daily
+invaders --endless --seed 1978
+invaders --two-player
+invaders --seed 42 --record run.json
+invaders --replay run.json
+invaders --verify-replay run.json       # headless, exit 0 only on a matching checksum
+invaders --scores --difficulty hard
+invaders --mono --reduced-motion --no-sound
+invaders --music "$HOME/Music/arcade.mp3"
 ```
-invaders --help
-```
 
-| Flag | Description |
-|------|-------------|
-| `--difficulty <easy\|normal\|hard>` | Difficulty preset (default: normal) |
-| `--no-sound` | Disable sound effects |
-| `--no-music` | Disable background music |
-| `--show-fps` | Display FPS counter |
-| `--fps <N>` | Set target FPS (default: 60) |
-| `--endless` | Start in endless/survival mode |
-| `--two-player` | Start in two-player alternating turns mode |
-| `--record <FILE>` | Record replay to a JSON file |
-| `--replay <FILE>` | Play back a recorded replay |
-| `--debug` | Enable debug logging to `invaders.log` |
-| `--version` | Show version and exit |
+`--fps 15..120` changes rendering only: gameplay always advances at 60 ticks per second. A private seeded random stream, canonical input tape, versioned settings, and full-state SHA-256 checksum make replay independent of frame rate and terminal dimensions. During playback, `P` pauses and `Q` exits; gameplay keys cannot change the recording. Replays can include unfinished runs and support up to four hours. Legacy 0.1 seed-only recordings are rejected because they lack enough information for reliable playback.
 
-## Gameplay
+`--record` writes the most recently played pilot's run on completion, restart, return to menu, or exit. In duel mode, it records that pilot independently, not the combined match. Starting another run replaces the file. Choose a fresh filename to keep each run. Completed live runs save scores automatically; replays and abandoned runs do not enter the leaderboards. Daily seed and difficulty override `--seed` and `--difficulty`.
 
-- Destroy all aliens before they reach the bottom
-- Use bunkers for cover (they erode when hit)
-- Shoot the Mystery Ship crossing the top for bonus points (50-300)
-- Catch power-ups dropped by destroyed aliens
-- Build combos by killing aliens in quick succession
-- Upgrade your weapon by collecting enough pickups (5 levels)
-- Survive boss fights every 5 levels
-- Earn bonus lives by completing levels and hitting score milestones
-- Difficulty increases each level: faster aliens, more rows, weaker bunkers
+Profiles live at `~/Library/Application Support/terminal-invaders/profile.json` on macOS and `$XDG_DATA_HOME/terminal-invaders/profile.json` (normally `~/.local/share`) on Linux. Use `--profile FILE` for a separate career. Boards keep ten scores per mode/difficulty, and daily results for the latest 31 dates. Atomic writes and a local file lock protect saves; malformed profiles are retained as `.json.bak` when replaced. The old `~/.invaders_*.json` files are untouched; the new rules start fresh boards.
 
-## Soundtrack
+Sound is optional and uses only game-owned `afplay` processes. The checked-in `soundtrack.mp3` can be selected explicitly with `--music ./soundtrack.mp3`; it is not required or included in the Python package. `--no-sound` starts muted; `--no-music` disables a supplied soundtrack. `--help` lists every option.
 
-To enable background music, place an MP3 file at `~/soundtrack.mp3`. The game will loop it automatically during gameplay.
+## Small modules, clear boundaries
+
+| Module | Responsibility |
+| --- | --- |
+| `model.py` | Arena constants, settings, entity values |
+| `engine.py` | Fixed-tick rules, collision handling, progression, state checksum |
+| `ui.py` | Curses drawing, keyboard input, fixed clock, menus and duel sessions |
+| `storage.py` | Validated profiles, boards, achievements, atomic writes |
+| `replay.py` | Versioned sparse recordings and validation |
+| `audio.py` | Generated effects and bounded, owned audio processes |
+| `cli.py` | Argument validation and application lifecycle |
+
+The engine has no terminal, clock, filesystem, or audio dependencies. Rendering never consumes gameplay randomness. There is no global event bus, threaded audio backend hierarchy, duplicated compatibility constants, or spatial index for a fleet of a few dozen aliens. Entity counts and catch-up work are bounded.
 
 ## Development
 
-```bash
-pip install -e ".[test]"    # Install with test dependencies
-make test                   # Run tests
-make test-coverage          # Run tests with HTML coverage report
-make lint                   # Run ruff linter
-make clean                  # Remove build artifacts
+```zsh
+python3 -m pip install -e '.[test]'
+make test
+make lint
+python3 -m pytest --cov=terminal_invaders --cov-report=term-missing
 ```
 
-## Architecture
-
-- **GameConfig** dataclass for all constants (no global mutation)
-- **EventBus** for decoupled publish/subscribe game events
-- **SpatialGrid** for optimized collision detection
-- **FrameTimer** for rolling-window performance metrics
-- **ScoreManager** / **StatsManager** with JSON persistence
-- **AchievementManager** for unlock tracking and popup display
-- **ReplayRecorder** / **ReplayPlayer** for deterministic replay via seed
-- **BossAlien** / **DivingAlien** for advanced enemy behaviors
-- **ParticleSystem** for visual effects
-- **AbstractSoundBackend** with macOS and Null implementations
-- 691 tests with coverage enforced via CI
+Tests cover deterministic runs, collision ordering, damage and upgrades, campaign transitions, recording round trips and corruption, profile recovery, concurrent profile merging, audio process ownership, terminal input, and session states. CI runs on macOS and Linux with Python 3.10, 3.12, and 3.14.

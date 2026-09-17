@@ -1,21 +1,18 @@
-.PHONY: test test-coverage lint run install clean
+.PHONY: test lint run install clean
 
 test:
-	python3 -m pytest test_invaders.py -v
-
-test-coverage:
-	python3 -m pytest test_invaders.py --cov=invaders --cov-report=html --cov-report=term-missing
-	@echo "HTML coverage report generated in htmlcov/"
+	python3 -m pytest
 
 lint:
-	python3 -m ruff check invaders.py test_invaders.py
+	python3 -m ruff check terminal_invaders tests invaders.py
+	python3 -m ruff format --check terminal_invaders tests invaders.py
 
 run:
-	python3 invaders.py
+	python3 -m terminal_invaders
 
 install:
-	pip install -e ".[test]"
+	python3 -m pip install -e '.[test]'
 
 clean:
-	rm -rf __pycache__ .pytest_cache .coverage htmlcov *.egg-info .eggs build dist
-	find . -name '*.pyc' -delete
+	rm -rf .pytest_cache .ruff_cache .coverage htmlcov build dist *.egg-info
+	find terminal_invaders tests -type d -name __pycache__ -exec rm -rf {} +
