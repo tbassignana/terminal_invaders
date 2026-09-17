@@ -53,7 +53,9 @@ class Playback:
             raise ValueError("invalid replay structure") from exc
 
     def _load(self, raw: dict) -> None:
-        if not isinstance(raw, dict) or raw.get("version") != FORMAT_VERSION:
+        if not isinstance(raw, dict):
+            raise ValueError("invalid replay structure")
+        if raw.get("version") != FORMAT_VERSION:
             raise ValueError("unsupported replay version (use a version 1 recording)")
         config = raw["config"]
         if (

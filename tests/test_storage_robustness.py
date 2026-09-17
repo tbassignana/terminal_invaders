@@ -32,6 +32,24 @@ class StorageRobustnessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid replay structure"):
             Playback(self.path)
 
+    def test_non_object_replay_is_a_structure_error(self):
+        for value in ([], None, True, 42, "replay"):
+            with self.subTest(value=value):
+                self.path.write_text(json.dumps(value))
+                with self.assertRaisesRegex(ValueError, "invalid replay structure"):
+                    Playback(self.path)
+
+    def test_decoder_recursion_is_a_structure_error(self):
+        self.path.write_text("[]")
+        with patch("terminal_invaders.replay.json.loads", side_effect=RecursionError):
+            with self.assertRaisesRegex(ValueError, "invalid replay structure"):
+                Playback(self.path)
+
+    def test_unsupported_version_has_a_distinct_error(self):
+        self.path.write_text(json.dumps({"version": 999}))
+        with self.assertRaisesRegex(ValueError, "unsupported replay version"):
+            Playback(self.path)
+
     def test_unavailable_file_lock_records_exactly_once(self):
         profile = Profile(self.path)
         result = dict(score=120, wave=1, victory=False, kills=2, shots=3, hits=2, ticks=300, best_combo=2)
