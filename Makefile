@@ -14,5 +14,5 @@ install:
 	python3 -m pip install -e '.[test]'
 
 clean:
-	rm -rf .pytest_cache .ruff_cache .coverage htmlcov build dist *.egg-info
+	rm -rf __pycache__ .pytest_cache .ruff_cache .hypothesis .coverage* htmlcov build dist *.egg-info
 	find terminal_invaders tests -type d -name __pycache__ -exec rm -rf {} +
