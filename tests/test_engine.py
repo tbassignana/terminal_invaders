@@ -2,8 +2,9 @@
 
 import random
 import unittest
+from dataclasses import replace
 
-from terminal_invaders.engine import Game, segment_hit
+from terminal_invaders.engine import DIGEST_FIELDS, Game, segment_hit
 from terminal_invaders.model import (
     HEIGHT,
     MAX_EFFECTS,
@@ -14,9 +15,25 @@ from terminal_invaders.model import (
     Alien,
     Boss,
     Config,
+    Effect,
     Pickup,
     Shot,
 )
+
+# One deliberate change per non-scalar gameplay field; scalars are bumped or toggled.
+GAMEPLAY_CHANGES = {
+    "config": lambda game: setattr(game, "config", replace(game.config, seed=game.config.seed + 1)),
+    "rng": lambda game: game.rng.random(),
+    "phase": lambda game: setattr(game, "phase", "victory"),
+    "player": lambda game: setattr(game.player, "bombs", game.player.bombs + 1),
+    "aliens": lambda game: setattr(game.aliens[0], "hp", 9),
+    "shots": lambda game: game.shots.append(Shot(1, 1)),
+    "pickups": lambda game: game.pickups.append(Pickup(1, 1, "slow")),
+    "bunkers": lambda game: game.bunkers.popitem(),
+    "boss": lambda game: setattr(game, "boss", Boss(30, 3, 9, 9)),
+    "ufo": lambda game: setattr(game, "ufo", UFO(5)),
+    "powerups": lambda game: game.powerups.update(slow=1),
+}
 
 
 def playing(seed=7, **kwargs):
@@ -48,6 +65,30 @@ class DeterminismTests(unittest.TestCase):
         self.assertNotEqual(original, game.digest())
         self.assertNotEqual(Game(Config(seed=1)).digest(), Game(Config(seed=2)).digest())
         self.assertNotEqual(Game(Config()).digest(), Game(Config(mode="daily")).digest())
+
+    def test_digest_covers_gameplay_fields_and_ignores_presentation(self):
+        def advanced():
+            game = Game(Config(seed=5))
+            for tick in range(400):
+                game.step(("fire", "left" if tick % 60 < 30 else "right"))
+            return game
+
+        game = advanced()
+        original = game.digest()
+        game.wave_name, game.notice = "RENAMED WAVE", "A NEW NOTICE"
+        game.effects.append(Effect(10, 10, "BOOM"))
+        game.events.append("kill")
+        self.assertEqual(game.digest(), original)
+        self.assertEqual(set(vars(game)) - set(DIGEST_FIELDS), {"wave_name", "notice", "effects", "events"})
+        for name in DIGEST_FIELDS:
+            with self.subTest(field=name):
+                game = advanced()
+                if name in GAMEPLAY_CHANGES:
+                    GAMEPLAY_CHANGES[name](game)
+                else:
+                    value = getattr(game, name)
+                    setattr(game, name, not value if type(value) is bool else value + 1)
+                self.assertNotEqual(game.digest(), original)
 
     def test_step_validation_and_terminal_state(self):
         game = Game()

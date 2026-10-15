@@ -1,19 +1,49 @@
 name: CI
 on: [push, pull_request]
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   test:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python: ['3.10', '3.12', '3.14']
+        python: ['3.11', '3.12', '3.13', '3.14', '3.15']
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -e '.[test]'
       - run: make lint
-      - run: python -m pytest --cov=terminal_invaders --cov-report=term-missing --cov-fail-under=80
+      - run: python -m pytest --cov=terminal_invaders --cov-report=term-missing --cov-fail-under=85
       - run: invaders --version
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: python -m pip install build twine
+      - run: python -m build
+      - run: python -m twine check --strict dist/*
+      # A fresh venv outside the checkout proves the wheel works without the source tree.
+      - run: |
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install dist/*.whl
+      - run: |
+          "$RUNNER_TEMP/wheel-venv/bin/invaders" --version
+          "$RUNNER_TEMP/wheel-venv/bin/invaders" --verify-replay tests/fixtures/golden-classic-normal.json

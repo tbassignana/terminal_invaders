@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 WIDTH, HEIGHT, TICK_RATE = 60, 20, 60
+RULESET = "campaign-1"  # bump whenever gameplay rules change; separates replays and leaderboards
 CAMPAIGN_WAVES = 12
 MAX_SHOTS, MAX_EFFECTS, MAX_PICKUPS = 160, 24, 8
 ACTIONS = frozenset({"left", "right", "fire", "bomb", "autofire"})

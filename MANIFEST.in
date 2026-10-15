@@ -1,0 +1,3 @@
+# The sdist ships the tests, so it also ships what they read: golden replays and the dev tools.
+graft tests/fixtures
+include tools/*.py

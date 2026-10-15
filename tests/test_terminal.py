@@ -61,6 +61,13 @@ class Terminal:
             if ready:
                 self.output.extend(os.read(self.master, 65536))
 
+    def wait_for(self, text, seconds=3.0):
+        """Drain until text appears; a loaded machine can take a while to handle SIGWINCH."""
+        deadline = time.monotonic() + seconds
+        while text not in self.output and time.monotonic() < deadline:
+            self.drain(0.05)
+        return text in self.output
+
     def finish(self):
         deadline = time.monotonic() + 5
         while self.process.poll() is None and time.monotonic() < deadline:
@@ -99,8 +106,7 @@ def test_real_terminal_pause_resize_record_and_restore(tmp_path, fps):
         terminal.send("p")
         terminal.drain(0.1)
         terminal.resize(40, 12)
-        terminal.drain(0.1)
-        assert b"RESIZE TO AT LEAST" in terminal.output
+        assert terminal.wait_for(b"RESIZE TO AT LEAST")
         terminal.resize(60, 24)
         terminal.drain(0.1)
         terminal.send("p")
@@ -110,7 +116,7 @@ def test_real_terminal_pause_resize_record_and_restore(tmp_path, fps):
         terminal.send("q")
         terminal.finish()
         assert terminal.process.returncode == 0
-        assert 1 <= json.loads(terminal.tape.read_text())["ticks"] < 100
+        assert 1 <= json.loads(terminal.tape.read_text())["tapes"][0]["ticks"] < 100
     finally:
         terminal.close()
 
@@ -141,7 +147,7 @@ def test_real_gameplay_controls_roundtrip(tmp_path):
         terminal.drain(0.1)
         terminal.send("q")
         terminal.finish()
-        replay = Playback(terminal.tape)
+        (replay,) = Playback(terminal.tape).tapes
         game = Game(replay.config)
         for tick in range(replay.ticks):
             game.step(replay.actions_at(tick))

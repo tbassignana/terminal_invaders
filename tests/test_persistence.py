@@ -7,7 +7,7 @@ import pytest
 
 from terminal_invaders.cli import main, parser
 from terminal_invaders.engine import Game
-from terminal_invaders.model import Config
+from terminal_invaders.model import RULESET, Config
 from terminal_invaders.replay import Playback, Recorder
 from terminal_invaders.storage import Profile, atomic_json
 
@@ -30,7 +30,7 @@ def tape(path, ticks=420):
 def test_record_roundtrip_and_headless_verification(tmp_path, capsys):
     path = tmp_path / "run.json"
     original = tape(path)
-    replay = Playback(path)
+    (replay,) = Playback(path).tapes
     clone = Game(replay.config)
     for tick in range(replay.ticks):
         clone.step(replay.actions_at(tick))
@@ -44,7 +44,7 @@ def test_tamper_detected(tmp_path, capsys):
     path = tmp_path / "run.json"
     tape(path)
     raw = json.loads(path.read_text())
-    raw["config"]["seed"] += 1
+    raw["tapes"][0]["config"]["seed"] += 1
     path.write_text(json.dumps(raw))
     assert main(["--verify-replay", str(path)]) == 1
     assert "MISMATCH" in capsys.readouterr().out
@@ -53,7 +53,8 @@ def test_tamper_detected(tmp_path, capsys):
 @pytest.mark.parametrize(
     "change",
     [
-        {"version": 99},
+        {"pilot": 2},
+        {"result": {"score": 0, "wave": 1, "kills": 0}},
         {"ticks": -1},
         {"ticks": True},
         {"ticks": 999999999},
@@ -69,7 +70,7 @@ def test_invalid_replays_rejected(tmp_path, change):
     path = tmp_path / "run.json"
     tape(path, 2)
     raw = json.loads(path.read_text())
-    raw.update(change)
+    raw["tapes"][0].update(change)
     path.write_text(json.dumps(raw))
     with pytest.raises(ValueError):
         Playback(path)
@@ -78,7 +79,14 @@ def test_invalid_replays_rejected(tmp_path, change):
 def test_empty_replay(tmp_path):
     path = tmp_path / "run.json"
     tape(path, 0)
-    assert Playback(path).verify(Game(Config(seed=321)))
+    assert Playback(path).tapes[0].verify(Game(Config(seed=321)))
+
+
+def test_replays_and_scores_carry_the_shared_ruleset(tmp_path):
+    game = tape(tmp_path / "run.json")
+    Profile(tmp_path / "profile.json").record(game.result(), game.config, "AAA")
+    assert json.loads((tmp_path / "run.json").read_text())["ruleset"] == RULESET
+    assert [row["ruleset"] for row in json.loads((tmp_path / "profile.json").read_text())["scores"]] == [RULESET]
 
 
 def test_profile_roundtrip_and_board_separation(tmp_path):
@@ -116,7 +124,8 @@ def test_corrupt_profile_preserved_on_save(tmp_path):
     profile = Profile(path)
     assert profile.error
     profile.record(result(), Config(), "AAA")
-    assert path.with_suffix(".json.bak").read_text() == "{bad json"
+    (moved,) = tmp_path.glob("profile.json.corrupt-*")
+    assert moved.read_text() == "{bad json"
     assert Profile(path).data["stats"]["runs"] == 1
 
 

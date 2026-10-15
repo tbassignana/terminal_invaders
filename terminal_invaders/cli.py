@@ -11,7 +11,7 @@ from pathlib import Path
 from . import __version__
 from .model import DIFFICULTIES, MODES, Config
 from .replay import Playback
-from .storage import Profile, clean_name
+from .storage import Profile, clean_name, log_path
 
 
 def bounded_int(low: int, high: int):
@@ -47,11 +47,16 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--music", type=Path, help="optional local soundtrack played by macOS afplay")
     tapes = command.add_mutually_exclusive_group()
     tapes.add_argument("--record", type=Path, metavar="FILE", help="save the last played run as a verified replay")
-    tapes.add_argument("--replay", type=Path, metavar="FILE", help="watch a version 1 replay")
+    tapes.add_argument("--replay", type=Path, metavar="FILE", help="watch a replay, one pilot after another")
     tapes.add_argument("--verify-replay", type=Path, metavar="FILE", help="verify a replay without a terminal")
     command.add_argument("--profile", type=Path, help="use a separate profile JSON file")
     command.add_argument("--scores", action="store_true", help="print scores for the selected mode and exit")
-    command.add_argument("--debug", action="store_true", help="write diagnostic errors to invaders.log")
+    command.add_argument(
+        "--debug",
+        action="store_true",
+        help="append diagnostic errors to invaders.log in $XDG_STATE_HOME/terminal-invaders "
+        "(default ~/.local/state/terminal-invaders; ~/Library/Logs/terminal-invaders on macOS)",
+    )
     command.add_argument("--version", action="version", version=f"Terminal Invaders {__version__}")
     return command
 
@@ -65,22 +70,21 @@ def main(argv: list[str] | None = None) -> int:
         options.difficulty = "normal"
     elif options.seed is None:
         options.seed = secrets.randbelow(10**15)
-    if options.debug:
-        logging.basicConfig(filename="invaders.log", level=logging.DEBUG)
     try:
+        if options.debug:
+            log = log_path()
+            log.parent.mkdir(parents=True, exist_ok=True)
+            logging.basicConfig(filename=log, level=logging.DEBUG)
         replay_path = options.verify_replay or options.replay
         replay = Playback(replay_path) if replay_path else None
         if options.verify_replay:
-            from .engine import Game
-
-            game = Game(replay.config)
-            for tick in range(replay.ticks):
-                game.step(replay.actions_at(tick))
-                if game.tick != tick + 1:
-                    raise ValueError("replay continues after the run ended")
-            verified = replay.verify(game)
-            print(f"{'VERIFIED' if verified else 'MISMATCH'}  {game.tick} ticks  score {game.score}  wave {game.wave}")
-            return 0 if verified else 1
+            verified = []
+            for tape in replay.tapes:
+                game = tape.simulate()
+                verified.append(tape.verify(game))
+                status = "VERIFIED" if verified[-1] else "MISMATCH"
+                print(f"{status}  pilot {tape.pilot}  {game.tick} ticks  score {game.score}  wave {game.wave}")
+            return 0 if all(verified) else 1
         profile = Profile(options.profile)
         options.name = options.name or profile.data["name"]
         if options.scores:

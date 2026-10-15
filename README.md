@@ -4,7 +4,7 @@ Space Invaders for your terminal. Clear the fleet, dodge incoming fire, and try 
 
 Play through a 12-wave campaign, see how far you get in endless mode, try the daily challenge, or take turns with a second player. There are bosses, power-ups, combo bonuses, and local high scores along the way.
 
-Runs on macOS and Linux with Python 3.10 or newer. You'll need a terminal at least 60 columns wide and 24 rows tall.
+Runs on macOS and Linux with Python 3.11 or newer. You'll need a terminal at least 60 columns wide and 24 rows tall.
 
 ## Play
 
@@ -40,7 +40,10 @@ Use the menus to choose a mode and difficulty. Scores save automatically when a 
 ## Working on the game
 
 ```sh
-python3 -m pip install -e '.[test]'
+python3 -m pip install -e '.[dev]'
 make test
 make lint
+make balance
 ```
+
+`make balance` has bots play a quick set of seeded games and prints win rates, pacing and economy for each bot. `make balance-full` runs every bot on every difficulty plus long endless games, which takes much longer. See `python3 tools/balance.py --help` for the options.

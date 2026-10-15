@@ -24,7 +24,8 @@ class StorageRobustnessTests(unittest.TestCase):
         self.assertIn("Profile could not be loaded", profile.error)
         self.assertEqual(profile.data["stats"]["runs"], 0)
         self.assertTrue(profile.save())
-        self.assertEqual(self.path.with_suffix(".json.bak").read_text(), original)
+        (moved,) = self.path.parent.glob("profile.json.corrupt-*")
+        self.assertEqual(moved.read_text(), original)
         self.assertIsNone(Profile(self.path).error)
 
     def test_deep_replay_is_a_validation_error(self):

@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-import random
+import math
 from dataclasses import asdict
 
 from .model import (
@@ -14,6 +14,7 @@ from .model import (
     MAX_PICKUPS,
     MAX_SHOTS,
     PICKUPS,
+    RULESET,
     UFO,
     WIDTH,
     Alien,
@@ -23,6 +24,14 @@ from .model import (
     Pickup,
     Player,
     Shot,
+)
+from .rng import Rng
+
+# The gameplay state Game.digest() hashes with RULESET; wave_name, notice, effects and events are presentation only.
+DIGEST_FIELDS = tuple(
+    "config difficulty rng tick phase wave wave_timer player aliens shots pickups bunkers boss ufo powerups score kills"
+    " shots_fired hits combo best_combo combo_timer bomb_charge autofire _fire_cooldown _alien_clock _enemy_clock"
+    " _dive_clock _ufo_clock _direction _wave_size _wave_damage _next_life".split()
 )
 
 
@@ -47,7 +56,7 @@ class Game:
 
     def __init__(self, config: Config = Config()):
         self.config = config
-        self.rng = random.Random(config.seed)
+        self.rng = Rng(config.seed)
         lives, self.difficulty = DIFFICULTIES[config.difficulty]
         self.player = Player(lives=lives)
         self.tick = self.score = self.kills = self.shots_fired = self.hits = 0
@@ -276,29 +285,42 @@ class Game:
             aim = (self.player.x - alien.x) / 240 if self.wave >= 5 else 0.0
             self.shots.append(Shot(alien.x, alien.y + 0.7, False, max(-0.08, min(0.08, aim)), speed))
 
-    def _targets(self, shot):
-        for cell in self.bunkers:
-            yield "bunker", cell, cell[0], cell[1], 0.48, 0.48
+    def _collision(self, shot, nx, ny):
+        """Nearest box the swept shot enters; earlier candidates win exact ties, so shelters block first."""
+        x0, y0 = shot.x, shot.y
+        nearest, collision = 2.0, None
+        cells = self.bunkers
+        if cells:
+            # Shelter boxes reach 0.48 from integer cells and never overlap (no ties): test only cells near the sweep.
+            left, right = math.ceil(min(x0, nx) - 0.5), math.floor(max(x0, nx) + 0.5)
+            top, bottom = math.ceil(min(y0, ny) - 0.5), math.floor(max(y0, ny) + 0.5)
+            if (right - left + 1) * (bottom - top + 1) < len(cells):
+                cells = [(x, y) for y in range(top, bottom + 1) for x in range(left, right + 1) if (x, y) in cells]
+            for x, y in cells:
+                distance = segment_hit(x0, y0, nx, ny, x, y, 0.48, 0.48)
+                if distance is not None and distance < nearest:
+                    nearest, collision = distance, ("bunker", (x, y))
         if not shot.friendly:
-            yield "player", self.player, self.player.x, self.player.y, 1.35, 0.45
-            return
+            player = self.player
+            distance = segment_hit(x0, y0, nx, ny, player.x, player.y, 1.35, 0.45)
+            return ("player", player) if distance is not None and distance < nearest else collision
         for alien in self.aliens:
-            yield "alien", alien, alien.x, alien.y, 1.35, 0.48
-        if self.boss:
-            yield "boss", self.boss, self.boss.x, self.boss.y, 4.0, 0.75
-        if self.ufo:
-            yield "ufo", self.ufo, self.ufo.x, self.ufo.y, 2.0, 0.45
+            distance = segment_hit(x0, y0, nx, ny, alien.x, alien.y, 1.35, 0.48)
+            if distance is not None and distance < nearest:
+                nearest, collision = distance, ("alien", alien)
+        for kind, target, rx, ry in (("boss", self.boss, 4.0, 0.75), ("ufo", self.ufo, 2.0, 0.45)):
+            if target:
+                distance = segment_hit(x0, y0, nx, ny, target.x, target.y, rx, ry)
+                if distance is not None and distance < nearest:
+                    nearest, collision = distance, (kind, target)
+        return collision
 
     def _move_shots(self):
         remaining = []
         for index, shot in enumerate(self.shots):
             speed = 0.55 if not shot.friendly and "slow" in self.powerups else 1.0
             nx, ny = shot.x + shot.vx * speed, shot.y + shot.vy * speed
-            nearest, collision = 2.0, None
-            for kind, target, x, y, rx, ry in self._targets(shot):
-                distance = segment_hit(shot.x, shot.y, nx, ny, x, y, rx, ry)
-                if distance is not None and distance < nearest:
-                    nearest, collision = distance, (kind, target)
+            collision = self._collision(shot, nx, ny)
             if collision:
                 self._impact(shot, *collision)
                 if self.phase == "game_over":
@@ -462,16 +484,17 @@ class Game:
         }
 
     def digest(self) -> str:
-        """Hash full simulation state, including timers, configuration and RNG."""
+        """Hash RULESET and the DIGEST_FIELDS, including timers, configuration and RNG state."""
 
         def encode(value):
             if hasattr(value, "__dataclass_fields__"):
                 return asdict(value)
             raise TypeError(f"Cannot serialize {type(value).__name__}")
 
-        state = dict(vars(self))
+        state = {name: getattr(self, name) for name in DIGEST_FIELDS}
         state["rng"] = self.rng.getstate()
         state["bunkers"] = sorted((x, y, hp) for (x, y), hp in self.bunkers.items())
+        state["ruleset"] = RULESET
         return hashlib.sha256(
             json.dumps(state, default=encode, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         ).hexdigest()

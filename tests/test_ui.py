@@ -9,7 +9,8 @@ from unittest.mock import Mock, patch
 
 from terminal_invaders.engine import Game
 from terminal_invaders.model import Config, Shot
-from terminal_invaders.replay import Playback, Recorder
+from terminal_invaders.replay import Playback, Recorder, save_tapes
+from terminal_invaders.storage import Profile
 from terminal_invaders.ui import Controls, FixedClock, Painter, Session, _loop
 
 
@@ -29,7 +30,7 @@ def session(**overrides):
         fps=60,
     )
     options.update(overrides)
-    profile = Mock(data={"scores": [], "stats": {}, "achievements": []}, error=None)
+    profile = Mock(data={"scores": [], "stats": {}, "achievements": []}, error=None, alert=None)
     profile.record.return_value = []
     profile.best.return_value = 0
     audio = Mock(enabled=False)
@@ -148,15 +149,58 @@ class SessionTests(unittest.TestCase):
             current = session(record=path)
             current.step(0)
             current.handle(ord("q"), 0)
-            replay = Playback(path)
+            (replay,) = Playback(path).tapes
             self.assertTrue(replay.verify(current.pilot.game))
             self.assertEqual(current.scene, "menu")
 
     def test_restart_keeps_replay_failure_visible(self):
         current = session(record=Path("unused.json"))
-        current.pilot.recorder.save = Mock(side_effect=OSError("disk unavailable"))
-        current.start()
+        with patch("terminal_invaders.ui.save_tapes", side_effect=OSError("disk unavailable")):
+            current.start()
         self.assertIn("disk unavailable", current.note)
+
+    def test_duel_records_every_pilot_into_one_verifiable_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "duel.json"
+            current = session(two_player=True, record=path)
+            for active, ticks in ((0, 5), (1, 3), (0, 2)):
+                current.active = active
+                current.change_scene("playing")
+                for _ in range(ticks):
+                    current.step(0)
+                current.save_replay()
+            current.handle(ord("q"), 0)
+            tapes = Playback(path).tapes
+            self.assertEqual([(tape.pilot, tape.ticks) for tape in tapes], [(1, 7), (2, 3)])
+            self.assertTrue(all(tape.verify(tape.simulate()) for tape in tapes))
+
+    @patch("terminal_invaders.ui.curses.doupdate")
+    def test_replay_watches_every_tape_in_order(self, update):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "duel.json"
+            tapes = []
+            for pilot, ticks in ((1, 4), (2, 6)):
+                game, recorder = Game(Config(seed=9)), Recorder(Config(seed=9), pilot)
+                for _ in range(ticks):
+                    recorder.append(("right",))
+                    game.step(("right",))
+                tapes.append(recorder.tape(game))
+            save_tapes(path, tapes)
+            current = session()
+            current.replay = Playback(path)
+            current.start()
+            for _ in range(4):
+                current.step(0)
+            self.assertEqual((current.active, current.scene), (1, "playing"))
+            for _ in range(6):
+                current.step(0)
+            self.assertEqual(current.scene, "results")
+            self.assertTrue(current.replay_verified)
+            self.assertEqual([(pilot.game.tick, pilot.verified) for pilot in current.pilots], [(4, True), (6, True)])
+            screen = FakeScreen()
+            Painter(screen, current.options).draw(current, 60)
+            self.assertIn("REPLAY VERIFIED", screen.content())
+            self.assertIn("P2 0  WAVE 1  OK", screen.content())
 
 
 class FakeScreen:
@@ -271,6 +315,21 @@ class DrawingTests(unittest.TestCase):
         Painter(screen, current.options).draw(current, 60)
         self.assertIn("NORMAL", screen.content())
         self.assertNotIn("HARD", screen.content())
+
+    @patch("terminal_invaders.ui.curses.doupdate")
+    def test_profile_alerts_are_shown_whole_on_the_menu_and_results(self, update):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "profile.json"
+            for content in ('{"version": 3, "name": "FUTURE"}', "{bad json"):
+                path.write_text(content)
+                current = session()
+                current.profile = Profile(path)
+                for scene in ("menu", "results"):
+                    with self.subTest(content=content, scene=scene):
+                        current.scene = scene
+                        screen = FakeScreen()
+                        Painter(screen, current.options).draw(current, 60)
+                        self.assertIn(current.profile.alert, screen.content())
 
     @patch("terminal_invaders.ui.curses.init_pair", side_effect=curses.error)
     @patch("terminal_invaders.ui.curses.use_default_colors")

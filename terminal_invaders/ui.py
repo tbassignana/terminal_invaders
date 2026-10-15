@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from .engine import Game
 from .model import HEIGHT, TICK_RATE, WIDTH, Config
-from .replay import Recorder
+from .replay import Recorder, save_tapes
 from .storage import ACHIEVEMENTS, board_key
 
 MIN_HEIGHT = HEIGHT + 4
@@ -97,6 +97,7 @@ class Pilot:
     recorder: Recorder | None = None
     finished: bool = False
     unlocked: tuple[str, ...] = ()
+    verified: bool | None = None
 
 
 class Session:
@@ -120,19 +121,22 @@ class Session:
 
     def start(self):
         self.save_replay()
-        seed = self.options.seed if self.options.fixed_seed else secrets.randbits(32)
-        config = self.replay.config if self.replay else self.configuration(seed)
-        count = 2 if self.mode == "duel" and not self.replay else 1
+        if self.replay:
+            configs = [tape.config for tape in self.replay.tapes]
+        else:
+            seed = self.options.seed if self.options.fixed_seed else secrets.randbits(32)
+            configs = [self.configuration(seed)] * (2 if self.mode == "duel" else 1)
+        count = len(configs)
         self.pilots = [
             Pilot(
                 Game(config),
                 f"{self.options.name[:8]}-{n + 1}" if count == 2 else self.options.name,
-                Recorder(config) if self.options.record and not self.replay else None,
+                Recorder(config, n + 1) if self.options.record and not self.replay else None,
             )
-            for n in range(count)
+            for n, config in enumerate(configs)
         ]
         self.active, self.replay_verified = 0, None
-        self.change_scene("handoff" if count == 2 else "playing")
+        self.change_scene("handoff" if count == 2 and not self.replay else "playing")
 
     def configuration(self, seed=None):
         if self.mode == "daily":
@@ -148,9 +152,10 @@ class Session:
         self.controls = Controls()
 
     def save_replay(self):
-        if self.pilot and self.pilot.recorder:
+        recorded = [pilot for pilot in self.pilots if pilot.recorder]
+        if recorded:
             try:
-                self.pilot.recorder.save(self.options.record, self.pilot.game)
+                save_tapes(self.options.record, [pilot.recorder.tape(pilot.game) for pilot in recorded])
                 self.note = ""
             except (OSError, ValueError) as exc:
                 self.note = f"Replay not saved: {exc}"
@@ -223,17 +228,18 @@ class Session:
             return
         pilot = self.pilot
         game = pilot.game
-        if self.replay and game.tick >= self.replay.ticks:
+        tape = self.replay.tapes[self.active] if self.replay else None
+        if tape and game.tick >= tape.ticks:
             self.finish_replay()
             return
-        actions = self.replay.actions_at(game.tick) if self.replay else self.controls.sample(now)
+        actions = tape.actions_at(game.tick) if tape else self.controls.sample(now)
         if pilot.recorder:
             pilot.recorder.append(actions)
         lives = game.player.lives
         game.step(actions)
         self.audio.update(game.events, playing=True)
-        if self.replay:
-            if game.tick >= self.replay.ticks or game.phase in TERMINAL:
+        if tape:
+            if game.tick >= tape.ticks or game.phase in TERMINAL:
                 self.finish_replay()
             return
         if game.phase in TERMINAL and not pilot.finished:
@@ -250,8 +256,14 @@ class Session:
                 self.change_scene("handoff")
 
     def finish_replay(self):
-        self.replay_verified = self.replay.verify(self.pilot.game)
-        self.change_scene("results")
+        """Verify the tape just watched, then play the next pilot's tape or show the results."""
+        self.pilot.verified = self.replay.tapes[self.active].verify(self.pilot.game)
+        if self.active + 1 < len(self.pilots):
+            self.active += 1
+            self.change_scene("playing")
+        else:
+            self.replay_verified = all(pilot.verified for pilot in self.pilots)
+            self.change_scene("results")
 
 
 class Painter:
@@ -366,7 +378,7 @@ class Painter:
     def footer(self, session):
         sound = "ON" if getattr(session.audio, "enabled", False) else "OFF"
         self.text(23, 0, f"PILOT {session.options.name}  |  SOUND {sound} [M]", dim=True)
-        message = session.note or session.profile.error
+        message = session.note or session.profile.alert
         if message:
             self.center(22, str(message)[:WIDTH], color=3)
 
@@ -470,7 +482,13 @@ class Painter:
         game = session.pilot.game
         if session.replay:
             title = "REPLAY VERIFIED" if session.replay_verified else "REPLAY MISMATCH"
-            lines = [f"SCORE {game.score:,}    WAVE {game.wave}", "Q / Escape to exit"]
+            lines = [f"SCORE {game.score:,}    WAVE {game.wave}"]
+            if len(session.pilots) > 1:
+                lines = [
+                    f"P{n} {pilot.game.score:,}  WAVE {pilot.game.wave}  {'OK' if pilot.verified else 'MISMATCH'}"
+                    for n, pilot in enumerate(session.pilots, 1)
+                ]
+            lines += ["Q / Escape to exit"]
         elif len(session.pilots) == 2:
             first, second = session.pilots
             winner = max(session.pilots, key=lambda pilot: pilot.game.score)
@@ -488,8 +506,8 @@ class Painter:
             lines += ["Enter fly again   Q menu"]
         lines.insert(-1, f"SEED {game.config.seed}")
         self.panel(title, lines)
-        if session.note or session.profile.error:
-            self.center(23, str(session.note or session.profile.error)[:WIDTH], color=3)
+        if session.note or session.profile.alert:
+            self.center(23, str(session.note or session.profile.alert)[:WIDTH], color=3)
 
     def draw(self, session, fps):
         self.screen.erase()
