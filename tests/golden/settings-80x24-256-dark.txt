@@ -1,0 +1,62 @@
+# scene=settings size=80x24 k=1 tier=256 theme=dark seed=1978 tick=0 scheme=latched
+|                                                                                |
+|                                    SETTINGS                                    |
+|                Saved to your profile. A flag wins for one run.                 |
+|                                                                                |
+|            > PALETTE         <           DEFAULT            >                  |
+|              BACKGROUND      <         AUTO (DARK)          >                  |
+|              EFFECTS         <             OFF              >                  |
+|              REDUCED MOTION  <             OFF              >                  |
+|              SCALE           <         AUTO (TEXT)          >                  |
+|              CONTROLS        <          AUTO (TAP)          >                  |
+|              KEYS            <           DEFAULT            >                  |
+|              FRAME RATE      <              60              >                  |
+|              SOUND           <              ON              >                  |
+|              TITLE DEMO      <             OFF              >                  |
+|              TIPS            <             AUTO             >                  |
+|              PILOT                         ACE       Enter to change           |
+|              BACK                                                              |
+|             /A\ ship   | yours   ! v theirs   [R] catch   # cover              |
+|                                                                                |
+|                Today's colours. Arcade keeps its 1978 colours.                 |
+|                                                                                |
+|            Up/Down choose  Left/Right change  Esc save and go back             |
+|                                                                                |
+|          PILOT ACE  |  SOUND OFF [M]                                           |
+--- styles
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa..........................bbbbbbbb..........................aaaaaaaaaa|
+|aaaaaaaaaa......ccccccccccccccccccccccccccccccccccccccccccccccc.......aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa..bbbbbbbbb.........dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..dddddddddddd......dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..ddddddddd.........dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..dddddddddddddddd..dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..ddddddd...........dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..dddddddddd........dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..dddddd............dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..dddddddddddd......dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..ddddddd...........dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..dddddddddddd......dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..dddddd............dddddddddddddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa..ddddddd............dddddddddddddddddddddddccccccccccccccc.aaaaaaaaaa|
+|aaaaaaaaaa..dddddd....................................................aaaaaaaaaa|
+|aaaaaaaaaa...eeeccccccccfcccccccccgggcccccccccchhhcccccccccicccccc....aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa......jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj.......aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa..ccccccccccccccccccccccccccccccccccccccccccccccccccccccc...aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaaccccccccccccccccccccccccccc.................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;5;254;48;5;233
+a = default/letterbox  sgr 0;38;5;254;48;5;232
+b = accent+bold  sgr 0;1;38;5;74;48;5;233
+c = dim  sgr 0;38;5;103;48;5;233
+d = text  sgr 0;38;5;254;48;5;233
+e = player+bold  sgr 0;1;38;5;74;48;5;233
+f = player_shot+bold  sgr 0;1;38;5;231;48;5;233
+g = enemy_shot+bold  sgr 0;1;38;5;100;48;5;233
+h = pickup+bold  sgr 0;1;38;5;159;48;5;233
+i = shelter+bold  sgr 0;1;38;5;163;48;5;233
+j = warn  sgr 0;38;5;184;48;5;233

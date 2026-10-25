@@ -1,0 +1,58 @@
+# scene=records size=80x24 k=1 tier=truecolor theme=dark seed=1978 tick=0 scheme=latched
+|                                                                                |
+|                       FLIGHT RECORDS - CAMPAIGN / NORMAL                       |
+|                                                                                |
+|           PILOT          SCORE  WAVE  MODE       DIFFICULTY                    |
+|                                                                                |
+|           ACE            21050    8  campaign   normal                         |
+|           NOVA            7770    4  campaign   normal                         |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|               Left/Right switch page   Enter / Escape to return                |
+|                                                                                |
+|          PILOT ACE  |  SOUND OFF [M]                                           |
+--- styles
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.............bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.............aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.ccccccccccccccccccccccccccccccccccccccccccccccccc..........aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.dddddddddddddddddddddddddddddddddddddddddddd...............aaaaaaaaaa|
+|aaaaaaaaaa.dddddddddddddddddddddddddddddddddddddddddddd...............aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.....eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee......aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaafffffffffffffffffffffffffff.................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;2;225;225;232;48;2;11;14;26
+a = default/letterbox  sgr 0;38;2;225;225;232;48;2;5;6;12
+b = accent+bold  sgr 0;1;38;2;86;180;233;48;2;11;14;26
+c = warn  sgr 0;38;2;240;228;66;48;2;11;14;26
+d = text  sgr 0;38;2;225;225;232;48;2;11;14;26
+e = accent  sgr 0;38;2;86;180;233;48;2;11;14;26
+f = dim  sgr 0;38;2;144;151;171;48;2;11;14;26

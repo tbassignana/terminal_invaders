@@ -7,21 +7,30 @@ import pytest
 
 from terminal_invaders import __version__
 from terminal_invaders.cli import main
-from terminal_invaders.engine import Game
 from terminal_invaders.model import RULESET, Config
-from terminal_invaders.replay import MAX_TAPES, Playback, Recorder, save_tapes
+from terminal_invaders.replay import MAX_TAPES, Playback, Recorder, Tape, save_tapes
+from terminal_invaders.rules import ARCADE, make_game
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-# Final (ticks, score, wave, victory) of each committed tape; a change here means gameplay changed.
+# Final (ticks, score, wave, victory) of each committed campaign-2 tape (tools/make_golden.py: the skilled bot through
+# tools/balance.py's façade); a change here means gameplay changed, and a gameplay change must bump RULESET (spec 17).
 GOLDEN = {
-    "golden-classic-normal.json": (7596, 21050, 8, False),
-    "golden-endless-hard.json": (7116, 19470, 8, False),
-    "golden-daily.json": (7758, 60250, 12, True),
+    "golden-classic-normal.json": (72000, 112430, 16, False),
+    "golden-endless-hard.json": (36000, 38960, 9, False),
+    "golden-daily.json": (117340, 292810, 24, True),
 }
+# The digest of each tape's final state: everything DIGEST_FIELDS covers, the three random streams and the ruleset.
+GOLDEN_DIGESTS = {
+    "golden-classic-normal.json": "48f1144ed199958d19375e9606cda9be64c5d7a03c54c68b102e498b5ea94dcf",
+    "golden-endless-hard.json": "51b277ded8e815aa5b615961c46acdd337a5a78b6f7a29a76b6684ac8837221e",
+    "golden-daily.json": "b2659050fb947fe7369994efca7affb592807ffaa632546cd5b918fdcb27bef6",
+}
+# Final (ticks, score, round) of golden-arcade.json (tools/make_golden.py); a change here means the arcade game changed.
+GOLDEN_ARCADE = (17986, 5070, 5)
 
 
 def recorded(config, pilot, ticks):
-    game, recorder = Game(config), Recorder(config, pilot)
+    game, recorder = make_game(config), Recorder(config, pilot)
     for tick in range(ticks):
         actions = ("fire", "left" if (tick // 40) % 2 else "right") if tick % 3 else ()
         recorder.append(actions)
@@ -42,13 +51,15 @@ def test_golden_replays_verify_with_exact_results(name):
     game = tape.simulate()
     assert tape.verify(game)
     assert (game.tick, game.score, game.wave, game.phase == "victory") == GOLDEN[name]
+    assert tape.digest == game.digest() == GOLDEN_DIGESTS[name]  # a moved digest: bump RULESET (spec 17)
+    assert tape.ruleset == RULESET and game.result()["victory"] == (name == "golden-daily.json")
 
 
 def test_golden_classic_run_reaches_a_boss_and_verifies_from_the_cli(capsys):
     (tape,) = Playback(FIXTURES / "golden-classic-normal.json").tapes
-    assert tape.config == Config("normal", "classic", 1978) and tape.result["wave"] >= 4
+    assert tape.config == Config("normal", "classic", 1978) and tape.result["wave"] >= 7  # past the WARDEN
     assert main(["--verify-replay", str(FIXTURES / "golden-classic-normal.json")]) == 0
-    assert capsys.readouterr().out == "VERIFIED  pilot 1  7596 ticks  score 21050  wave 8\n"
+    assert capsys.readouterr().out == "VERIFIED  pilot 1  72000 ticks  score 112430  wave 16\n"
 
 
 def test_file_holds_every_pilot_and_verifies_each_tape(tmp_path, capsys):
@@ -86,13 +97,13 @@ def test_one_tampered_tape_fails_only_its_own_line(tmp_path, capsys, field):
 
 
 def test_inputs_after_the_run_ended_fail_verification(tmp_path, capsys):
-    path = tmp_path / "late.json"
-    raw = json.loads((FIXTURES / "golden-classic-normal.json").read_text())
+    path = tmp_path / "late.json"  # golden-daily ends in victory; the other two stop at their caps while playing
+    raw = json.loads((FIXTURES / "golden-daily.json").read_text())
     raw["tapes"][0]["ticks"] += 10
-    raw["tapes"][0]["inputs"].append([7600, ["fire"]])
+    raw["tapes"][0]["inputs"].append([117346, ["fire"]])
     path.write_text(json.dumps(raw))
     assert main(["--verify-replay", str(path)]) == 1
-    assert capsys.readouterr().out.startswith("MISMATCH  pilot 1  7596 ticks")
+    assert capsys.readouterr().out.startswith("MISMATCH  pilot 1  117340 ticks")
 
 
 def test_version_one_and_foreign_rulesets_have_specific_errors(tmp_path, capsys):
@@ -106,8 +117,56 @@ def test_version_one_and_foreign_rulesets_have_specific_errors(tmp_path, capsys)
     raw.update(ruleset="arcade-1978", engine="9.0.0")
     path.write_text(json.dumps(raw))
     with pytest.raises(
-        ValueError, match="recorded with ruleset arcade-1978 .engine 9.0.0.; this version plays campaign-1"
+        ValueError,
+        match="recorded with ruleset arcade-1978 .engine 9.0.0.; this version plays campaign-2 and arcade-1978-1 and verifies campaign-1$",
     ):
+        Playback(path)
+
+
+def test_golden_arcade_replay_verifies_from_the_cli(capsys, monkeypatch):
+    """The saved demo game ends in a game over by itself and prints VERIFIED (spec 8, gate G3.3). The game checked is
+    the one the CLI simulates, so the tape runs once."""
+    playback = Playback(FIXTURES / "golden-arcade.json")
+    (tape,) = playback.tapes
+    assert playback.ruleset == ARCADE and tape.config == Config("normal", "arcade", 1978)
+    assert (tape.ticks, tape.result["score"], tape.result["wave"]) == GOLDEN_ARCADE
+    games, simulate = [], Tape.simulate
+    monkeypatch.setattr(Tape, "simulate", lambda self: games.append(simulate(self)) or games[-1])
+    assert main(["--verify-replay", str(FIXTURES / "golden-arcade.json")]) == 0
+    (game,) = games
+    assert game.phase == "game_over" and (game.tick, game.score, game.wave) == GOLDEN_ARCADE
+    expected = f"VERIFIED  pilot 1  {tape.ticks} ticks  score {game.score}  round {game.wave}\n"
+    assert capsys.readouterr().out == expected
+
+
+def test_an_arcade_game_round_trips_under_its_own_ruleset(tmp_path, capsys):
+    path = tmp_path / "arcade.json"
+    save_tapes(path, [recorded(Config(mode="arcade"), 1, 900)])
+    raw = json.loads(path.read_text())
+    assert raw["ruleset"] == ARCADE and raw["tapes"][0]["config"]["mode"] == "arcade"
+    assert Playback(path).ruleset == ARCADE
+    assert main(["--verify-replay", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("VERIFIED  pilot 1  900 ticks  score ") and out.endswith("  round 1\n")  # rounds, not waves
+    raw["tapes"][0]["inputs"] = raw["tapes"][0]["inputs"][::2]  # every other input: the program sees less fire
+    path.write_text(json.dumps(raw))
+    assert main(["--verify-replay", str(path)]) == 1
+    assert capsys.readouterr().out.startswith("MISMATCH  pilot 1  900 ticks")
+
+
+def test_a_replay_holds_one_ruleset_and_each_tape_must_belong_to_it(tmp_path):
+    path = tmp_path / "mixed.json"
+    with pytest.raises(ValueError, match="a replay holds the tapes of one ruleset"):
+        save_tapes(path, [recorded(Config(seed=77), 1, 60), recorded(Config(mode="arcade"), 2, 60)])
+    raw = two_pilots(path)
+    raw["tapes"][1]["config"]["mode"] = "arcade"  # an arcade tape in a campaign file
+    path.write_text(json.dumps(raw))
+    with pytest.raises(ValueError, match="invalid replay settings"):
+        Playback(path)
+    raw["tapes"][1]["config"]["mode"] = "classic"
+    raw["ruleset"] = ARCADE  # campaign tapes in an arcade file
+    path.write_text(json.dumps(raw))
+    with pytest.raises(ValueError, match="invalid replay settings"):
         Playback(path)
 
 

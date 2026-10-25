@@ -1,0 +1,32 @@
+name: Gate
+# The gate checks (Phase 1 spec 13 on): pytest -m gate, the G4 SSH-link rows included (a minute each, Linux only),
+# and the slow tests Phase 5 adds (G5.1's "gate and slow": the shared bot runs, the full flash scenes, the full
+# real-draw proof, the long pinned keyed games, the game after a demo, the first-run flows R1-R7 and the installed
+# wheel's S1-S4).
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      # setuptools >= 77 in this Python: test_firstrun's S1-S4 and test_packaging's slow test build the wheel with
+      # it (the 3.11 runner's own setuptools is older than pyproject's build-system needs)
+      - run: python -m pip install -e '.[test]' 'setuptools>=77'
+      # -rA prints each row's measurements with its result; addopts (which leaves slow out) is cleared
+      - run: python -m pytest -p no:cacheprovider -o addopts="" -m "gate or slow" -rA --durations=30

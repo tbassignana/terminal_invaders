@@ -1,0 +1,33 @@
+{
+  "family": "xterm",
+  "provenance": "synthetic: XTerm patch 390 with its default white background (no kitty protocol; DECRQM 2026 answers 0); built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "xterm-256color",
+    "LANG": "en_US.UTF-8"
+  },
+  "replies": "\u001b[?2026;0$y\u001bP>|XTerm(390)\u001b\\\u001b]11;rgb:ffff/ffff/ffff\u001b\\\u001b[2;1R\u001b[3;2R\u001b[0n\u001b[?64;1;2;6;9;15;16;17;18;21;22;28c",
+  "push_reply": null,
+  "echo": false,
+  "keys": {
+    "protocol": "legacy",
+    "os_repeat": {
+      "delay": 0.66,
+      "interval": 0.04
+    }
+  },
+  "expect": {
+    "family": "xterm",
+    "remote": false,
+    "multiplexer": null,
+    "color": "256",
+    "background": "light",
+    "sync": false,
+    "release_events": false,
+    "scheme": "latched",
+    "utf8": true,
+    "ambiguous_wide": false,
+    "unicode_blocks": true,
+    "echoes_queries": false,
+    "ack": "cpr"
+  }
+}

@@ -1,0 +1,65 @@
+# scene=fx-boss-kick size=80x24 k=1 tier=truecolor theme=dark seed=1978 tick=27010 scheme=latched
+|          SCORE 0027400   HI 0027400             WAVE 06/24  ACT I              |
+|          LIVES ^^^^   BOMBS 1  COMBO x1      GUN ... BOMB 35%                  |
+|                           WARDEN  [........|...]  II                           |
+|                                               .                                |
+|                  .                                                             |
+|                            .                  +10,000                          |
+|                                                 &&&                            |
+|                                               [R][L]                           |
+|           .             .          .                                           |
+|             .                                      |                           |
+|                   .                                                            |
+|             .                  .                                               |
+|                                 .   .                  .                       |
+|             .                                      |                           |
+|             .     .       .                             ..                     |
+|                                                                   .            |
+|                          .                                ..                   |
+|                ##                      .   :                :                  |
+|                #             #       .      .     |       .## .                |
+|                     .                                        .                 |
+|                                  .               {A}  .                        |
+|                                                                                |
+|          Tap A/D: move, S: stop  Space Fire  B Bomb  P Pause                   |
+|          EXTRA LIFE | TS                                                       |
+--- styles
+|aaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbb.............ccccccccccccccccc....aaaaaaaaaa|
+|aaaaaaaaaadddddddddddddddddddddddddddddd......eeeeeee.ffffffff........aaaaaaaaaa|
+|aaaaaaaaaa.................gggggggggggggggggggggggggg.................aaaaaaaaaa|
+|aaaaaaaaaa.....................................h......................aaaaaaaaaa|
+|aaaaaaaaaa........h...................................................aaaaaaaaaa|
+|aaaaaaaaaa..................h..................ddddddd................aaaaaaaaaa|
+|aaaaaaaaaa.......................................iii..................aaaaaaaaaa|
+|aaaaaaaaaa.....................................jjjjjj.................aaaaaaaaaa|
+|aaaaaaaaaa.h.............h..........h.................................aaaaaaaaaa|
+|aaaaaaaaaa...h......................................k.................aaaaaaaaaa|
+|aaaaaaaaaa.........h..................................................aaaaaaaaaa|
+|aaaaaaaaaa...h..................h.....................................aaaaaaaaaa|
+|aaaaaaaaaa.......................h...h..................h.............aaaaaaaaaa|
+|aaaaaaaaaa...h......................................k.................aaaaaaaaaa|
+|aaaaaaaaaa...h.....h.......h.............................hh...........aaaaaaaaaa|
+|aaaaaaaaaa.........................................................h..aaaaaaaaaa|
+|aaaaaaaaaa................h................................hh.........aaaaaaaaaa|
+|aaaaaaaaaa......ll......................h...l................l........aaaaaaaaaa|
+|aaaaaaaaaa......l.............l.......h......h.....k.......hll.h......aaaaaaaaaa|
+|aaaaaaaaaa...........h........................................h.......aaaaaaaaaa|
+|aaaaaaaaaa........................h...............mmm..h..............aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaafffffffffffffffffffffffffffffffffffffffffffffffffff.........aaaaaaaaaa|
+|aaaaaaaaaadddddddddd.ffff.............................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;2;225;225;232;48;2;11;14;26
+a = default/letterbox  sgr 0;38;2;225;225;232;48;2;5;6;12
+b = good+bold  sgr 0;1;38;2;95;211;141;48;2;11;14;26
+c = accent+bold  sgr 0;1;38;2;86;180;233;48;2;11;14;26
+d = warn  sgr 0;38;2;240;228;66;48;2;11;14;26
+e = accent  sgr 0;38;2;86;180;233;48;2;11;14;26
+f = dim  sgr 0;38;2;144;151;171;48;2;11;14;26
+g = danger  sgr 0;38;2;255;122;107;48;2;11;14;26
+h = star  sgr 0;38;2;58;64;96;48;2;11;14;26
+i = spark  sgr 0;38;2;216;216;232;48;2;11;14;26
+j = pickup+bold  sgr 0;1;38;2;173;234;234;48;2;11;14;26
+k = player_shot  sgr 0;38;2;255;255;255;48;2;11;14;26
+l = shelter  sgr 0;38;2;204;0;152;48;2;11;14;26
+m = player+bold  sgr 0;1;38;2;86;180;233;48;2;11;14;26

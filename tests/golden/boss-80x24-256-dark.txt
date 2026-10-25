@@ -1,0 +1,66 @@
+# scene=boss size=80x24 k=1 tier=256 theme=dark seed=1978 tick=19282 scheme=latched
+|          SCORE 0016000   HI 0016000             WAVE 06/24  ACT I              |
+|          LIVES ^^^    BOMBS 1  COMBO x1      GUN |.. BOMB 34%                  |
+|              .            WARDEN  [########|###]  I  .                         |
+|                       .                                       .                |
+|            .                   .                                               |
+|                     .                   .<=[===]=>                             |
+|                                      /T\         . /T\                         |
+|                                                           .                    |
+|                                    {=} {=} {=} {=}                 .           |
+|                 .                   .                                          |
+|                          .                   .                                 |
+|                                   .  !             |  .                        |
+|                                     !                          .               |
+|             .                                                                  |
+|                      .                !                                        |
+|                               .                                                |
+|                  #####        #####    .   #####    |   ###.#                  |
+|                 #### ##      #######      #######      ###  ##      .          |
+|                 ##   ##      ##   ##      ##   ##      # .  ##                 |
+|                           .                                                    |
+|                                    .               {A}                         |
+|                                                                                |
+|          Tap A/D: move, S: stop  Space Fire  B Bomb  P Pause                   |
+|          TS                                                                    |
+--- styles
+|aaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbb.............ccccccccccccccccc....aaaaaaaaaa|
+|aaaaaaaaaadddddddddddddddddddddddddddddd......eeeeeee.ffffffff........aaaaaaaaaa|
+|aaaaaaaaaa....g............hhhhhhhhhhhhhhhhhhhhhhhhh..g...............aaaaaaaaaa|
+|aaaaaaaaaa.............g.......................................g......aaaaaaaaaa|
+|aaaaaaaaaa..g...................g.....................................aaaaaaaaaa|
+|aaaaaaaaaa...........g...................giiiiiiiii...................aaaaaaaaaa|
+|aaaaaaaaaa............................iii.........g.iii...............aaaaaaaaaa|
+|aaaaaaaaaa.................................................g..........aaaaaaaaaa|
+|aaaaaaaaaa..........................jjj.jjj.jjj.jjj.................g.aaaaaaaaaa|
+|aaaaaaaaaa.......g...................g................................aaaaaaaaaa|
+|aaaaaaaaaa................g...................g.......................aaaaaaaaaa|
+|aaaaaaaaaa.........................g..k.............l..g..............aaaaaaaaaa|
+|aaaaaaaaaa...........................k..........................g.....aaaaaaaaaa|
+|aaaaaaaaaa...g........................................................aaaaaaaaaa|
+|aaaaaaaaaa............g................k..............................aaaaaaaaaa|
+|aaaaaaaaaa.....................g......................................aaaaaaaaaa|
+|aaaaaaaaaa........mmmmm........mmmmm....g...mmmmm....l...mmmgm........aaaaaaaaaa|
+|aaaaaaaaaa.......mmmm.mm......mmmmmmm......mmmmmmm......mmm..mm......gaaaaaaaaaa|
+|aaaaaaaaaa.......mm...mm......mm...mm......mm...mm......m.g..mm.......aaaaaaaaaa|
+|aaaaaaaaaa.................g..........................................aaaaaaaaaa|
+|aaaaaaaaaa..........................g...............nnn...............aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaafffffffffffffffffffffffffffffffffffffffffffffffffff.........aaaaaaaaaa|
+|aaaaaaaaaaff..........................................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;5;254;48;5;233
+a = default/letterbox  sgr 0;38;5;254;48;5;232
+b = good+bold  sgr 0;1;38;5;78;48;5;233
+c = accent+bold  sgr 0;1;38;5;74;48;5;233
+d = warn  sgr 0;38;5;184;48;5;233
+e = accent  sgr 0;38;5;74;48;5;233
+f = dim  sgr 0;38;5;103;48;5;233
+g = star  sgr 0;38;5;237;48;5;233
+h = danger  sgr 0;38;5;203;48;5;233
+i = boss+bold  sgr 0;1;38;5;208;48;5;233
+j = alien  sgr 0;38;5;253;48;5;233
+k = enemy_shot  sgr 0;38;5;100;48;5;233
+l = player_shot  sgr 0;38;5;231;48;5;233
+m = shelter  sgr 0;38;5;163;48;5;233
+n = player+bold  sgr 0;1;38;5;74;48;5;233

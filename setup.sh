@@ -15,6 +15,8 @@ if ! "$python" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null
 fi
 # --clear: a venv left by an older Python keeps that interpreter even when rebuilt with another one.
 "$python" -m venv --clear .venv
+# setuptools copies whatever an earlier build left in build/ into the new wheel, files since removed included.
+rm -rf build
 .venv/bin/python -m pip install .
 printf '\nInstalled. Run: %s/.venv/bin/invaders\n' "$PWD"
 printf 'Or activate in zsh: source "%s/.venv/bin/activate"\n' "$PWD"

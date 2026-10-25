@@ -1,0 +1,33 @@
+{
+  "family": "silent",
+  "provenance": "synthetic: a terminal that answers nothing: env-only capabilities, clock pacing, no teardown sentinel; built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "xterm-256color",
+    "LANG": "en_US.UTF-8"
+  },
+  "replies": "",
+  "push_reply": null,
+  "echo": false,
+  "keys": {
+    "protocol": "legacy",
+    "os_repeat": {
+      "delay": 0.66,
+      "interval": 0.04
+    }
+  },
+  "expect": {
+    "family": "unknown",
+    "remote": false,
+    "multiplexer": null,
+    "color": "256",
+    "background": "dark",
+    "sync": false,
+    "release_events": false,
+    "scheme": "latched",
+    "utf8": true,
+    "ambiguous_wide": null,
+    "unicode_blocks": true,
+    "echoes_queries": false,
+    "ack": null
+  }
+}

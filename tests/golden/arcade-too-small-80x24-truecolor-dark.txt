@@ -1,0 +1,55 @@
+# scene=arcade-too-small size=80x24 p=4 tier=truecolor theme=dark seed=1978 tick=900 scheme=latched
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|            ARCADE NEEDS 56 x 32                                                |
+|            Current: 80 x 24 | Paused                                           |
+|            Enlarge the window or zoom out                                      |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+--- styles
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaabbbbbbbbbbbbbbbbbbbb....................................aaaaaaaaaaaa|
+|aaaaaaaaaaaaccccccccccccccccccccccccc...............................aaaaaaaaaaaa|
+|aaaaaaaaaaaacccccccccccccccccccccccccccccc..........................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+|aaaaaaaaaaaa........................................................aaaaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;2;225;225;232;48;2;11;14;26
+a = default/letterbox  sgr 0;38;2;225;225;232;48;2;5;6;12
+b = warn+bold  sgr 0;1;38;2;240;228;66;48;2;11;14;26
+c = text  sgr 0;38;2;225;225;232;48;2;11;14;26

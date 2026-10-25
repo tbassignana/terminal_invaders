@@ -22,8 +22,29 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -e '.[test]'
       - run: make lint
-      - run: python -m pytest --cov=terminal_invaders --cov-report=term-missing --cov-fail-under=85
+      # Coverage measures through sys.monitoring where Python has it (3.12 and later): the default tracer slows every
+      # line enough that the Arcade step's timing test fails. 3.11 has no sys.monitoring and keeps the default.
+      - run: python -m pytest --cov=terminal_invaders --cov-report=term-missing --cov-report=json --cov-fail-under=90
+        env:
+          COVERAGE_CORE: ${{ matrix.python != '3.11' && 'sysmon' || '' }}
+      # Spec 11.6 and Phase 4 §23: each term/ and campaign/ module at least 90% on its own, which the package-wide
+      # 90% does not check; and Phase 5's new modules (G5.3).
+      - run: python tools/term_coverage.py coverage.json --also fx settings tapes screens tutorial attract --min 90
       - run: invaders --version
+  # Phase 5 G5.6, G5.7 and G5.4: the palettes' contrast, shape and flash gates (about 20 s), and the goldens are
+  # what tests/support/frames.py draws (make frames leaves nothing to write).
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -e '.[test]'
+      - run: make palette-check
+      - run: python tools/make_frames.py --check
   package:
     strategy:
       fail-fast: false
@@ -47,3 +68,4 @@ jobs:
       - run: |
           "$RUNNER_TEMP/wheel-venv/bin/invaders" --version
           "$RUNNER_TEMP/wheel-venv/bin/invaders" --verify-replay tests/fixtures/golden-classic-normal.json
+          "$RUNNER_TEMP/wheel-venv/bin/python" -I -c "from terminal_invaders.audio import helper, mixer"

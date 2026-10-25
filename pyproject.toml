@@ -12,7 +12,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.11"
 keywords = ["space invaders", "arcade", "game", "terminal", "retro"]
 classifiers = [
-    "Environment :: Console :: Curses",
+    "Environment :: Console",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3 :: Only",
@@ -41,9 +41,18 @@ version = {attr = "terminal_invaders.__version__"}
 [tool.setuptools.packages.find]
 include = ["terminal_invaders*"]
 
+[tool.setuptools.package-data]
+terminal_invaders = ["demos/*.json"]  # the title demo's tapes (tools/make_attract.py), in the wheel and the sdist
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+pythonpath = ["."]  # tests import tests.support whichever way pytest is started
+addopts = "-q -m 'not slow and not audio'"  # pytest -m gate (or -m slow, -m audio) selects them
+markers = [
+    "gate: a Phase 1 gate check (spec 13): pytest -m gate runs them all",
+    "slow: minutes long (the G4 SSH-link rows), left out of a plain run",
+    "audio: plays through a real sound server (the G2 latency and dropout rows), left out of a plain run",
+]
 
 [tool.coverage.run]
 source = ["terminal_invaders"]
@@ -53,5 +62,8 @@ target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I"]
+select = ["E", "F", "W", "I", "TID251"]
 ignore = ["E501"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+curses.msg = "The game owns the terminal itself (terminal_invaders.term); curses is gone."

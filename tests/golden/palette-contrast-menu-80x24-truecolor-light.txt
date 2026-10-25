@@ -1,0 +1,59 @@
+# scene=palette-contrast-menu size=80x24 k=1 tier=truecolor theme=light seed=1978 tick=0 scheme=latched
+|                                                                                |
+|                                T E R M I N A L                                 |
+|                                                                                |
+|                      ___ _  ___   ___   ___  ___ ___  ___                      |
+|                     |_ _| \| \ \ / /_\ |   \| __| _ \/ __|                     |
+|                      | || .` |\ V / _ \| |) | _||   /\__ \                     |
+|                     |___|_|\_| \_/_/ \_\___/|___|_|_\|___/                     |
+|                                                                                |
+|                  [o]       /W\       <X>       /W\       [o]                   |
+|                                                                                |
+|                          EARTH NEEDS ANOTHER QUARTER                           |
+|                                                                                |
+|                       > LAUNCH                                                 |
+|                         MODE         < CAMPAIGN  >                             |
+|                         DIFFICULTY   <  NORMAL   >                             |
+|                         FLIGHT RECORDS                                         |
+|                         HOW TO PLAY                                            |
+|                         SETTINGS                                               |
+|                         QUIT                                                   |
+|                24 waves in four acts, a boss at each act's end.                |
+|                                                                                |
+|                   Arrows select  Enter choose  Esc Esc quit                    |
+|                                                                                |
+|          PILOT ACE  |  SOUND OFF [M]                                           |
+--- styles
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa......................bbbbbbbbbbbbbbb.......................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa...........ccccccccccccccccccccccccccccccccccccc............aaaaaaaaaa|
+|aaaaaaaaaa...........cccccccccccccccccccccccccccccccccccccc...........aaaaaaaaaa|
+|aaaaaaaaaa...........cccccccccccccccccccccccccccccccccccccc...........aaaaaaaaaa|
+|aaaaaaaaaa...........cccccccccccccccccccccccccccccccccccccc...........aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa........ddddddddddddddddddddddddddddddddddddddddddd.........aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa................eeeeeeeeeeeeeeeeeeeeeeeeeee.................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.............bbbbbbbb.......................................aaaaaaaaaa|
+|aaaaaaaaaa.............ffffffffffffffffffffffffffff...................aaaaaaaaaa|
+|aaaaaaaaaa.............ffffffffffffffffffffffffffff...................aaaaaaaaaa|
+|aaaaaaaaaa.............ffffffffffffffff...............................aaaaaaaaaa|
+|aaaaaaaaaa.............fffffffffffff..................................aaaaaaaaaa|
+|aaaaaaaaaa.............ffffffffff.....................................aaaaaaaaaa|
+|aaaaaaaaaa.............ffffff.........................................aaaaaaaaaa|
+|aaaaaaaaaa......gggggggggggggggggggggggggggggggggggggggggggggggg......aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.........eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee..........aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeee.................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;2;0;0;0;48;2;255;255;255
+a = default/letterbox  sgr 0;38;2;0;0;0;48;2;230;226;214
+b = accent+bold  sgr 0;1;38;2;0;0;135;48;2;255;255;255
+c = good+bold  sgr 0;1;38;2;0;95;0;48;2;255;255;255
+d = enemy  sgr 0;38;2;95;0;135;48;2;255;255;255
+e = dim  sgr 0;38;2;78;78;78;48;2;255;255;255
+f = text  sgr 0;38;2;0;0;0;48;2;255;255;255
+g = warn  sgr 0;38;2;95;0;0;48;2;255;255;255

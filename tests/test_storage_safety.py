@@ -241,14 +241,16 @@ def test_version_one_migration_keeps_every_score_and_writes_a_backup(tmp_path):
     assert saved["version"] == 2 and saved["stats"]["runs"] == 10 and "veteran" in saved["achievements"]
     for entry in scores:
         assert {**entry, "ruleset": "campaign-1"} in saved["scores"]
-    assert all(entry["ruleset"] == "campaign-1" for entry in saved["scores"])
+    rulesets = [entry["ruleset"] for entry in saved["scores"]]
+    assert sorted(rulesets) == ["campaign-1"] * len(scores) + [RULESET] * 2  # the two new runs are campaign-2's
 
 
 def test_ruleset_separates_boards(tmp_path):
     path = tmp_path / "profile.json"
     profile = Profile(path)
     profile.record(result(800), Config(), "AAA")
-    profile.data["scores"][0]["ruleset"] = "campaign-2"
+    assert profile.best(Config()) == 800
+    profile.data["scores"][0]["ruleset"] = "campaign-1"
     assert profile.best(Config()) == 0
 
 
@@ -387,7 +389,8 @@ def test_default_profile_imports_1_0_and_never_writes_its_file(linux_home, tmp_p
     run_1_0(old, 100)
     (folder / "profile.json.bak").write_text("a backup left by 1.0")
     profile = Profile()
-    assert profile.path == folder / "profile-2.json" and profile.best(Config(seed=7)) == 100
+    assert profile.path == folder / "profile-2.json" and profile.best(Config(seed=7)) == 0  # 1.0 played campaign-1
+    assert [entry["score"] for entry in profile.old_boards()["classic", "normal"]] == [100]  # on the OLD RULES page
     # 1.0 and this build take turns: each keeps its own file, so 1.0 never meets a profile it would replace.
     for score in (111, 222, 333, 444):
         if score in (111, 333):
@@ -409,3 +412,114 @@ def test_unusable_1_0_profile_is_ignored_and_left_alone(linux_home, tmp_path, mo
         profile = Profile()
         assert profile.error is None and not profile.read_only and profile.data["scores"] == []
         assert listing(folder) == ["profile.json"]
+
+
+# Phase 5 (spec 4.3): a settings save is a save like a run's, under the same never-destroy-data rules.
+NEWER = json.dumps({"version": 3, "name": "FUTURE", "settings": {"palette": "cvd"}, "hologram": [1]})
+
+
+def test_settings_and_keys_from_other_builds_survive_every_kind_of_save(tmp_path):
+    """The Phase 5 twin of test_keys_and_fields_from_other_builds_survive_a_save: a settings save, a run and a rename
+    each keep unknown settings keys, invalid values, foreign top-level keys and every other field."""
+    path = tmp_path / "profile.json"
+    linked = row(500, ruleset=RULESET, replay="runs/500.json")
+    stats = dict(runs=4, kills=90, shots=100, hits=80, ticks=9000, best_combo=4, arcade_runs=12, bosses=3)
+    settings = {"volume": 0.4, "palette": "amber", "sound": 1, "fps": 30, "theme": "light", "hud": {"corner": [1, 2]}}
+    raw = {"version": 2, "scores": [linked], "stats": stats, "achievements": ["arcade_ace"], "settings": settings}
+    path.write_text(json.dumps({**raw, "hologram": [1], "broken": float("nan")}))
+    profile = Profile(path)
+    assert profile.settings == settings
+    assert profile.update_settings({"theme": "dark", "fps": 60})  # fps back to its default: its key goes
+    kept = {**{key: value for key, value in settings.items() if key != "fps"}, "theme": "dark"}
+    saved = json.loads(path.read_text())
+    assert saved == {**raw, "settings": kept, "name": "PILOT", "hologram": [1]}  # nothing else moved
+    profile.record(result(111), Config(seed=7), "ACE")
+    assert profile.rename(profile.last_placing, "BOB")
+    saved = json.loads(path.read_text())
+    assert saved["settings"] == kept and saved["hologram"] == [1] and "broken" not in saved
+    assert linked in saved["scores"] and len(saved["scores"]) == 2 and saved["name"] == "BOB"
+    assert saved["stats"] == {**stats, "runs": 5, "kills": 120, "shots": 150, "hits": 108, "ticks": 12000}
+    assert saved["achievements"] == ["first_blood", "arcade_ace"]
+
+
+@pytest.mark.parametrize(
+    "content", [NEWER.encode(), b" " * 2_000_001, json.dumps(NEWER_AND_LARGE).encode()], ids=["newer", "junk", "large"]
+)
+def test_a_settings_save_on_a_read_only_profile_applies_for_the_session_and_writes_nothing(tmp_path, content):
+    path = tmp_path / "profile.json"
+    path.write_bytes(content)
+    before = listing(tmp_path)
+    profile = Profile(path)
+    assert profile.read_only
+    shown = profile.alert
+    assert profile.update_settings({}) is True and profile.alert == shown  # nothing to save: no settings alert
+    assert profile.update_settings({"effects": "calm"}, name="ANN") is False
+    assert profile.alert == "Settings not saved: this profile is read-only" and len(profile.alert) <= WIDTH
+    assert profile.settings["effects"] == "calm" and profile.data["name"] == "ANN"  # in force for this session
+    assert path.read_bytes() == content and listing(tmp_path) == before
+
+
+def test_a_profile_a_newer_build_replaces_mid_session_is_not_overwritten_by_a_settings_save(tmp_path):
+    path = tmp_path / "profile.json"
+    profile = Profile(path)
+    assert profile.update_settings({"palette": "cvd"})
+    path.write_text(NEWER)
+    assert profile.update_settings({"palette": "contrast"}) is False
+    assert profile.read_only and profile.alert == "Settings not saved: this profile is read-only"
+    assert path.read_text() == NEWER and profile.settings["palette"] == "contrast"
+
+
+def test_an_unreadable_profile_is_moved_aside_at_the_first_settings_save(tmp_path):
+    path = tmp_path / "profile.json"
+    path.write_bytes(b"{bad json\xff")
+    profile = Profile(path)
+    assert profile.settings == {} and path.read_bytes() == b"{bad json\xff"  # reading moves nothing
+    assert profile.update_settings({"palette": "cvd"})
+    (moved,) = tmp_path.glob("profile.json.corrupt-*")
+    assert moved.read_bytes() == b"{bad json\xff" and profile.alert == f"Bad profile moved to {moved.name}"
+    assert Profile(path).settings == {"palette": "cvd"}
+
+
+def test_an_unreadable_profile_with_nothing_to_save_stays_where_it_is(tmp_path):
+    path = tmp_path / "profile.json"
+    path.write_text("{bad json")
+    assert Profile(path).update_settings({"palette": "default", "fps": 60}) is True
+    assert path.read_text() == "{bad json" and not list(tmp_path.glob("*.corrupt-*"))
+
+
+def test_a_version_one_profile_is_backed_up_before_its_first_settings_save(tmp_path):
+    path = tmp_path / "profile.json"
+    original = json.dumps({"version": 1, "name": "ACE", "scores": [row(300)], "achievements": ["veteran"]})
+    path.write_text(original)
+    profile = Profile(path)
+    assert profile.update_settings({"effects": "calm"})
+    assert profile.update_settings({"tips": "off"})
+    assert (tmp_path / "profile.v1.json.bak").read_text() == original
+    assert listing(tmp_path) == ["profile.json", "profile.lock", "profile.v1.json.bak"]
+    saved = json.loads(path.read_text())
+    assert saved["version"] == 2 and saved["settings"] == {"effects": "calm", "tips": "off"}
+    assert saved["scores"] == [{**row(300), "ruleset": "campaign-1"}] and "veteran" in saved["achievements"]
+
+
+def test_a_settings_save_that_would_pass_2_mb_is_refused_and_the_file_kept(tmp_path):
+    path = tmp_path / "profile.json"
+    wide = [row(ruleset="arcade-1978", note="é" * 800) for _ in range(1000)]
+    original = json.dumps({"version": 2, "scores": wide}, ensure_ascii=False)
+    path.write_text(original, encoding="utf-8")
+    profile = Profile(path)
+    assert profile.update_settings({"palette": "cvd"}) is False and "2 MB" in profile.error
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_a_settings_save_on_the_default_profile_never_writes_1_0s_file(linux_home, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    folder = tmp_path / "data/terminal-invaders"
+    folder.mkdir(parents=True)
+    old = folder / "profile.json"
+    run_1_0(old, 100)
+    before = old.read_bytes()
+    profile = Profile()
+    assert profile.update_settings({"palette": "cvd"})
+    assert old.read_bytes() == before and Profile().settings == {"palette": "cvd"}
+    assert [entry["score"] for entry in Profile().old_boards()["classic", "normal"]] == [100]
+    assert listing(folder) == ["profile-2.json", "profile-2.lock", "profile.json"]

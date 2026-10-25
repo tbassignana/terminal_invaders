@@ -17,6 +17,7 @@ ENV/
 .hypothesis/
 .coverage*
 coverage.xml
+coverage.json
 htmlcov/
 *.log
 

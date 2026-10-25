@@ -1,0 +1,37 @@
+{
+  "family": "tmux-3.6-in-ghostty",
+  "provenance": "synthetic: tmux 3.6a inside Ghostty: tmux answers the probe itself (no kitty protocol, no DECRQM 2026 before 3.7) and reports Ghostty's background; built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "tmux-256color",
+    "COLORTERM": "truecolor",
+    "TERM_PROGRAM": "tmux",
+    "TERM_PROGRAM_VERSION": "3.6a",
+    "TMUX": "1",
+    "LANG": "en_US.UTF-8"
+  },
+  "replies": "\u001bP>|tmux 3.6a\u001b\\\u001b]11;rgb:2828/2c2c/3434\u001b\\\u001b[2;1R\u001b[3;2R\u001b[0n\u001b[?1;2c",
+  "push_reply": null,
+  "echo": false,
+  "keys": {
+    "protocol": "legacy",
+    "os_repeat": {
+      "delay": 0.225,
+      "interval": 0.03
+    }
+  },
+  "expect": {
+    "family": "tmux",
+    "remote": false,
+    "multiplexer": "tmux",
+    "color": "truecolor",
+    "background": "dark",
+    "sync": false,
+    "release_events": false,
+    "scheme": "latched",
+    "utf8": true,
+    "ambiguous_wide": false,
+    "unicode_blocks": true,
+    "echoes_queries": false,
+    "ack": "cpr"
+  }
+}

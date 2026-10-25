@@ -1,0 +1,36 @@
+{
+  "family": "wezterm-default",
+  "provenance": "synthetic: WezTerm 20240203 with its default enable_kitty_keyboard = false: the flags query answers, the push is ignored and verification fails; built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "TERM_PROGRAM": "WezTerm",
+    "TERM_PROGRAM_VERSION": "20240203-110809-5046fc22",
+    "LANG": "en_US.UTF-8"
+  },
+  "replies": "\u001b[?0u\u001b[?2026;2$y\u001bP>|WezTerm 20240203-110809-5046fc22\u001b\\\u001b]11;rgb:0000/0000/0000\u001b\\\u001b[2;1R\u001b[3;2R\u001b[0n\u001b[?65;4;6;18;22c",
+  "push_reply": "\u001b[?0u\u001b[?65;4;6;18;22c",
+  "echo": false,
+  "keys": {
+    "protocol": "legacy",
+    "os_repeat": {
+      "delay": 0.5,
+      "interval": 0.03
+    }
+  },
+  "expect": {
+    "family": "wezterm",
+    "remote": false,
+    "multiplexer": null,
+    "color": "truecolor",
+    "background": "dark",
+    "sync": true,
+    "release_events": false,
+    "scheme": "latched",
+    "utf8": true,
+    "ambiguous_wide": false,
+    "unicode_blocks": true,
+    "echoes_queries": false,
+    "ack": "cpr"
+  }
+}

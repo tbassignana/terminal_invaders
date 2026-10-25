@@ -1,0 +1,61 @@
+# scene=show-fps size=80x24 k=1 tier=256 theme=dark seed=1978 tick=600 scheme=latched
+|          SCORE 0000260   HI 0015000             WAVE 01/24  ACT I              |
+|          LIVES ^^^    BOMBS 1  COMBO x1      GUN ||  BOMB 0%                   |
+|              .                                       .                         |
+|                       .                                       .                |
+|            .                   .                                               |
+|                     .                   .                                      |
+|                                                  .                             |
+|                                                           .                    |
+|                                                                    .           |
+|                 .                   .                                          |
+|                          .                   .                                 |
+|                                   .                   .                        |
+|                                                                .               |
+|             .                                                                  |
+|                      .                                                         |
+|                               .                                                |
+|                  #####        #####    .   #####        #####                  |
+|                 #######      #######      #######      #######      .          |
+|                 ##   ##      ##   #:      ##   ##      ##.  ##                 |
+|                           .                                                    |
+|                                    .      {A}                                  |
+|                                                                                |
+|          Tap A/D: move, S: stop  Space Fire  B Bomb  P Pause                   |
+|          FPS 60.0  RTT 42ms  W 3.4  B/f 812  K17  latched k1 256               |
+--- styles
+|aaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbb.............ccccccccccccccccc....aaaaaaaaaa|
+|aaaaaaaaaadddddddddddddddddddddddddddddd......eeeeee..fffffff.........aaaaaaaaaa|
+|aaaaaaaaaa....g.......................................g...............aaaaaaaaaa|
+|aaaaaaaaaa.............g.......................................g......aaaaaaaaaa|
+|aaaaaaaaaa..g...................g.....................................aaaaaaaaaa|
+|aaaaaaaaaa...........g...................g............................aaaaaaaaaa|
+|aaaaaaaaaa........................................g...................aaaaaaaaaa|
+|aaaaaaaaaa.................................................g..........aaaaaaaaaa|
+|aaaaaaaaaa..........................................................g.aaaaaaaaaa|
+|aaaaaaaaaa.......g...................g................................aaaaaaaaaa|
+|aaaaaaaaaa................g...................g.......................aaaaaaaaaa|
+|aaaaaaaaaa.........................g...................g..............aaaaaaaaaa|
+|aaaaaaaaaa......................................................g.....aaaaaaaaaa|
+|aaaaaaaaaa...g........................................................aaaaaaaaaa|
+|aaaaaaaaaa............g...............................................aaaaaaaaaa|
+|aaaaaaaaaa.....................g......................................aaaaaaaaaa|
+|aaaaaaaaaa........hhhhh........hhhhh....g...hhhhh........hhhhh........aaaaaaaaaa|
+|aaaaaaaaaa.......hhhhhhh......hhhhhhh......hhhhhhh......hhhhhhh......gaaaaaaaaaa|
+|aaaaaaaaaa.......hh...hh......hh...hh......hh...hh......hhg..hh.......aaaaaaaaaa|
+|aaaaaaaaaa.................g..........................................aaaaaaaaaa|
+|aaaaaaaaaa..........................g......iii........................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaafffffffffffffffffffffffffffffffffffffffffffffffffff.........aaaaaaaaaa|
+|aaaaaaaaaaffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffaaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;5;254;48;5;233
+a = default/letterbox  sgr 0;38;5;254;48;5;232
+b = good+bold  sgr 0;1;38;5;78;48;5;233
+c = accent+bold  sgr 0;1;38;5;74;48;5;233
+d = warn  sgr 0;38;5;184;48;5;233
+e = accent  sgr 0;38;5;74;48;5;233
+f = dim  sgr 0;38;5;103;48;5;233
+g = star  sgr 0;38;5;237;48;5;233
+h = shelter  sgr 0;38;5;163;48;5;233
+i = player+bold  sgr 0;1;38;5;74;48;5;233

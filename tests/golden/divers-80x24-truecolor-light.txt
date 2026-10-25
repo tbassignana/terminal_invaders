@@ -1,0 +1,65 @@
+# scene=divers size=80x24 k=1 tier=truecolor theme=light seed=1978 tick=9706 scheme=latched
+|          SCORE 0006920   HI 0015000             WAVE 03/24  ACT I              |
+|          LIVES ^^^    BOMBS 1  COMBO x1      GUN ..  BOMB 16%                  |
+|              .                                       .                         |
+|                       .        =<=>=                          .                |
+|            .     \W/     \W/   .                                               |
+|                     .                   .                                      |
+|                  \W/ \W/|\W/                     .                             |
+|                                                           .                    |
+|                                                                    .           |
+|                 .                   .                                          |
+|                          .                   .                                 |
+|                                   .                   .                        |
+|                                                                .               |
+|             .                                                                  |
+|                      .                                                         |
+|                               .                                                |
+|                  #####        #####    .   #####        #####                  |
+|                 #### ##      ###          #######      #######      .          |
+|                 ##   ##|   ! #:           ##   ##      ##.  ##                 |
+|                           .                                                    |
+|                       {A}          .                                           |
+|                                                                                |
+|          Tap A/D: move, S: stop  Space Fire  B Bomb  P Pause                   |
+|          RAPID 2s                                                              |
+--- styles
+|aaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbb.............ccccccccccccccccc....aaaaaaaaaa|
+|aaaaaaaaaadddddddddddddddddddddddddddddd......eeeeee..ffffffff........aaaaaaaaaa|
+|aaaaaaaaaa....g.......................................g...............aaaaaaaaaa|
+|aaaaaaaaaa.............g........hhhhh..........................g......aaaaaaaaaa|
+|aaaaaaaaaa..g.....iii.....iii...g.....................................aaaaaaaaaa|
+|aaaaaaaaaa...........g...................g............................aaaaaaaaaa|
+|aaaaaaaaaa........iii.iiijiii.....................g...................aaaaaaaaaa|
+|aaaaaaaaaa.................................................g..........aaaaaaaaaa|
+|aaaaaaaaaa..........................................................g.aaaaaaaaaa|
+|aaaaaaaaaa.......g...................g................................aaaaaaaaaa|
+|aaaaaaaaaa................g...................g.......................aaaaaaaaaa|
+|aaaaaaaaaa.........................g...................g..............aaaaaaaaaa|
+|aaaaaaaaaa......................................................g.....aaaaaaaaaa|
+|aaaaaaaaaa...g........................................................aaaaaaaaaa|
+|aaaaaaaaaa............g...............................................aaaaaaaaaa|
+|aaaaaaaaaa.....................g......................................aaaaaaaaaa|
+|aaaaaaaaaa........kkkkk........kkkkk....g...kkkkk........kkkkk........aaaaaaaaaa|
+|aaaaaaaaaa.......kkkk.kk......kkk..........kkkkkkk......kkkkkkk......gaaaaaaaaaa|
+|aaaaaaaaaa.......kk...kkj...l.kk...........kk...kk......kkg..kk.......aaaaaaaaaa|
+|aaaaaaaaaa.................g..........................................aaaaaaaaaa|
+|aaaaaaaaaa.............mmm..........g.................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaafffffffffffffffffffffffffffffffffffffffffffffffffff.........aaaaaaaaaa|
+|aaaaaaaaaaeeeeeeee....................................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;2;26;26;36;48;2;244;241;232
+a = default/letterbox  sgr 0;38;2;26;26;36;48;2;230;226;214
+b = good+bold  sgr 0;1;38;2;10;110;69;48;2;244;241;232
+c = accent+bold  sgr 0;1;38;2;11;95;165;48;2;244;241;232
+d = warn  sgr 0;38;2;122;90;0;48;2;244;241;232
+e = accent  sgr 0;38;2;11;95;165;48;2;244;241;232
+f = dim  sgr 0;38;2;85;89;106;48;2;244;241;232
+g = star  sgr 0;38;2;207;201;184;48;2;244;241;232
+h = ufo+bold  sgr 0;1;38;2;156;42;124;48;2;244;241;232
+i = alien  sgr 0;38;2;52;52;74;48;2;244;241;232
+j = player_shot  sgr 0;38;2;16;16;16;48;2;244;241;232
+k = shelter  sgr 0;38;2;178;153;255;48;2;244;241;232
+l = enemy_shot  sgr 0;38;2;153;76;0;48;2;244;241;232
+m = player+bold  sgr 0;1;38;2;11;95;165;48;2;244;241;232

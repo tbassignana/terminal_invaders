@@ -1,0 +1,36 @@
+{
+  "family": "ssh-iterm2",
+  "provenance": "synthetic: iTerm2 3.5.6 to a Linux host over SSH (TERM_PROGRAM, COLORTERM and LC_TERMINAL not forwarded; XTVERSION identifies it); built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "xterm-256color",
+    "LANG": "en_US.UTF-8",
+    "SSH_CONNECTION": "1",
+    "SSH_CLIENT": "1",
+    "SSH_TTY": "1"
+  },
+  "replies": "\u001b[?0u\u001b[?2026;2$y\u001bP>|iTerm2 3.5.6\u001b\\\u001b]11;rgb:0000/0000/0000\u001b\\\u001b[2;1R\u001b[3;2R\u001b[0n\u001b[?62;4c",
+  "push_reply": "\u001b[?11u\u001b[?62;4c",
+  "echo": false,
+  "keys": {
+    "protocol": "kitty",
+    "os_repeat": {
+      "delay": 0.525,
+      "interval": 0.09
+    }
+  },
+  "expect": {
+    "family": "iterm2",
+    "remote": true,
+    "multiplexer": null,
+    "color": "truecolor",
+    "background": "dark",
+    "sync": true,
+    "release_events": true,
+    "scheme": "hold",
+    "utf8": true,
+    "ambiguous_wide": false,
+    "unicode_blocks": true,
+    "echoes_queries": false,
+    "ack": "cpr"
+  }
+}

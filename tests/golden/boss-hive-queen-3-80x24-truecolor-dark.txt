@@ -1,0 +1,65 @@
+# scene=boss-hive-queen-3 size=80x24 k=1 tier=truecolor theme=dark seed=1978 tick=570 scheme=latched
+|          SCORE 0002000   HI 0015000             WAVE 12/24  ACT II             |
+|          LIVES ^^^    BOMBS 1  COMBO x1      GUN ||  BOMB 0%                   |
+|              .         HIVE QUEEN  [###|...|....]  III                         |
+|                       .                    ~w~                .                |
+|            .                   .                                               |
+|                     .                  ~w~        ~w~                          |
+|                                       }-=<(q)>=-{.                             |
+|                                        ~w~  !     ~w~     .                    |
+|                                            ~!~                     .           |
+|                 .                   .       !                                  |
+|                          .                 ! .                                 |
+|                                   .       !   o       .                        |
+|                                               !                .               |
+|             .                                                                  |
+|                      .                                                         |
+|                               .                                                |
+|                  #####        #####    .   ## ::        #####                  |
+|                 #######      #######      #######      #######      .          |
+|                 ##   ##      ##   ##      ##   ##      ##.  ##                 |
+|                           .                                                    |
+|                                    .  {A}                                      |
+|                                                  !   !                         |
+|          Tap A/D: move, S: stop  Space Fire  B Bomb  P Pause                   |
+|          SPREAD 6s  SHIELD 10s                                                 |
+--- styles
+|aaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbb.............cccccccccccccccccc...aaaaaaaaaa|
+|aaaaaaaaaadddddddddddddddddddddddddddddd......eeeeee..fffffff.........aaaaaaaaaa|
+|aaaaaaaaaa....g.........hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh...............aaaaaaaaaa|
+|aaaaaaaaaa.............g....................iii................g......aaaaaaaaaa|
+|aaaaaaaaaa..g...................g.....................................aaaaaaaaaa|
+|aaaaaaaaaa...........g..................iii........iii................aaaaaaaaaa|
+|aaaaaaaaaa.............................jjjjjjjjjjjg...................aaaaaaaaaa|
+|aaaaaaaaaa..............................iii..k.....iii.....g..........aaaaaaaaaa|
+|aaaaaaaaaa..................................iki.....................g.aaaaaaaaaa|
+|aaaaaaaaaa.......g...................g.......k........................aaaaaaaaaa|
+|aaaaaaaaaa................g.................k.g.......................aaaaaaaaaa|
+|aaaaaaaaaa.........................g.......k...k.......g..............aaaaaaaaaa|
+|aaaaaaaaaa.....................................k................g.....aaaaaaaaaa|
+|aaaaaaaaaa...g........................................................aaaaaaaaaa|
+|aaaaaaaaaa............g...............................................aaaaaaaaaa|
+|aaaaaaaaaa.....................g......................................aaaaaaaaaa|
+|aaaaaaaaaa........lllll........lllll....g...ll.ll........lllll........aaaaaaaaaa|
+|aaaaaaaaaa.......lllllll......lllllll......lllllll......lllllll......gaaaaaaaaaa|
+|aaaaaaaaaa.......ll...ll......ll...ll......ll...ll......llg..ll.......aaaaaaaaaa|
+|aaaaaaaaaa.................g..........................................aaaaaaaaaa|
+|aaaaaaaaaa..........................g..mmm............................aaaaaaaaaa|
+|aaaaaaaaaa........................................k...k...............aaaaaaaaaa|
+|aaaaaaaaaafffffffffffffffffffffffffffffffffffffffffffffffffff.........aaaaaaaaaa|
+|aaaaaaaaaaeeeeeeeee..eeeeeeeeee.......................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;2;225;225;232;48;2;11;14;26
+a = default/letterbox  sgr 0;38;2;225;225;232;48;2;5;6;12
+b = good+bold  sgr 0;1;38;2;95;211;141;48;2;11;14;26
+c = accent+bold  sgr 0;1;38;2;86;180;233;48;2;11;14;26
+d = warn  sgr 0;38;2;240;228;66;48;2;11;14;26
+e = accent  sgr 0;38;2;86;180;233;48;2;11;14;26
+f = dim  sgr 0;38;2;144;151;171;48;2;11;14;26
+g = star  sgr 0;38;2;58;64;96;48;2;11;14;26
+h = danger  sgr 0;38;2;255;122;107;48;2;11;14;26
+i = alien  sgr 0;38;2;216;216;232;48;2;11;14;26
+j = boss+bold  sgr 0;1;38;2;255;153;50;48;2;11;14;26
+k = enemy_shot  sgr 0;38;2;152;153;0;48;2;11;14;26
+l = shelter  sgr 0;38;2;204;0;152;48;2;11;14;26
+m = player+bold  sgr 0;1;38;2;86;180;233;48;2;11;14;26

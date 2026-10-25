@@ -1,0 +1,54 @@
+# scene=help size=80x24 k=1 tier=mono theme=dark seed=1978 tick=0 scheme=latched
+|                                                                                |
+|                                 FLIGHT MANUAL                                  |
+|                                                                                |
+|                                                                                |
+|           MOVE      Tap A/D to start; tap back or S to stop                    |
+|           CONTROLS  Tap: this terminal sends no key releases                   |
+|           LEGEND    /A\ you {A} shielded  ! v : theirs  [R] catch              |
+|           FIRE      Space fires; hold it to keep firing                        |
+|           BOMB      B clears enemy fire; combos earn more                      |
+|           PAUSE     P or Escape   |   M sound   |   F1 (fn+F1) stats           |
+|           SESSION   In pause: R restarts, Q returns to the menu                |
+|           PICKUPS   R rapid S spread + shield T slow L repair B bomb           |
+|           SCORE     Hits in a row raise COMBO; a miss breaks it.               |
+|           CAMPAIGN  24 waves, 4 bosses, an upgrade every 3 waves.              |
+|           ARCADE    The 1978 rules: tap to fire, no upgrades.                  |
+|           ENDLESS   Keep climbing until the fleet overwhelms you.              |
+|           DAILY     One shared UTC seed, normal difficulty.                    |
+|           DUEL      Two pilots, same seed. Swap each wave and life.            |
+|                 Scores save automatically when a run finishes.                 |
+|              A bigger window (120 x 44 or more) shows pixel art.               |
+|                                                                                |
+|                            Enter / Escape to return                            |
+|                                                                                |
+|          PILOT ACE  |  SOUND OFF [M]                                           |
+--- styles
+|................................................................................|
+|.................................aaaaaaaaaaaaa..................................|
+|................................................................................|
+|................................................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|...........aaaaaaaaa............................................................|
+|.................bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.................|
+|..............bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb...............|
+|................................................................................|
+|................................................................................|
+|................................................................................|
+|..........bbbbbbbbbbbbbbbbbbbbbbbbbbb...........................................|
+--- legend
+. = default  sgr 0
+a = default+bold  sgr 0;1
+b = default+dim  sgr 0;2

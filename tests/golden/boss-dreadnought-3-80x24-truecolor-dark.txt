@@ -1,0 +1,65 @@
+# scene=boss-dreadnought-3 size=80x24 k=1 tier=truecolor theme=dark seed=1978 tick=570 scheme=latched
+|          SCORE 0004500   HI 0015000             WAVE 18/24  ACT III            |
+|          LIVES ^^     BOMBS 1  COMBO x1      GUN ||  BOMB 0%                   |
+|              .         DREADNOUGHT  [###|....|...]  III                        |
+|                       .                                       .                |
+|            .                   .                                               |
+|                     .                   .                                      |
+|                                                  .                             |
+|                                    [#[.{=}#{=} {=} {=}    .                    |
+|                                                                    .           |
+|                 .                   .                                          |
+|                          .                   .                                 |
+|                                   .                   .                        |
+|                                                                .               |
+|             .                                                                  |
+|                      .                                                         |
+|                               .                                                |
+|                  #####        #####    .   #####        #####                  |
+|                 #######      #######      #######      #######      .          |
+|                 ##   ##      ##   ##      ##   ##      ##.  ##                 |
+|                           .           [+]                                      |
+|                                    .  /A\                                      |
+|                                                                                |
+|          Tap A/D: move, S: stop  Space Fire  B Bomb  P Pause                   |
+|          SPREAD 7s                                                             |
+--- styles
+|aaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbb.............ccccccccccccccccccc..aaaaaaaaaa|
+|aaaaaaaaaadddddddddddddddddddddddddddddd......eeeeee..fffffff.........aaaaaaaaaa|
+|aaaaaaaaaa....g.........hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh..............aaaaaaaaaa|
+|aaaaaaaaaa.............g.......................................g......aaaaaaaaaa|
+|aaaaaaaaaa..g...................g.....................................aaaaaaaaaa|
+|aaaaaaaaaa...........g...................g............................aaaaaaaaaa|
+|aaaaaaaaaa........................................g...................aaaaaaaaaa|
+|aaaaaaaaaa..........................iiiijjjijjj.jjj.jjj....g..........aaaaaaaaaa|
+|aaaaaaaaaa..........................................................g.aaaaaaaaaa|
+|aaaaaaaaaa.......g...................g................................aaaaaaaaaa|
+|aaaaaaaaaa................g...................g.......................aaaaaaaaaa|
+|aaaaaaaaaa.........................g...................g..............aaaaaaaaaa|
+|aaaaaaaaaa......................................................g.....aaaaaaaaaa|
+|aaaaaaaaaa...g........................................................aaaaaaaaaa|
+|aaaaaaaaaa............g...............................................aaaaaaaaaa|
+|aaaaaaaaaa.....................g......................................aaaaaaaaaa|
+|aaaaaaaaaa........kkkkk........kkkkk....g...kkkkk........kkkkk........aaaaaaaaaa|
+|aaaaaaaaaa.......kkkkkkk......kkkkkkk......kkkkkkk......kkkkkkk......gaaaaaaaaaa|
+|aaaaaaaaaa.......kk...kk......kk...kk......kk...kk......kkg..kk.......aaaaaaaaaa|
+|aaaaaaaaaa.................g...........lll............................aaaaaaaaaa|
+|aaaaaaaaaa..........................g..mmm............................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaafffffffffffffffffffffffffffffffffffffffffffffffffff.........aaaaaaaaaa|
+|aaaaaaaaaaeeeeeeeee...................................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;2;225;225;232;48;2;11;14;26
+a = default/letterbox  sgr 0;38;2;225;225;232;48;2;5;6;12
+b = good+bold  sgr 0;1;38;2;95;211;141;48;2;11;14;26
+c = accent+bold  sgr 0;1;38;2;86;180;233;48;2;11;14;26
+d = warn  sgr 0;38;2;240;228;66;48;2;11;14;26
+e = accent  sgr 0;38;2;86;180;233;48;2;11;14;26
+f = dim  sgr 0;38;2;144;151;171;48;2;11;14;26
+g = star  sgr 0;38;2;58;64;96;48;2;11;14;26
+h = danger  sgr 0;38;2;255;122;107;48;2;11;14;26
+i = boss+bold  sgr 0;1;38;2;255;153;50;48;2;11;14;26
+j = alien  sgr 0;38;2;216;216;232;48;2;11;14;26
+k = shelter  sgr 0;38;2;204;0;152;48;2;11;14;26
+l = pickup+bold  sgr 0;1;38;2;173;234;234;48;2;11;14;26
+m = player+bold  sgr 0;1;38;2;86;180;233;48;2;11;14;26

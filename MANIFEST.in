@@ -1,3 +1,6 @@
-# The sdist ships the tests, so it also ships what they read: golden replays and the dev tools.
+# The sdist ships the tests, so it also ships what they read: golden replays and frames, terminal fixtures, test
+# support modules and the dev tools.
 graft tests/fixtures
-include tools/*.py
+graft tests/golden
+recursive-include tests *.py
+recursive-include tools *.py

@@ -1,0 +1,58 @@
+# scene=career size=80x24 k=1 tier=truecolor theme=dark seed=1978 tick=0 scheme=latched
+|                                                                                |
+|                             CAREER & ACHIEVEMENTS                              |
+|                                                                                |
+|                                                                                |
+|              RUNS     12     KILLS     840                                     |
+|                                                                                |
+|              ACCURACY  75.0%   BEST COMBO 9                                    |
+|                                                                                |
+|              FLIGHT TIME 60.0 minutes                                          |
+|                                                                                |
+|                                                                                |
+|             * First contact             * Chain reaction                       |
+|             * Sharpshooter                                                     |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|               Left/Right switch page   Enter / Escape to return                |
+|                                                                                |
+|          PILOT ACE  |  SOUND OFF [M]                                           |
+--- styles
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa...................bbbbbbbbbbbbbbbbbbbbb....................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa....ccccccccccccccccccccccccccccc...........................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa....cccccccccccccccccccccccccccccc..........................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa....cccccccccccccccccccccccc................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa...ddddddddddddddd.............dddddddddddddddd.............aaaaaaaaaa|
+|aaaaaaaaaa...dddddddddddddd...........................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.....eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee......aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaafffffffffffffffffffffffffff.................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;2;225;225;232;48;2;11;14;26
+a = default/letterbox  sgr 0;38;2;225;225;232;48;2;5;6;12
+b = accent+bold  sgr 0;1;38;2;86;180;233;48;2;11;14;26
+c = good  sgr 0;38;2;95;211;141;48;2;11;14;26
+d = warn  sgr 0;38;2;240;228;66;48;2;11;14;26
+e = accent  sgr 0;38;2;86;180;233;48;2;11;14;26
+f = dim  sgr 0;38;2;144;151;171;48;2;11;14;26

@@ -1,0 +1,35 @@
+{
+  "family": "apple-terminal-26",
+  "provenance": "synthetic: Terminal.app on macOS 26 (build 470; truecolor), Clear Dark profile; the OSC 11 answer is inferred; built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "xterm-256color",
+    "TERM_PROGRAM": "Apple_Terminal",
+    "TERM_PROGRAM_VERSION": "470",
+    "LANG": "en_US.UTF-8"
+  },
+  "replies": "\u001b]11;rgb:1e1e/1e1e/1e1e\u001b\\\u001b[2;1R\u001b[3;2R\u001b[0n\u001b[?1;2c",
+  "push_reply": null,
+  "echo": false,
+  "keys": {
+    "protocol": "legacy",
+    "os_repeat": {
+      "delay": 0.525,
+      "interval": 0.09
+    }
+  },
+  "expect": {
+    "family": "apple_terminal",
+    "remote": false,
+    "multiplexer": null,
+    "color": "truecolor",
+    "background": "dark",
+    "sync": false,
+    "release_events": false,
+    "scheme": "latched",
+    "utf8": true,
+    "ambiguous_wide": false,
+    "unicode_blocks": true,
+    "echoes_queries": false,
+    "ack": "cpr"
+  }
+}

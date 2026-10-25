@@ -1,0 +1,36 @@
+{
+  "family": "ssh-apple-terminal",
+  "provenance": "synthetic: Terminal.app to a Linux host over SSH: TERM_PROGRAM is not forwarded, so every query is sent and the DECRQM final 'p' is printed (echo check at column 2); built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "xterm-256color",
+    "LANG": "en_US.UTF-8",
+    "SSH_CONNECTION": "1",
+    "SSH_CLIENT": "1",
+    "SSH_TTY": "1"
+  },
+  "replies": "\u001b]11;rgb:ffff/ffff/ffff\u001b\\\u001b[2;2R\u001b[3;2R\u001b[0n\u001b[?1;2c",
+  "push_reply": null,
+  "echo": true,
+  "keys": {
+    "protocol": "legacy",
+    "os_repeat": {
+      "delay": 0.525,
+      "interval": 0.09
+    }
+  },
+  "expect": {
+    "family": "unknown",
+    "remote": true,
+    "multiplexer": null,
+    "color": "256",
+    "background": "light",
+    "sync": false,
+    "release_events": false,
+    "scheme": "latched",
+    "utf8": true,
+    "ambiguous_wide": false,
+    "unicode_blocks": true,
+    "echoes_queries": true,
+    "ack": "cpr"
+  }
+}

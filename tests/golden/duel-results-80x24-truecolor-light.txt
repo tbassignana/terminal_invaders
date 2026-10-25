@@ -1,0 +1,58 @@
+# scene=duel-results size=80x24 k=1 tier=truecolor theme=light seed=1978 tick=25771 scheme=latched
+|                                                                                |
+|                                   ACE-1 WINS                                   |
+|                                                                                |
+|                                                                                |
+|             ACE-1                       ACE-2                                  |
+|             SCORE 112,430               SCORE 1,670                            |
+|             REACHED ACT III WAVE 16     REACHED ACT I WAVE 02                  |
+|             ACCURACY 68%                ACCURACY 60%                           |
+|             BEST COMBO x6               BEST COMBO x2                          |
+|             SHOT DOWN BY A HUNTER       SHOT DOWN BY A PELLET                  |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                   SEED 1978                                    |
+|                                                                                |
+|                             Enter rematch   Q menu                             |
+|                                                                                |
+|          PILOT ACE  |  SOUND OFF [M]                                           |
+--- styles
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.........................bbbbbbbbbb.........................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa...ccccc.......................ccccc........................aaaaaaaaaa|
+|aaaaaaaaaa...ddddddddddddd...............ddddddddddd..................aaaaaaaaaa|
+|aaaaaaaaaa...ddddddddddddddddddddddd.....ddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa...dddddddddddd................dddddddddddd.................aaaaaaaaaa|
+|aaaaaaaaaa...ddddddddddddd...............ddddddddddddd................aaaaaaaaaa|
+|aaaaaaaaaa...ddddddddddddddddddddd.......ddddddddddddddddddddd........aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.........................eeeeeeeee..........................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa...................ffffffffffffffffffffff...................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeee.................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;2;26;26;36;48;2;244;241;232
+a = default/letterbox  sgr 0;38;2;26;26;36;48;2;230;226;214
+b = danger+bold  sgr 0;1;38;2;179;38;30;48;2;244;241;232
+c = accent+bold  sgr 0;1;38;2;11;95;165;48;2;244;241;232
+d = text  sgr 0;38;2;26;26;36;48;2;244;241;232
+e = dim  sgr 0;38;2;85;89;106;48;2;244;241;232
+f = accent  sgr 0;38;2;11;95;165;48;2;244;241;232

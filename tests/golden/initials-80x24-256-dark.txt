@@ -1,0 +1,60 @@
+# scene=initials size=80x24 k=1 tier=256 theme=dark seed=1978 tick=75789 scheme=latched
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                 NEW HIGH SCORE                                 |
+|                                                                                |
+|                             #3   CAMPAIGN / NORMAL                             |
+|                                 SCORE 112,430                                  |
+|                                                                                |
+|                                                                                |
+|                                   A   C   E                                    |
+|                                   ^                                            |
+|                                 SAVES AS  ACE                                  |
+|                                                                                |
+|             Type letters, or Up/Down to change, Left/Right to move             |
+|                           Enter save        Esc skip                           |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|             Type or Up/Down  Left/Right move  Enter save  Esc skip             |
+|                                                                                |
+|          PILOT ACE                                                             |
+--- styles
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.......................bbbbbbbbbbbbbb.......................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa...................cccccccccccccccccccccc...................aaaaaaaaaa|
+|aaaaaaaaaa.......................ddddddddddddd........................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.........................e...d...d..........................aaaaaaaaaa|
+|aaaaaaaaaa.........................b..................................aaaaaaaaaa|
+|aaaaaaaaaa.......................fffffffffffff........................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa...gggggggggggggggggggggggggggggggggggggggggggggggggggggg...aaaaaaaaaa|
+|aaaaaaaaaa.................hhhhhhhhhhhhhhhhhhhhhhhhhh.................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa...gggggggggggggggggggggggggggggggggggggggggggggggggggggg...aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaaggggggggg...................................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;5;254;48;5;233
+a = default/letterbox  sgr 0;38;5;254;48;5;232
+b = accent+bold  sgr 0;1;38;5;74;48;5;233
+c = good  sgr 0;38;5;78;48;5;233
+d = text+bold  sgr 0;1;38;5;254;48;5;233
+e = text+bold+reverse  sgr 0;1;7;38;5;254;48;5;233
+f = text  sgr 0;38;5;254;48;5;233
+g = dim  sgr 0;38;5;103;48;5;233
+h = accent  sgr 0;38;5;74;48;5;233

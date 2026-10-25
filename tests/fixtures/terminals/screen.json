@@ -1,0 +1,34 @@
+{
+  "family": "screen",
+  "provenance": "synthetic: GNU screen 4.9 with TERM=screen (answers only CPR, DSR and DA1); built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "screen",
+    "STY": "1",
+    "LANG": "en_US.UTF-8"
+  },
+  "replies": "\u001b[2;1R\u001b[3;2R\u001b[0n\u001b[?1;2c",
+  "push_reply": null,
+  "echo": false,
+  "keys": {
+    "protocol": "legacy",
+    "os_repeat": {
+      "delay": 0.66,
+      "interval": 0.04
+    }
+  },
+  "expect": {
+    "family": "screen",
+    "remote": false,
+    "multiplexer": "screen",
+    "color": "16",
+    "background": "dark",
+    "sync": false,
+    "release_events": false,
+    "scheme": "latched",
+    "utf8": true,
+    "ambiguous_wide": false,
+    "unicode_blocks": true,
+    "echoes_queries": false,
+    "ack": "cpr"
+  }
+}

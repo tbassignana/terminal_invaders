@@ -1,0 +1,35 @@
+{
+  "family": "vte-gnome",
+  "provenance": "synthetic: GNOME Terminal on VTE 0.78 (mode 2026 permanently reset, Ps 4); built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "VTE_VERSION": "7800",
+    "LANG": "en_US.UTF-8"
+  },
+  "replies": "\u001b[?2026;4$y\u001bP>|VTE(7800)\u001b\\\u001b]11;rgb:1e1e/1e1e/1e1e\u001b\\\u001b[2;1R\u001b[3;2R\u001b[0n\u001b[?65;1;9c",
+  "push_reply": null,
+  "echo": false,
+  "keys": {
+    "protocol": "legacy",
+    "os_repeat": {
+      "delay": 0.5,
+      "interval": 0.03
+    }
+  },
+  "expect": {
+    "family": "vte",
+    "remote": false,
+    "multiplexer": null,
+    "color": "truecolor",
+    "background": "dark",
+    "sync": false,
+    "release_events": false,
+    "scheme": "latched",
+    "utf8": true,
+    "ambiguous_wide": false,
+    "unicode_blocks": true,
+    "echoes_queries": false,
+    "ack": "cpr"
+  }
+}

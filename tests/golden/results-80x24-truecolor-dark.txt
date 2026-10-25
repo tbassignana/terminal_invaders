@@ -1,0 +1,59 @@
+# scene=results size=80x24 k=1 tier=truecolor theme=dark seed=1978 tick=75789 scheme=latched
+|                                                                                |
+|                                  SIGNAL LOST                                   |
+|                       GAME OVER - SHOT DOWN BY A HUNTER                        |
+|                                                                                |
+|             SCORE        112,430                                               |
+|             REACHED      ACT III  WAVE 16  "HUNTERS"                           |
+|             TIME         21:03                                                 |
+|             KILLS        1259    ACCURACY 68%     BEST COMBO x6                |
+|             BOSSES       WARDEN, HIVE QUEEN                                    |
+|             PERFECT      15 waves                                              |
+|             UPGRADES     TRIPLE SHOT, DEFLECTOR, PIERCER,                      |
+|                          RAIL ROUNDS x2                                        |
+|             UNLOCKED     Deep space, High roller                               |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                   SEED 1978                                    |
+|                                                                                |
+|                            Enter fly again   Q menu                            |
+|                                                                                |
+|          PILOT ACE  |  SOUND OFF [M]                                           |
+--- styles
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa........................bbbbbbbbbbb.........................aaaaaaaaaa|
+|aaaaaaaaaa.............ccccccccccccccccccccccccccccccccc..............aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa...ddddd........eeeeeee.....................................aaaaaaaaaa|
+|aaaaaaaaaa...ddddddd......eeeeeeeeeeeeeeeeeeeeeeeeeee.................aaaaaaaaaa|
+|aaaaaaaaaa...dddd.........eeeee.......................................aaaaaaaaaa|
+|aaaaaaaaaa...ddddd........eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee......aaaaaaaaaa|
+|aaaaaaaaaa...dddddd.......eeeeeeeeeeeeeeeeee..........................aaaaaaaaaa|
+|aaaaaaaaaa...ddddddd......eeeeeeee....................................aaaaaaaaaa|
+|aaaaaaaaaa...dddddddd.....eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee............aaaaaaaaaa|
+|aaaaaaaaaa................eeeeeeeeeeeeee..............................aaaaaaaaaa|
+|aaaaaaaaaa...dddddddd.....eeeeeeeeeeeeeeeeeeeeeee.....................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa.........................fffffffff..........................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaa..................gggggggggggggggggggggggg..................aaaaaaaaaa|
+|aaaaaaaaaa............................................................aaaaaaaaaa|
+|aaaaaaaaaafffffffffffffffffffffffffff.................................aaaaaaaaaa|
+--- legend
+. = default  sgr 0;38;2;225;225;232;48;2;11;14;26
+a = default/letterbox  sgr 0;38;2;225;225;232;48;2;5;6;12
+b = danger+bold  sgr 0;1;38;2;255;122;107;48;2;11;14;26
+c = warn  sgr 0;38;2;240;228;66;48;2;11;14;26
+d = accent+bold  sgr 0;1;38;2;86;180;233;48;2;11;14;26
+e = text  sgr 0;38;2;225;225;232;48;2;11;14;26
+f = dim  sgr 0;38;2;144;151;171;48;2;11;14;26
+g = accent  sgr 0;38;2;86;180;233;48;2;11;14;26

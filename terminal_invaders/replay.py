@@ -6,8 +6,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import __version__
-from .engine import Game
-from .model import ACTIONS, DIFFICULTIES, MODES, RULESET, Config
+from .model import ACTIONS, DIFFICULTIES, MODES, Config
+from .rules import CAMPAIGN, LEGACY, RULESETS, game_class, make_game, ruleset_for
 from .storage import atomic_json, natural
 
 FORMAT_VERSION = 2
@@ -16,6 +16,10 @@ MAX_BYTES = 64_000_000
 MAX_TAPES = 8
 RESULT_KEYS = ("score", "wave", "kills", "victory")
 LABEL = re.compile(r"[\w.+-]{1,64}", re.ASCII)  # ruleset and engine names are printed in error messages
+LEGACY_REFUSAL = (
+    "this replay was recorded under the old 12-wave rules (campaign-1); invaders --verify-replay FILE checks it, "
+    "but it can't be shown"
+)
 
 
 class Recorder:
@@ -31,6 +35,8 @@ class Recorder:
         self.ticks += 1
 
     def tape(self, game) -> dict:
+        if getattr(game, "staged", False):
+            raise ValueError("a staged game can't be recorded")
         if game.tick != self.ticks:
             raise ValueError("recording and simulation ticks differ")
         if self.ticks > MAX_TICKS:
@@ -50,8 +56,12 @@ class Recorder:
 
 
 def save_tapes(path: Path, tapes: list[dict]) -> None:
-    """Write every pilot's tape into one replay file."""
-    atomic_json(Path(path), {"format": FORMAT_VERSION, "ruleset": RULESET, "engine": __version__, "tapes": tapes})
+    """Write every pilot's tape into one replay file, under the ruleset their mode plays."""
+    rulesets = {ruleset_for(tape["config"]["mode"]) for tape in tapes}
+    if len(rulesets) != 1:
+        raise ValueError("a replay holds the tapes of one ruleset")
+    (ruleset,) = rulesets
+    atomic_json(Path(path), {"format": FORMAT_VERSION, "ruleset": ruleset, "engine": __version__, "tapes": tapes})
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,13 +72,14 @@ class Tape:
     inputs: dict
     digest: str
     result: dict
+    ruleset: str = ""  # the file's ruleset; "" plays the one config's mode plays today
 
     def actions_at(self, tick: int) -> tuple[str, ...]:
         return self.inputs.get(tick, ())
 
-    def simulate(self) -> Game:
+    def simulate(self):
         """Replay headlessly; a run that ends before the tape does stops there and fails verification."""
-        game = Game(self.config)
+        game = game_class(self.ruleset)(self.config) if self.ruleset else make_game(self.config)
         for tick in range(self.ticks):
             game.step(self.actions_at(tick))
             if game.tick != tick + 1:
@@ -107,15 +118,21 @@ class Playback:
         ruleset, self.engine = raw["ruleset"], raw["engine"]
         if any(not isinstance(label, str) or not LABEL.fullmatch(label) for label in (ruleset, self.engine)):
             raise ValueError("invalid replay header")
-        if ruleset != RULESET:
-            raise ValueError(f"recorded with ruleset {ruleset} (engine {self.engine}); this version plays {RULESET}")
+        if ruleset not in RULESETS and ruleset not in LEGACY:
+            plays, verifies = " and ".join(RULESETS), " and ".join(LEGACY)
+            raise ValueError(
+                f"recorded with ruleset {ruleset} (engine {self.engine}); "
+                f"this version plays {plays} and verifies {verifies}"
+            )
         tapes = raw["tapes"]
         if not isinstance(tapes, list) or not 1 <= len(tapes) <= MAX_TAPES:
             raise ValueError("invalid replay tapes")
-        self.tapes = [self._tape(tape, pilot) for pilot, tape in enumerate(tapes, 1)]
+        self.ruleset = ruleset
+        self.legacy = ruleset in LEGACY  # it verifies, but can't be watched
+        self.tapes = [self._tape(tape, pilot, ruleset) for pilot, tape in enumerate(tapes, 1)]
 
     @staticmethod
-    def _tape(raw: dict, pilot: int) -> Tape:
+    def _tape(raw: dict, pilot: int, ruleset: str) -> Tape:
         if not isinstance(raw, dict) or set(raw) != {"pilot", "config", "ticks", "inputs", "digest", "result"}:
             raise ValueError("invalid replay tape")
         if type(raw["pilot"]) is not int or raw["pilot"] != pilot:
@@ -126,6 +143,7 @@ class Playback:
             or set(config) != {"difficulty", "mode", "seed"}
             or config["difficulty"] not in DIFFICULTIES
             or config["mode"] not in MODES
+            or ruleset_for(config["mode"]) != (CAMPAIGN if ruleset in LEGACY else ruleset)
             or not natural(config["seed"])
         ):
             raise ValueError("invalid replay settings")
@@ -158,4 +176,9 @@ class Playback:
                 raise ValueError("unknown replay action")
             actions_by_tick[tick] = tuple(actions)
             previous = tick
-        return Tape(pilot, Config(**config), ticks, actions_by_tick, digest, dict(result))
+        return Tape(pilot, Config(**config), ticks, actions_by_tick, digest, dict(result), ruleset)
+
+    def refuse_watching(self) -> None:
+        """--replay calls this before the terminal opens: a campaign-1 tape verifies but can't be shown (§17)."""
+        if self.legacy:
+            raise ValueError(LEGACY_REFUSAL)

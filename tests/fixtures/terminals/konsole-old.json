@@ -1,0 +1,36 @@
+{
+  "family": "konsole-old",
+  "provenance": "synthetic: Konsole 23.08 as shipped by LTS distributions (no kitty protocol, no mode 2026, no XTVERSION); built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "COLORFGBG": "15;0",
+    "KONSOLE_VERSION": "230805",
+    "LANG": "en_US.UTF-8"
+  },
+  "replies": "\u001b]11;rgb:2323/2626/2727\u0007\u001b[2;1R\u001b[3;2R\u001b[0n\u001b[?62;22c",
+  "push_reply": null,
+  "echo": false,
+  "keys": {
+    "protocol": "legacy",
+    "os_repeat": {
+      "delay": 0.6,
+      "interval": 0.04
+    }
+  },
+  "expect": {
+    "family": "konsole",
+    "remote": false,
+    "multiplexer": null,
+    "color": "truecolor",
+    "background": "dark",
+    "sync": false,
+    "release_events": false,
+    "scheme": "latched",
+    "utf8": true,
+    "ambiguous_wide": false,
+    "unicode_blocks": true,
+    "echoes_queries": false,
+    "ack": "cpr"
+  }
+}

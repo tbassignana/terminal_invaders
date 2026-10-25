@@ -1,0 +1,37 @@
+{
+  "family": "iterm2-3.4",
+  "provenance": "synthetic: iTerm2 3.4 (no kitty protocol; mode 2026 unknown, inferred) with a light profile and 'ambiguous characters are double-width' on; built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "TERM_PROGRAM": "iTerm.app",
+    "TERM_PROGRAM_VERSION": "3.4.23",
+    "LC_TERMINAL": "iTerm2",
+    "LANG": "en_US.UTF-8"
+  },
+  "replies": "\u001b[?2026;0$y\u001bP>|iTerm2 3.4.23\u001b\\\u001b]11;rgb:ffff/ffff/ffff\u001b\\\u001b[2;1R\u001b[3;3R\u001b[0n\u001b[?62;4c",
+  "push_reply": null,
+  "echo": false,
+  "keys": {
+    "protocol": "legacy",
+    "os_repeat": {
+      "delay": 0.525,
+      "interval": 0.09
+    }
+  },
+  "expect": {
+    "family": "iterm2",
+    "remote": false,
+    "multiplexer": null,
+    "color": "truecolor",
+    "background": "light",
+    "sync": false,
+    "release_events": false,
+    "scheme": "latched",
+    "utf8": true,
+    "ambiguous_wide": true,
+    "unicode_blocks": false,
+    "echoes_queries": false,
+    "ack": "cpr"
+  }
+}

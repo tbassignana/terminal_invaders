@@ -1,0 +1,33 @@
+{
+  "family": "foot",
+  "provenance": "synthetic: foot 1.20 (sets only TERM); built from the terminal-capabilities audit (eval.json) and its cited sources; replace with an invaders --probe --raw capture (G5)",
+  "env": {
+    "TERM": "foot",
+    "LANG": "en_US.UTF-8"
+  },
+  "replies": "\u001b[?0u\u001b[?2026;2$y\u001bP>|foot(1.20.2)\u001b\\\u001b]11;rgb:2424/2424/2424\u001b\\\u001b[2;1R\u001b[3;2R\u001b[0n\u001b[?62;4;22c",
+  "push_reply": "\u001b[?11u\u001b[?62;4;22c",
+  "echo": false,
+  "keys": {
+    "protocol": "kitty",
+    "os_repeat": {
+      "delay": 0.5,
+      "interval": 0.03
+    }
+  },
+  "expect": {
+    "family": "foot",
+    "remote": false,
+    "multiplexer": null,
+    "color": "truecolor",
+    "background": "dark",
+    "sync": true,
+    "release_events": true,
+    "scheme": "hold",
+    "utf8": true,
+    "ambiguous_wide": false,
+    "unicode_blocks": true,
+    "echoes_queries": false,
+    "ack": "cpr"
+  }
+}
