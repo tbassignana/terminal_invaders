@@ -3,13 +3,17 @@ update() sends, the repeat gaps, M, the status lines, and a close() that always 
 
 import io
 import os
+import select
+import signal
 import subprocess
 import sys
 import time
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import Mock, patch
+from types import SimpleNamespace
+from unittest.mock import Mock, call, patch
 
 from terminal_invaders import app, cli
 from terminal_invaders.arcade import machine
@@ -30,6 +34,7 @@ class FakeHelper:
         self.pid = 40000 + id(self) % 10000
         self.calls: list[str] = []
         self.killed = False
+        self.killed_at: float | None = None  # the test's clock (Case.now) when its group was killed
 
     def received(self) -> bytes:
         data = b""
@@ -93,12 +98,40 @@ class Case(unittest.TestCase):
         for helper in self.helpers:
             if helper.pid == pid:
                 helper.calls.append("killpg")
-                helper.killed = True
+                helper.killed, helper.killed_at = True, self.now
                 return
         raise ProcessLookupError
 
     def audio(self, **options) -> Audio:
         return Audio(clock=lambda: self.now, popen=self.popen, **options)
+
+    @contextmanager
+    def on_the_test_clock(self):
+        """Audio's waits on self.now instead of the machine's clock, so a test reads how long they were however slow
+        the machine is: select.select answers at once when a pipe is ready (EOF counts), which takes a millisecond,
+        and otherwise waits out its whole timeout, moving self.now on by it; time.sleep moves it on too. A wait made
+        some other way, or one that asks for no time at all, never moves self.now, so its deadline would never come:
+        after 5 s on the machine's clock, reading the test's clock fails instead of hanging the run."""
+        real_select, began = select.select, time.monotonic()
+
+        def now() -> float:
+            if time.monotonic() - began > 5.0:
+                raise AssertionError("Audio waited off the test's clock, or spun")
+            return self.now
+
+        def wait(read, write, error, timeout=None):
+            if timeout is None:
+                raise AssertionError("a wait without a timeout")  # on a helper that never answers it never ends
+            ready = real_select(read, write, error, 0)
+            self.now = now() + (0.001 if any(ready) else timeout)
+            return ready
+
+        def sleep(seconds):
+            self.now = now() + seconds
+
+        clock = SimpleNamespace(monotonic=now, sleep=sleep)
+        with patch("terminal_invaders.audio.time", clock), patch("select.select", wait):
+            yield
 
 
 class MessagesTests(Case):
@@ -244,9 +277,9 @@ class StatusTests(Case):
         (helper,) = self.helpers
         os.close(helper.inbox)
         helper.inbox = None
-        began = time.monotonic()
-        audio.update(["fire"])
-        self.assertLess(time.monotonic() - began, 0.1)  # no CLOSE_WAIT: it is gone or broken
+        with self.on_the_test_clock():
+            audio.update(["fire"])
+        self.assertEqual(self.now, 0.0)  # no CLOSE_WAIT, no wait at all: it is gone or broken
         self.assertEqual((audio.available, audio.enabled, audio.pid), (False, False, None))
         self.assertEqual(helper.calls, ["killpg", "wait"])
 
@@ -257,9 +290,9 @@ class CloseTests(Case):
         (helper,) = self.helpers
         helper.say(b"bye\n")
         helper.exit()
-        began = time.monotonic()
-        audio.close()
-        self.assertLess(time.monotonic() - began, 0.1)
+        with self.on_the_test_clock():
+            audio.close()
+        self.assertLess(self.now, 0.01)  # one answer, then EOF: it returned then, not when CLOSE_WAIT ran out
         self.assertEqual(helper.received(), QUIT)
         self.assertEqual(helper.calls, ["killpg", "wait"])  # the sweep still runs: a player may be left
         self.assertTrue(helper.stdin.closed and helper.stdout.closed)
@@ -267,14 +300,18 @@ class CloseTests(Case):
     def test_close_kills_a_hung_helper_group_before_reaping_and_is_idempotent(self):
         audio = self.audio()
         (helper,) = self.helpers
-        began = time.monotonic()
-        audio.close()
-        took = time.monotonic() - began
-        self.assertGreaterEqual(took, 0.29)
-        self.assertLess(took, 0.35)
-        self.assertEqual(helper.calls, ["killpg", "wait"])
-        audio.close()
-        audio.update(["fire"])
+        with self.on_the_test_clock():
+            audio.close()
+            # It asked the helper to quit and gave it all of CLOSE_WAIT, the spec's 0.3 s, once (on the test's clock,
+            # so on any machine); only then did it kill the group, with no wait after that, and then reap the helper.
+            self.assertEqual(helper.received(), QUIT)
+            self.assertAlmostEqual(helper.killed_at, 0.3)
+            self.assertEqual(self.now, helper.killed_at)
+            self.assertEqual(helper.calls, ["killpg", "wait"])
+            self.assertEqual(self.killpg_calls, [call(helper.pid, signal.SIGKILL)])  # a stopped helper dies too
+            audio.close()
+            audio.update(["fire"])
+        self.assertEqual(self.now, helper.killed_at)  # the second close() waited for nothing
         self.assertEqual((helper.calls, audio.toggle(), audio.enabled), (["killpg", "wait"], False, False))
 
     def test_close_sweeps_even_when_interrupted(self):

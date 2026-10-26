@@ -17,6 +17,7 @@ from array import array
 from collections import deque
 from ctypes import c_void_p, sizeof
 from pathlib import Path
+from statistics import median
 
 import pytest
 
@@ -80,7 +81,8 @@ class FakeLibrary:
 
 class FakeToolbox(FakeLibrary):
     """An AudioQueue that plays one buffer every 10 ms on its own thread (or on complete() with thread=False) and
-    calls back through the callback's C address only."""
+    calls back through the callback's C address only; .played notes where each of the thread's callbacks starts and
+    ends, and .timing how long the thread waited for that buffer's turn and then spent in its callback."""
 
     FUNCTIONS = {
         "AudioQueueNewOutput": "new_output",
@@ -101,6 +103,8 @@ class FakeToolbox(FakeLibrary):
         self.callback = None
         self.running = False
         self.stopped_with: list[int] = []  # buffers held at each Stop
+        self.played: list[tuple[str, int]] = []  # ("call", buffer) and ("return", buffer) around each callback
+        self.timing: list[tuple[float, float]] = []  # (s waiting for the buffer's turn, s in its callback) for each
         self.done = threading.Event()
         self.thread = threading.Thread(target=self._play, daemon=True) if thread else None
 
@@ -157,11 +161,17 @@ class FakeToolbox(FakeLibrary):
             self.callback(None, self.QUEUE, self.queued.popleft())
 
     def _play(self) -> None:
+        asleep = time.monotonic()
         while not self.done.wait(0.010):
             with self.lock:
                 ref = self.queued.popleft() if self.running and self.queued else None
             if ref is not None:
+                start = time.monotonic()
+                self.played.append(("call", ref))
                 self.callback(None, self.QUEUE, ref)
+                self.played.append(("return", ref))
+                self.timing.append((start - asleep, time.monotonic() - start))
+            asleep = time.monotonic()
 
 
 class Counter:
@@ -210,13 +220,13 @@ def turn(sink, events, mixer, feeding: bool, timeout: float = 0.2) -> int:
     return len(items)
 
 
-def handover(sink, events, wait: float = 0.0) -> None:
-    """Hand the sink every queued event, after waiting up to `wait` for the first."""
+def handover(sink, events, wait: float = 0.0) -> int:
+    """Hand the sink every queued event, after waiting up to `wait` for the first; returns how many."""
     try:
         sink.on_event(events.get(timeout=wait) if wait else events.get_nowait())
     except queue.Empty:
-        return
-    handover(sink, events)
+        return 0
+    return 1 + handover(sink, events)
 
 
 def test_struct_sizes_codes_and_format():
@@ -240,25 +250,55 @@ def test_without_the_framework_the_sink_fails():
 
 
 def test_the_queue_keeps_30_to_50_ms_and_refills_each_buffer_in_order():
+    """Just before each refill the queue holds 50 ms less 10 ms per buffer back since the last refill, and each refill
+    puts all 50 ms back, the blocks in order. Each callback posts its buffer as it runs, so the helper, which turns on
+    every post, sees 40 ms (30 ms when it is a buffer late). How many buffers one turn of this test gets back depends
+    on how fast the machine runs it, so every turn is checked against what it handed over, and every third turn waits
+    for two or three on purpose. All this holds only while the callback, and the sink's own work on each turn, are
+    quick next to the 10 ms a buffer lasts, so both are timed against the queue thread's 10 ms waits as this machine
+    runs them: a slow machine stretches them alike."""
     at, events, sink = queue_sink()
-    mixer, leads, refilled = Counter(), [], set()
+    mixer, backs, spent = Counter(), [], []  # for each turn: how many buffers it handed over, s in the sink's calls
+
+    def post(event) -> None:  # the helper's queue, noting each buffer as the callback posts it
+        at.played.append(("post", event[1]))
+        events.put(event)
+
+    def timed(call):  # one of the sink's own calls, its time added to this turn's
+        def run(*args) -> None:
+            start = time.monotonic()
+            call(*args)
+            spent[-1] += time.monotonic() - start
+
+        return run
+
+    sink.post, sink.on_event, sink.feed = post, timed(sink.on_event), timed(sink.feed)
     assert macos.AudioQueueSink.low_water  # so the engine's stats sample the lead just before each refill
     try:
         sink.open()  # five buffers of silence, then Start
         opening = ["AudioQueueNewOutput"] + ["AudioQueueAllocateBuffer"] * 5 + ["AudioQueueEnqueueBuffer"] * 5
         assert at.names() == opening + ["AudioQueueStart"]
         assert isinstance(sink.cb, macos.CALLBACK)
-        deadline = time.monotonic() + 0.4
-        while time.monotonic() < deadline:
-            handover(sink, events, wait=0.2)
-            leads.append(sink.lead_ms())  # just before the refill
+        deadline = time.monotonic() + 10  # a hang guard: 40 buffers take 0.4 s, under 3 s on the slowest CI runner
+        while sink.callbacks < 40 and time.monotonic() < deadline:
+            late = (1, 1, 2, 1, 1, 3)[len(backs) % 6]  # every third turn waits for two or three buffers to come back
+            spent.append(0.0)
+            back = handover(sink, events, wait=5.0)
+            while 0 < back < late and time.monotonic() < deadline:
+                back += handover(sink, events, wait=5.0)
+            before = sink.lead_ms()
             sink.feed(mixer, True)
-            refilled.add(sink.lead_ms())
+            assert (before, sink.lead_ms()) == (50 - 10 * back, 50)  # 10 ms less for each buffer back; all refilled
+            backs.append(back)
     finally:
         sink.close()
-    leads.sort()
-    assert leads[len(leads) // 20] >= 30 and leads[len(leads) // 2] == 40 and refilled == {50}
-    assert sink.callbacks >= 20 and len(at.enqueued) == 5 + mixer.k
+    at.thread.join(5.0)  # Dispose told the queue's thread to end; once it has, .played and .timing are complete
+    assert sink.callbacks >= 40 and max(backs) >= 3  # and the late turns refilled three or more at once
+    calls = [ref for step, ref in at.played if step == "call"]
+    assert at.played == [(step, ref) for ref in calls for step in ("call", "post", "return")]  # within its callback
+    waited, called = (median(column) for column in zip(*at.timing))
+    assert called < waited / 2 and median(spent) < waited / 2  # each well under what a buffer lasts on this machine
+    assert len(at.enqueued) == 5 + mixer.k
     assert at.enqueued == [ZEROS] * 5 + counted(1, mixer.k)  # every block once, in order
     assert at.names().count("AudioQueueStart") == 1
 
@@ -268,7 +308,7 @@ def test_idle_stops_the_queue_once_every_buffer_is_back_and_the_next_feed_restar
     mixer = Counter()
     try:
         sink.open()
-        deadline = time.monotonic() + 1.0
+        deadline = time.monotonic() + 5  # a hang guard: the five buffers take 50 ms, 0.35 s on the slowest CI runner
         while at.running and time.monotonic() < deadline:
             turn(sink, events, mixer, False, timeout=0.05)
         assert at.stopped_with == [0] and not sink.running
@@ -280,8 +320,8 @@ def test_idle_stops_the_queue_once_every_buffer_is_back_and_the_next_feed_restar
         sink.feed(mixer, True)
         assert at.names()[calls:] == ["AudioQueueEnqueueBuffer"] * 5 + ["AudioQueueStart"]
         assert sink.lead_ms() == 50
-        deadline = time.monotonic() + 0.2
-        while time.monotonic() < deadline:
+        deadline = time.monotonic() + 5  # a hang guard, as above
+        while sink.callbacks <= 10 and time.monotonic() < deadline:  # the sixth back since the restart was refilled
             turn(sink, events, mixer, True)
         assert sink.callbacks > 10 and at.enqueued[5:10] == counted(1, 5)
     finally:

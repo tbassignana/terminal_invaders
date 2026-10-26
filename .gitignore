@@ -35,6 +35,7 @@ htmlcov/
 .AppleDouble
 .LSOverride
 
-# Keep project documentation to the README
+# Keep project documentation to the README and docs/
 *.md
 !/README.md
+!/docs/*.md

@@ -1149,20 +1149,44 @@ class IdentityTests(unittest.TestCase):
     def test_the_replies_after_a_long_outage_take_as_many_steps_as_there_are_replies(self):
         """F2 of the S16 review: each reply rebuilt the frames given up on, and the burst after a 10 s outage, some 600
         replies, took 20 ms in one loop iteration, more than a frame. The lists are in send order, so a reply settles
-        what it names from their fronts."""
+        what it names from their fronts and costs the same however many frames are still behind it or were settled
+        before it. The first 500 replies of a 5000-reply burst and its last 500 each take under 4 times as long as a
+        burst of 500 in the same test (about as long; S16's rebuilding made the first 500 some 15 times as long, and
+        the 5000 1.6 s). And each reply, whatever the backlog, takes under 20 times as long as sending its frame did
+        (2 to 4.5 times): replies grown several times dearer would stall a frame just the same. Times are this
+        thread's CPU time, the best of three runs, so the machine's speed and whatever else runs on it cancel out."""
         import time
 
-        pacer = AckPacer("adaptive", tagged=True)
-        lose_three(pacer, TAGS[1:4])
-        for n in range(5000):
-            pacer.sent(1.05 + n * 0.0016, 100, full=False, tag=OFF)
-        late = pacer.late
-        start = time.perf_counter()
-        for n in range(5000):
-            pacer.acked(9.1 + n * 1e-5, OFF)
-        self.assertLess(time.perf_counter() - start, 0.4)  # 1.6 s on S16
-        self.assertEqual((pacer.late, pacer.owed, pacer.disabled), (late, 0, False))
-        self.assertIs(pacer.late, late)
+        def burst(n):
+            """The CPU time the first and the last 500 replies of a burst of n took, to frames sent clock pacing after
+            three were lost, and the time sending those frames took."""
+            pacer = AckPacer("adaptive", tagged=True)
+            lose_three(pacer, TAGS[1:4])
+            sending = time.thread_time()
+            for k in range(n):
+                pacer.sent(1.05 + k * 0.0016, 100, full=False, tag=OFF)
+            late, marks = pacer.late, []
+            for k in range(n):
+                if k % 500 == 0:
+                    marks.append(time.thread_time())
+                pacer.acked(9.1 + k * 1e-5, OFF)
+            marks.append(time.thread_time())
+            self.assertEqual((pacer.late, pacer.owed, pacer.disabled), (late, 0, False))
+            self.assertIs(pacer.late, late)
+            return marks[1] - marks[0], marks[-1] - marks[-2], marks[0] - sending
+
+        def ratio(a, b):
+            """a / b; b can be 0, as a VM takes the time its host stole off what its thread runs next."""
+            return a / b if b else float("inf")
+
+        trials = []
+        for _ in range(3):
+            first, last, _ = burst(5000)
+            replies, _, sends = burst(500)
+            trials.append((ratio(max(first, last), replies), ratio(replies, sends)))
+        growth, cost = (min(ratios) for ratios in zip(*trials))
+        self.assertLess(growth, 4, trials)
+        self.assertLess(cost, 20, trials)
 
     def test_a_reply_naming_no_frame_answers_the_oldest_query(self):
         """A size the game never learned (two changes between its looks at the size) puts a reply where no frame

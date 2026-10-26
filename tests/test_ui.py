@@ -1285,6 +1285,21 @@ class CampaignScreenTests(unittest.TestCase):
         self.assertFalse({"SIGNAL LOST", "CONTINUED    once", "SHIP LOST"} & set(rows))
         self.assertFalse([row for row in rows if row.startswith(("UPGRADES", "CONTINUED", "BOSSES", "BOMBS"))])
 
+    def test_results_list_every_boss_beaten_whole(self):
+        """All four bosses are wider than the results' value column: the BOSSES row wraps onto a second, as UPGRADES
+        does, so no name is cut off; Endless's repeats keep their counts."""
+        for mode, wave, bosses, lines in (
+            ("classic", 24, 4, ["BOSSES       WARDEN, HIVE QUEEN, DREADNOUGHT,", "MOTHERSHIP"]),
+            ("endless", 40, 10, ["BOSSES       WARDEN, HIVE QUEEN x3, DREADNOUGHT x3,", "MOTHERSHIP x3"]),
+            ("classic", 13, 2, ["BOSSES       WARDEN, HIVE QUEEN", "PERFECT      1 wave"]),
+        ):
+            with self.subTest(mode=mode, bosses=bosses):
+                game = staged(Config("normal", mode, 1978), wave, phase="playing")
+                game.phase, game.bosses, game.perfect_waves = "game_over", bosses, 1
+                rows = self.results(game)
+                at = next(index for index, row in enumerate(rows) if row.startswith("BOSSES"))
+                self.assertEqual(rows[at : at + 2], lines)
+
     def test_the_pause_panel_lists_endless_modifiers(self):
         game = staged(Config("normal", "endless", 1978), 40, phase="playing")
         game.modifiers = ["QUICK RELOAD", "ARMOURED", "EXTRA SLOT", "DIVE STORM", "FAST SHOTS", "REINFORCED"]

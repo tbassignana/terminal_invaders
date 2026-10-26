@@ -4,28 +4,39 @@ and stalled readers, no terminfo (G3), --probe, and Arcade mode's quickstart (Ph
 On a loaded machine (another suite running beside this one) the game starts, reads keys and draws late. So a test
 waits for what it needs to see (the game up, a key's effect on screen, the probe sent) with a deadline of UP, never
 for a fixed time: a fixed sleep only stands for a scenario's length or a guard the game times itself. The spec's own
-time bounds (a teardown within 1.7 s, a silent terminal's start within 0.3 s) are checked as they are."""
+time bounds are checked as they are (a slow reader's teardown within 1.7 s), except where the game's own waiting
+takes most of the bound, and a loaded machine's late timers alone overshoot what is left: a silent terminal's start
+and teardown within 0.3 s (50 ms past the probe's 250 ms), and a stalled terminal's teardown within 1.7 s (the
+sentinel's 1 s wait, then a process to end). Those are timed exactly on a FakeTerminal's virtual clock, and on the
+pty only as a guard against a hang, beside a terminal that answers."""
 
+import gc
 import json
 import os
 import random
 import re
+import select
 import signal
 import subprocess
 import sys
 import termios
+import threading
 import time
 from collections import Counter
+from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 
+from terminal_invaders import app, cli
 from terminal_invaders.app import text_hash
 from terminal_invaders.engine import Game
 from terminal_invaders.replay import Playback
 from terminal_invaders.term.caps import REMOTE_RTT
 from terminal_invaders.term.keys import PRESS, RELEASE, REPEAT, Key
 from terminal_invaders.term.simkeys import encode
-from terminal_invaders.term.tty import ENTER
+from terminal_invaders.term.tty import ENTER, SETTLE_MAX, TITLE_POP, TerminalSession
+from tests.support.faketerm import FakeTerminal, Responder
 from tests.support.ptyrun import LEAVE, ROOT, Pty, echoed, unread
 from tests.support.terminals import load
 from tests.support.vt import Pen
@@ -312,38 +323,6 @@ def test_a_slow_reader_gets_a_short_teardown_and_no_reply_reaches_the_shell(tmp_
         terminal.close()
 
 
-@pytest.mark.gate  # G6
-def test_a_terminal_that_stopped_reading_still_gets_leave(tmp_path):
-    # Clock pacing fills the pty while the terminal reads nothing; SIGTERM flushes what it has not read, so LEAVE
-    # fits and follows the bytes it had half read, after CAN.
-    stress = {"INVADERS_FAULT": "stress:3000"}
-    terminal = game(tmp_path, "--debug", "--pacing", "off", fixture="ghostty", env=stress)
-    try:
-        assert terminal.wait_for("SCORE", UP)
-        terminal.stub.stalled = True
-        terminal.wait(2.0)
-        terminal.process.send_signal(signal.SIGTERM)
-        sent = time.monotonic()
-        assert terminal.exit() == 143
-        assert time.monotonic() - sent <= 1.7
-        terminal.stub.stalled = False
-        assert terminal.wait_for(LEAVE, UP)
-        assert until(lambda: echoed(terminal.output()))  # the stub answered the sentinel, and the tty echoed it
-        terminal.wait(0.2)  # anything else would come with it
-        output = terminal.output()
-        assert b"\x18" in output[output.rindex(b"\x1b[?2026h") :]  # the cut frame was cancelled
-        vt = terminal.stub.vt
-        assert not vt.alt_screen and vt.cursor_visible and vt.kitty_depth == 0 and not vt.paste and not vt.focus
-        assert (vt.titles, vt.title) == ([], "")
-        assert terminal.stub.error is None
-        restored = termios.tcgetattr(terminal.slave)
-        assert restored[3] & ~PENDIN == terminal.original[3] & ~PENDIN
-        # Only the sentinel's reply came too late, from a terminal that read nothing for seconds: it is echoed
-        assert echoed(output) == [b"^[[?62;22c"]
-    finally:
-        terminal.close()
-
-
 @pytest.mark.gate
 @pytest.mark.parametrize("fixture", ["ghostty", "kitty", "term-unset", "dumb"])
 def test_g3_starts_and_plays_without_terminfo(tmp_path, fixture):
@@ -365,25 +344,279 @@ def test_g3_starts_and_plays_without_terminfo(tmp_path, fixture):
         terminal.close()
 
 
-@pytest.mark.gate  # G3.3
-def test_a_silent_terminal_starts_and_leaves_at_once_on_clock_pacing(tmp_path):
-    terminal = Pty(tmp_path, "--debug", fixture="silent")
+class Clocked(FakeTerminal):
+    """A FakeTerminal that keeps when the game wrote what, on its virtual clock, as the pty's stub keeps when it read
+    it. That clock moves only in the waits the game asks of the terminal (FakeTerminal.select), so a span on it is the
+    game's own waiting, exactly, however loaded the machine. Any other wait, which the clock would not see, is kept in
+    `unclocked` while watched()."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.arrivals: list[tuple[float, int]] = []  # (when, total bytes written by then), one per write
+        self.unclocked: list[tuple[str, float | None]] = []  # ("sleep" or "select", its timeout)
+
+    def write(self, fd: int, data) -> int:
+        written = super().write(fd, data)
+        self.arrivals.append((self.now, len(self.output)))
+        return written
+
+    def arrival(self, marker: bytes) -> float:
+        """When the first marker had been written in full."""
+        end = self.output.index(marker) + len(marker)
+        return next(when for when, total in self.arrivals if total >= end)
+
+    def watched(self):
+        """While in it, every wait around the terminal is kept in `unclocked` (watching)."""
+        return watching(self.unclocked)
+
+
+@contextmanager
+def watching(unclocked: list):
+    """While in it, every time.sleep() and every select.select() with a timeout that this thread makes is kept in
+    unclocked, as ("sleep" or "select", its timeout), and still made: a wait around a FakeTerminal, which its virtual
+    clock does not see. FakeTerminal.select's own look at the signal pipe has a timeout of 0, and other threads (a
+    test's leftovers) are left alone."""
+    sleep, poll, thread = time.sleep, select.select, threading.get_ident()
+
+    def slept(seconds):
+        if threading.get_ident() == thread and seconds > 0:
+            unclocked.append(("sleep", seconds))
+        sleep(seconds)
+
+    def polled(r, w, x, timeout=None):
+        if threading.get_ident() == thread and (timeout is None or timeout > 0):
+            unclocked.append(("select", timeout))
+        return poll(r, w, x, timeout)
+
+    with patch.object(time, "sleep", slept), patch.object(select, "select", polled):
+        yield
+
+
+def main_on_a_virtual_clock(directory, doc: dict, fake: FakeTerminal, *arguments) -> tuple[int, TerminalSession]:
+    """cli.main() with these arguments as the pty runs the binary (--no-sound, a fresh profile and HOME, no title
+    demo; but no --debug, which would set up this process's logging) on the fake, a FakeTerminal of the fixture doc:
+    main()'s exit code (a fatal signal's too, which ends main() with SystemExit as it ends the binary) and the
+    TerminalSession it made, which is fake.session once made, for the fake's scheduled actions. Only the tty, its
+    environment and its fd operations are the fake's, as in test_firstrun's launches: the options, the profile, the
+    sound, the Session and the TerminalSession (with its keymap) are main()'s and app.run()'s own."""
+    fake.fd = os.open(os.devnull, os.O_RDWR)  # app.run() closes it; FakeTerminal only compares it
+    made: list[TerminalSession] = []
+
+    def terminal(*args, **kwargs):
+        made.append(TerminalSession(*args, **kwargs, ops=fake.ops()))
+        fake.session = made[-1]
+        return made[-1]
+
+    directory.mkdir()
+    environ = {"HOME": str(directory), "XDG_STATE_HOME": str(directory / "state"), "INVADERS_ATTRACT_IDLE": "off"}
+    with (
+        patch.dict(os.environ, environ),
+        patch.object(cli, "require_terminal", lambda command: None),
+        patch.object(app, "open_tty", return_value=fake.fd),
+        patch.object(app, "user_env", return_value=dict(doc["env"])),
+        patch.object(app, "TerminalSession", terminal),
+    ):
+        try:
+            code = cli.main(["--no-sound", "--profile", str(directory / "p.json"), *arguments])
+        except SystemExit as exc:
+            code = exc.code
+    (term,) = made
+    return code, term
+
+
+def leave_the_menu_on_a_virtual_clock(directory, fixture: str, quit_at: float) -> tuple[Clocked, TerminalSession]:
+    """cli.main() on a watched Clocked terminal of the fixture (main_on_a_virtual_clock), in the title menu: Esc
+    GUARD before quit_at (QUIT), Esc again at quit_at."""
+    doc = load(fixture)
+    fake = Clocked(doc, cols=80, rows=30)
+    fake.type(b"\x1b", at=quit_at - GUARD)  # QUIT
+    fake.type(b"\x1b", at=quit_at)
+    with fake.watched():
+        code, term = main_on_a_virtual_clock(directory, doc, fake)
+    assert code == 0
+    return fake, term
+
+
+def leave_the_menu(directory, fixture: str) -> tuple[float, float, bytes, str]:
+    """The game's title menu on a pty of the fixture, with --debug, left with Esc Esc: its start (ENTER to LAUNCH, as
+    the stub read them), its leaving (the second Esc sent to LEAVE read), the output and the debug log."""
+    directory.mkdir()
+    terminal = Pty(directory, "--debug", fixture=fixture)
     try:
         assert terminal.wait_for("LAUNCH", UP)
-        started = terminal.arrival(b"LAUNCH") - terminal.arrival(ENTER)
-        assert started <= 0.3, started
+        start = terminal.arrival(b"LAUNCH") - terminal.arrival(ENTER)
         terminal.tap("escape")  # QUIT
         assert terminal.wait_for("> QUIT", UP)
         terminal.wait(GUARD)
         sent = time.monotonic()
         terminal.tap("escape")
         assert terminal.finish(tape=False) == 0
-        assert terminal.arrival(LEAVE) - sent <= 0.3
-        output = terminal.output()
-        assert output.count(b"\x1b[5n") == output.count(b"\x1b[c") == 1  # the probe's: no acks, no sentinel
-        assert "ack none" in terminal.log.read_text()
+        return start, terminal.arrival(LEAVE) - sent, terminal.output(), terminal.log.read_text()
     finally:
         terminal.close()
+
+
+@pytest.mark.gate  # G3.3
+def test_a_silent_terminal_starts_and_leaves_at_once_on_clock_pacing(tmp_path):
+    """G3.3: a terminal that never answers starts within the probe's 250 ms and 50 ms, on clock pacing and with no
+    sentinel, and its teardown takes no more than 300 ms.
+
+    All a silent terminal could make long is the game's own waiting, so that is timed where it is exact: on a virtual
+    clock, the game's main() draws LAUNCH at the probe's deadline and leaves the terminal as soon as the quit key is
+    known, and waits for nothing else, not even around the terminal (a sleep, a select of its own). The binary then has
+    to take the same path on a pty: the same capabilities, one probe and no sentinel. Its start and its leaving are
+    timed there too, but a loaded machine adds time of its own (GitHub's macOS runners took 320 to 410 ms to start,
+    as their select() woke late), so there they are only held against a terminal that answers at once, timed on the
+    same machine just after, as a guard against a hang."""
+    quit_at = 2.0 + GUARD  # the keys come long after the menu is up, even past a remote terminal's 1 s probe
+    fake, term = leave_the_menu_on_a_virtual_clock(tmp_path / "virtual", "silent", quit_at)
+    assert (term.caps.ack, term.caps.probe_rtt, term.pacer.mode) == (None, None, "off")  # silent: clock pacing
+    assert fake.arrival(b"LAUNCH") - fake.arrival(ENTER) == pytest.approx(0.25)  # the probe's deadline, no more
+    left = fake.arrival(LEAVE)
+    assert left == pytest.approx(quit_at + 0.05)  # as soon as the lone Esc is a key: 50 ms with nothing after it
+    restored = [call for call in fake.calls if call[0] == "tcsetattr"][-1]
+    assert restored[3] == left and fake.attrs == term.saved  # cooked mode at once: no sentinel to wait for
+    assert fake.unclocked == []  # and the clock saw every wait: none went around the terminal
+    assert fake.output.count(b"\x1b[5n") == fake.output.count(b"\x1b[c") == 1  # the probe's: no acks, no sentinel
+
+    started, leaving, output, log = leave_the_menu(tmp_path / "silent", "silent")
+    assert output.count(b"\x1b[5n") == output.count(b"\x1b[c") == 1
+    assert f"Terminal: {term.caps.row()}\n" in log  # as on the virtual clock: local (a 250 ms probe), ack none, silent
+    # xterm has the silent fixture's TERM and legacy keys and answers at once: it starts without the probe's wait,
+    # and takes the same path to LEAVE. Beside it the silent terminal may take the probe's 250 ms more to start, and
+    # `hang` more to start and to leave: 1.25 s in all is three times the most a macOS runner took to start (0.41 s).
+    # Waits shorter than that are the virtual clock's to catch.
+    answered_start, answered_leaving, *_ = leave_the_menu(tmp_path / "xterm", "xterm")
+    hang = 1.0
+    assert started - answered_start <= 0.25 + hang, (started, answered_start)
+    assert leaving - answered_leaving <= hang, (leaving, answered_leaving)
+
+
+def terminate_play_on_a_virtual_clock(directory, stall_at: float, signal_at: float):
+    """The binary's run in test_a_terminal_that_stopped_reading_still_gets_leave on a watched Clocked ghostty
+    terminal (main_on_a_virtual_clock): --quickstart on seed 42, recorded, on clock pacing (--pacing off), with frames
+    of their own size (the stress fault needs --debug). At stall_at the terminal stops reading: the pty takes 1 KB
+    more (about what a macOS pty holds), then nothing, and nothing written from then on is answered. SIGTERM comes at
+    signal_at, sent to this process while the game's handler has it. Returns the terminal, the TerminalSession,
+    main()'s exit code, what the game had not sent yet as the signal came: (the room left in the pty, whether a frame
+    was half sent, the bytes still queued), and the real time from the signal to main()'s return (None, unsignalled)."""
+    doc = load("ghostty")
+    fake = Clocked(doc, cols=80, rows=30)
+    unsent, signalled = [], []
+
+    def stall():
+        fake.room, fake.responder = 1024, Responder(None)  # a Responder for no terminal answers nothing
+
+    def terminate():
+        term = fake.session
+        unsent.append((fake.room, term.out.mid_frame, term.out.pending()))
+        assert signal.getsignal(signal.SIGTERM) == term._handler  # the game's, so the signal cannot end pytest
+        gc.collect()  # now, not in the teardown timed next: late in a whole run, pytest's heap takes 0.13 s
+        signalled.append(time.monotonic())
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    fake.at(stall_at, stall)
+    fake.at(signal_at, terminate)
+    play = ["--quickstart", "--seed", "42", "--record", str(directory / "recording.json"), "--pacing", "off"]
+    with fake.watched():
+        code, term = main_on_a_virtual_clock(directory, doc, fake, *play)
+    ended = time.monotonic()
+    return fake, term, code, unsent, ended - signalled[0] if signalled else None
+
+
+def exit_after(terminal: Pty, signum: int) -> float:
+    """Signal the game; how long it took to exit, as a thread blocked in waitpid saw it. Pty.exit() polls, and sleeps
+    50 ms after the exit, and on a loaded machine each of those sleeps wakes late."""
+    exited = []
+    reaper = threading.Thread(target=lambda: exited.append((terminal.process.wait(), time.monotonic())), daemon=True)
+    reaper.start()
+    terminal.process.send_signal(signum)
+    sent = time.monotonic()
+    reaper.join(UP)
+    assert exited, "the game did not exit"
+    return exited[0][1] - sent
+
+
+@contextmanager
+def terminated_in_play(directory, *, stalled: bool):
+    """The binary as on the virtual clock, but with --debug, so that its frames take 3000 bytes more (the stress
+    fault) and fill a pty sooner, on a ghostty pty whose terminal stops reading 2 s before SIGTERM (stalled) or reads
+    on: the Pty and how long the game took to exit after the signal (exit_after)."""
+    directory.mkdir()
+    stress = {"INVADERS_FAULT": "stress:3000"}
+    terminal = game(directory, "--debug", "--pacing", "off", fixture="ghostty", env=stress)
+    try:
+        assert terminal.wait_for("SCORE", UP)
+        terminal.stub.stalled = stalled
+        terminal.wait(2.0)
+        yield terminal, exit_after(terminal, signal.SIGTERM)
+    finally:
+        terminal.close()
+
+
+@pytest.mark.gate  # G6
+def test_a_terminal_that_stopped_reading_still_gets_leave(tmp_path):
+    """G6 (spec 4.6): clock pacing fills the pty while the terminal reads nothing; SIGTERM flushes what it has not
+    read, so LEAVE fits and follows the bytes it had half read, after CAN, and the game is gone within 1.7 s, the
+    worst case of LEAVE's 0.5 s and the sentinel's wait for its reply, SETTLE_MAX (1 s).
+
+    Here that wait takes most of the 1.7 s, so the game's own waiting is timed where it is exact: on a virtual clock,
+    main() flushes and sends LEAVE the instant the signal comes, though the pty is full, then waits SETTLE_MAX for a
+    reply that a terminal reading nothing never sends, and waits for nothing else, not even around the terminal, nor
+    in real time. The binary then has to do the same on a pty. A loaded machine wakes each timed wait late and is slow to end a process
+    (the old bound measured 1.55 s on one core shared with two busy loops, with 150 ms of Linux timer slack standing
+    in for macOS's late timers), so there the teardown is only held against a terminal that reads on, torn down the
+    same way on the same machine just after, as a guard against a hang."""
+    stall_at, signal_at = 1.0, 3.0  # the game has been playing for a second, then the 2 s of the pty's stall
+    fake, term, code, unsent, real = terminate_play_on_a_virtual_clock(tmp_path / "virtual", stall_at, signal_at)
+    assert code == 143 and term.pacer.mode == "off"  # SIGTERM's exit, from clock pacing
+    ((room, half_sent, queued),) = unsent
+    assert room == 0 and half_sent and queued  # the pty was full, with a frame half sent and the rest queued
+    flushed = [when for name, queue, _, when in fake.calls if (name, queue) == ("tcflush", termios.TCOFLUSH)]
+    assert flushed == [signal_at]  # what the terminal had not read was dropped as the signal came
+    assert fake.arrival(LEAVE) == signal_at  # so LEAVE fit at once
+    output = bytes(fake.output)
+    assert b"\x18" in output[output.rindex(b"\x1b[?2026h") :]  # after CAN: the cut frame was cancelled
+    assert output.endswith(LEAVE + TITLE_POP + b"\x1b[c")  # and the sentinel (DA1) went with it
+    restored = [call for call in fake.calls if call[0] == "tcsetattr"][-1]
+    assert restored[3] == pytest.approx(signal_at + SETTLE_MAX)  # cooked mode once the sentinel's wait was over
+    assert restored[3] - signal_at <= 1.7 and fake.attrs == term.saved  # spec 4.6's bound, exactly
+    assert restored[1] == termios.TCSANOW  # at once: TCSADRAIN waits for the terminal to read what is queued
+    assert fake.unclocked == []  # and the clock saw every wait: none went around the terminal
+    # Nor any other wait: every wait the game asks of the fake takes no real time, so the real time from the signal
+    # to main()'s return is the teardown's own work (the flush, LEAVE, cooked mode, the replay saved) and any wait it
+    # made that `unclocked` cannot see (a thread joined, an Event, a selectors or poll wait). 0.5 s is a guard ten
+    # times the most a loaded machine took (0.05 s), and less than the 0.7 s spec 4.6 leaves past the sentinel's wait.
+    assert real is not None and real <= 0.5, real
+
+    with terminated_in_play(tmp_path / "stalled", stalled=True) as (terminal, stalled):
+        assert terminal.process.returncode == 143
+        terminal.stub.stalled = False
+        assert terminal.wait_for(LEAVE, UP)
+        assert until(lambda: echoed(terminal.output()))  # the stub answered the sentinel, and the tty echoed it
+        terminal.wait(0.2)  # anything else would come with it
+        output = terminal.output()
+        assert b"\x18" in output[output.rindex(b"\x1b[?2026h") :]  # the cut frame was cancelled
+        vt = terminal.stub.vt
+        assert not vt.alt_screen and vt.cursor_visible and vt.kitty_depth == 0 and not vt.paste and not vt.focus
+        assert (vt.titles, vt.title) == ([], "")
+        assert terminal.stub.error is None
+        restored = termios.tcgetattr(terminal.slave)
+        assert restored[3] & ~PENDIN == terminal.original[3] & ~PENDIN
+        # Only the sentinel's reply came too late, from a terminal that read nothing for seconds: it is echoed
+        assert echoed(output) == [b"^[[?62;22c"]
+    # A terminal that reads on answers the sentinel at once, so its teardown is the rest of the stalled one's: LEAVE,
+    # then cooked mode and a process to end. `hang` is a guard for it (almost four times the most a loaded machine
+    # took, 0.13 s), and less than the 0.7 s spec 4.6 leaves past the sentinel's wait, as the binary's exit has waits
+    # of its own that main() on the virtual clock has not (a thread the interpreter waits for, an atexit handler).
+    # Beside it the stalled terminal's teardown takes SETTLE_MAX more, by design, and may take `late` more: six times
+    # the most a loaded machine added (0.17 s, the late wake from that one wait). Waits in main() shorter than that
+    # are the virtual run's to catch.
+    with terminated_in_play(tmp_path / "reading", stalled=False) as (terminal, reading):
+        assert terminal.finish() == 143
+    hang, late = 0.5, 1.0
+    assert reading <= hang, reading
+    assert stalled - reading <= SETTLE_MAX + late, (stalled, reading)
 
 
 def local(probe, base, attempts: int = 8):

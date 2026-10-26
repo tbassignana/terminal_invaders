@@ -12,6 +12,7 @@ import importlib.util
 import math
 import os
 import re
+import select
 import signal
 import subprocess
 import sys
@@ -36,7 +37,7 @@ from tests.support.ptyrun import IsolatedPty
 from tests.support.terminals import load
 from tests.test_app import play
 from tests.test_ssh_lag import gate
-from tests.test_terminal import leave
+from tests.test_terminal import UP, leave, until
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = ROOT / "tools" / "bench_render.py"
@@ -239,6 +240,37 @@ class Finished:
         return self.returncode
 
 
+class Tapped:
+    """A running sleeper process whose stalls the test reads as the sleeper prints them; stalls() then gets them with
+    the rest of its output, as if nothing had read them."""
+
+    def __init__(self, process: subprocess.Popen):
+        self.process, self.out = process, ""
+
+    def __getattr__(self, name):  # pid, poll and kill are the process's own
+        return getattr(self.process, name)
+
+    def seen(self) -> list[tuple[float, float]]:
+        """The stalls it has printed so far, as (start, end); this never waits for more."""
+        fd = self.process.stdout.fileno()
+        while select.select([fd], [], [], 0)[0] and (chunk := os.read(fd, 4096)):
+            self.out += chunk.decode()
+        lines = self.out[: self.out.rfind("\n") + 1].splitlines()  # whole lines only
+        return [(float(start), float(end)) for start, end in map(str.split, lines)]
+
+    def communicate(self):
+        return self.out + self.process.communicate()[0], None
+
+
+def pause(process, seconds: float) -> float:
+    """Stop the process for `seconds`, as a host that stalls its vCPU would; when it was stopped."""
+    os.kill(process.pid, signal.SIGSTOP)
+    stopped = time.monotonic()
+    time.sleep(seconds)
+    os.kill(process.pid, signal.SIGCONT)
+    return stopped
+
+
 def test_there_is_a_sleeper_on_every_cpu_and_a_stall_only_one_of_them_saw_is_kept():
     """A virtual machine's host can stall one vCPU and not the others, and a sleeper sees only the vCPU it runs on
     (decision 2's detector, as verified: one unpinned sleeper missed such a stall, and G1.1 failed on the frame it
@@ -250,7 +282,7 @@ def test_there_is_a_sleeper_on_every_cpu_and_a_stall_only_one_of_them_saw_is_kep
     assert merging.stalls() == [(1.0, 1.06), (3.0, 3.02)] and merging.seen_by == [[0, 1], [0]]
     merging.processes = [Finished("1.000 1.050\n"), Finished("1.040 1.070\n1.065 1.090\n"), Finished("")]
     assert merging.stalls() == [(1.0, 1.09)] and merging.seen_by == [[0, 1]]  # a CPU is listed once
-    sleeper = stalls.Sleeper(1.0)
+    sleeper = stalls.Sleeper(30.0)  # longer than all the waits below together: they are ended once the stall is in
     try:
         assert sleeper.cpus == stalls.cpus() and len(sleeper.processes) == len(sleeper.cpus)
         if hasattr(os, "sched_setaffinity"):
@@ -259,12 +291,29 @@ def test_there_is_a_sleeper_on_every_cpu_and_a_stall_only_one_of_them_saw_is_kep
             while [os.sched_getaffinity(process.pid) for process in sleeper.processes] != [{n} for n in sleeper.cpus]:
                 assert time.monotonic() < deadline, "each sleeper pins itself to its own CPU"
                 time.sleep(0.01)
+        # A sleeper measures nothing until Python has started and it is in its loop, 20-50 ms after it was started
+        # and 300 ms on a loaded machine: a stop before then goes unseen. Its pinning above shows it got that far only
+        # where pinning changed something (not when this process has one CPU, nor on macOS, which has none), and it
+        # prints nothing but stalls, each as soon as it has measured it (flush=True). So it is stopped for 100 ms, as
+        # often as it takes, until it has printed a stall (one it measured by itself counts too): then it is in its
+        # loop. UP is a deadline only.
+        last = sleeper.processes[-1] = Tapped(sleeper.processes[-1])
+        deadline = time.monotonic() + UP
+        while not last.seen():
+            assert time.monotonic() < deadline, "a sleeper stopped for 100 ms prints that stall"
+            pause(last, 0.1)
+            until(last.seen, 0.5)
+        # Then the stop the test measures, once the sleeper has had a moment to get back to its naps after printing.
+        # There is one, as before: stopping it again for each stop it missed would pass a sleeper that sees only some
+        # of them (one whose naps are too long, say). A sleeper that works sees it wherever it lands, as it is printing
+        # too (each nap is timed from the end of the last), which matters on macOS: there the test's wake-up and the
+        # sleeper's can come together. The sleepers are ended once the last one has printed the stall that covers this
+        # stop, or after UP if it never does: that is all the waiting there is.
         time.sleep(0.1)
-        last = sleeper.processes[-1]
-        os.kill(last.pid, signal.SIGSTOP)
-        stopped = time.monotonic()
-        time.sleep(0.1)
-        os.kill(last.pid, signal.SIGCONT)
+        stopped = pause(last, 0.1)
+        until(lambda: any(start < stopped + 0.1 < end for start, end in last.seen()), UP)
+        for process in sleeper.processes:
+            process.kill()
         found = sleeper.stalls()
     finally:
         sleeper.stop()
@@ -281,14 +330,27 @@ def test_the_stub_process_answers_as_the_fixture_and_keeps_every_byte(tmp_path):
         assert terminal.wait_for("SCORE", 5.0), terminal.screen()
         assert terminal.stub.vt.kitty["alt"]  # the stub process answered the push verification, as the fixture does
         terminal.tap("d", "space")
-        terminal.wait(1.0)
-        assert terminal.output().count(b"\x1b[6n") > 30  # each frame's ack was answered, or frames would stop
+        # Each frame's ack is answered at once, as the fixture does. A frame whose ack goes unanswered, or whose reply
+        # names no frame in flight, holds its slot of the window for the pacer's loss timeout, a second at least, and
+        # three losses in a row put the frames on the clock (pacing.py): frames that go on prove nothing by
+        # themselves, and how fast they come is the machine's (one whose timers overshoot draws fewer a second). So
+        # the game makes 30 ack queries, with UP as a deadline only, and then its --debug log shows the acks kept up.
+        assert until(lambda: terminal.output().count(b"\x1b[6n") > 30, UP), terminal.output().count(b"\x1b[6n")
         leave(terminal)
         assert terminal.finish() == 0
         frames, arrivals = terminal.frames(), terminal.stub.arrivals
         assert len(frames) > 20 and terminal.screen_hashes() == [frame[5] for frame in frames]
         assert arrivals[-1][1] == len(terminal.output()) and arrivals == sorted(arrivals)
         assert len(stalls.esu_times(terminal.output(), arrivals)) == len(frames)
+        # No frame covers half a second's ticks of play: the one a lost ack holds back covers a second's, while the game
+        # draws as soon as the window lets it, and a slow machine or a stall adds 8 ticks at most each time the game
+        # looks at the clock (ui.FixedClock). The pacer never gave up on the acks (app.Meter logs it), and the smoothed
+        # round trip it logs once a second (srtt) was under 0.1 s at least once: a few ms, on a loaded machine too
+        # (14 ms at most with the CPU shared five ways), and as late as the stub's answers if they come late.
+        assert max(frame[2] for frame in frames) < TICK_RATE / 2, [frame[2] for frame in frames]
+        log = terminal.log.read_text()
+        srtts = [float(srtt) for srtt in re.findall(r"Loop .*, srtt (\S+)$", log, re.M) if srtt != "None"]
+        assert "Acks lost: clock pacing" not in log and any(srtt < 0.1 for srtt in srtts), log[-3000:]
     finally:
         terminal.close()
     assert terminal.stub.process.returncode == 0 and not terminal.stub.directory.exists()

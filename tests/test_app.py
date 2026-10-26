@@ -16,6 +16,7 @@ import subprocess
 import sys
 import termios
 import threading
+import time
 import unittest
 from contextlib import nullcontext
 from dataclasses import replace
@@ -33,7 +34,7 @@ from terminal_invaders.input import HOLD_NOTE, HoldControls, LatchedControls, Ti
 from terminal_invaders.keymap import Keymap
 from terminal_invaders.model import Config
 from terminal_invaders.replay import LEGACY_REFUSAL, Recorder
-from terminal_invaders.term.caps import Capabilities, EnvHints
+from terminal_invaders.term.caps import REMOTE_RTT, Capabilities, EnvHints
 from terminal_invaders.term.decode import Decoder
 from terminal_invaders.term.encode import ack_tag, tag_count
 from terminal_invaders.term.keys import Key, Reply
@@ -53,6 +54,7 @@ FRAME = app.Renderer.frame
 ADAPT, EXPIRE, HELD, SENT = AckPacer._adapt, AckPacer.expire, AckPacer.held, AckPacer.sent
 OFF = AckPacer("off")  # clock pacing: tracks nothing, so tests can share it
 ROOT = Path(__file__).resolve().parents[1]
+UP = 10.0  # the longest a step may take to show on a loaded machine: a deadline, never a delay
 # G3: a whole session on a FakeTerminal (probe, kitty push, play, pause, quit, teardown) in a fresh interpreter.
 HEADLESS = """
 import sys
@@ -2566,18 +2568,47 @@ class PtyTests(unittest.TestCase):
         os.close(self.master)
         os.close(self.slave)
 
+    def screen(self) -> str:
+        with self.stub.lock:
+            return "\n".join(self.stub.vt.lines())
+
     def test_run_plays_quits_and_restores(self):
         before = termios.tcgetattr(self.slave)
         current = session()
         audio = Mock()
         doc = load("ghostty")  # kitty keys, as the stub reports after the game's push
-        script = [(0.5, "p"), (0.7, "q"), (0.9, "escape"), (1.1, "escape")]  # pause, menu, QUIT, quit
-        timers = [threading.Timer(at, lambda name=name: os.write(self.master, taps(doc, name))) for at, name in script]
-        for timer in timers:
-            timer.start()
-        with patch.object(app, "Session", return_value=current), patch.object(current, "save_replay") as save:
-            app.run(current.options, current.profile, audio)
-        timers[-1].join()
+        # Pause, menu, QUIT, quit, in order from one thread, each key once the screen shows what the one before did.
+        # The first also waits for 30 ticks of play (half a second), as many as the game had played by the first key
+        # when the keys went at set times: its first frame is drawn before its first tick, and play must tick. Keys
+        # sent at set times would need the game up by the first (input that comes before raw mode is flushed, and the
+        # kitty push's verification reads no keys) and timers that fire in order, and on a loaded machine a lost or
+        # swapped key leaves run() playing on.
+        script = [("SCORE", 30, "p"), ("PAUSED", 0, "q"), ("> LAUNCH", 0, "escape"), ("> QUIT", 0, "escape")]
+        missed, returned = [], threading.Event()
+
+        def shows(text: str, ticks: int) -> bool:
+            return text in self.screen() and current.pilot.game.tick >= ticks
+
+        def keys():
+            for shown, ticks, name in script:
+                deadline = time.monotonic() + UP
+                while not shows(shown, ticks) and time.monotonic() < deadline:
+                    if returned.wait(0.02):
+                        missed.append(shown)  # run() returned first: the game quit before it was told to
+                        return
+                if not shows(shown, ticks):
+                    missed.append(shown)  # sent anyway, so that run() can still end and the test fail on it
+                os.write(self.master, taps(doc, name))
+
+        driver = threading.Thread(target=keys, daemon=True)
+        driver.start()
+        try:
+            with patch.object(app, "Session", return_value=current), patch.object(current, "save_replay") as save:
+                app.run(current.options, current.profile, audio)
+        finally:
+            returned.set()
+            driver.join()
+        self.assertEqual(missed, [], self.screen())
         self.assertTrue(current.quit)
         save.assert_called_with()  # leaving play saves the partial run, and run() saves on its way out
         audio.close.assert_called_once_with()
@@ -2593,13 +2624,36 @@ class PtyTests(unittest.TestCase):
         self.assertFalse(self.stub.vt.kitty_depth)
         return out.getvalue()
 
+    def local(self, attempts: int = 8) -> tuple[str, bytes]:
+        """The report of the first --probe whose round trip was a local terminal's (at most caps.REMOTE_RTT), and
+        what that probe wrote. The stub answers from a thread of this process, and on a loaded machine it can answer
+        later than that: the probe then rightly calls the terminal remote, as its report must say, so it runs again,
+        `attempts` times at most, as test_terminal's local() does."""
+        for _ in range(attempts):
+            with self.stub.lock:
+                start = len(self.stub.output)
+            began = time.monotonic()
+            text = self.probe()
+            took = time.monotonic() - began
+            with self.stub.lock:
+                written = bytes(self.stub.output[start:])
+            rtt = re.search(r"^probe_rtt +(\S+)$", text, re.MULTILINE)[1]
+            self.assertNotEqual(rtt, "None", text)  # the stub answered within the probe's timeout
+            self.assertGreater(float(rtt), 0, text)  # from the probe's write to the DA1 reply that came after it
+            self.assertLessEqual(float(rtt), took, text)  # in seconds: a part of the probe, on any machine
+            where = "local" if float(rtt) <= REMOTE_RTT else "remote"  # caps.resolve: a slow round trip is remote
+            self.assertTrue(text.startswith(f"ghostty 1.2.0  {where}  "), text)
+            if where == "local":
+                return text, written
+        self.fail(f"no probe round trip within {REMOTE_RTT * 1000:.0f} ms in {attempts} probes: too loaded to tell")
+
     def test_probe_prints_what_the_terminal_supports(self):
-        text = self.probe()
+        text, written = self.local()
         self.assertTrue(text.startswith("ghostty 1.2.0  local  truecolor dark  sync  keys kitty 11 release"), text)
         self.assertIn("family           ghostty", text)
         self.assertIn("kitty_flags      11", text)  # pushed and verified, as the game does
         self.assertIn("answered         cpr_echo cpr_width da1", text)
-        self.assertIn(b"\x1b[>11u", bytes(self.stub.output))
+        self.assertIn(b"\x1b[>11u", written)
         self.assertFalse(self.stub.vt.kitty_depth)
 
     def test_probe_json_prints_every_capability(self):

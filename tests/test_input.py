@@ -331,7 +331,7 @@ class HeldFireGapTests(unittest.TestCase):
                 fired, last = self.play(controls, taps, 1.61)
                 if label.endswith("ssh"):
                     # Over SSH these taps are inside the 0.25 s gap: a held Space, as in Phase 1, so fire stays on
-                    # until Space comes again (the accepted cost of not missing a hold on a jittery link; README)
+                    # until Space comes again (the accepted cost of not missing a hold on a jittery link; docs/GUIDE.md)
                     self.assertTrue(controls.held_fire)
                     self.assertEqual(fired[-1], round(3.0 / TICK))
                 else:
@@ -359,7 +359,7 @@ class HeldFireGapTests(unittest.TestCase):
                     self.assertEqual(self.held(build(), spaces, spaces[-1] + steer), expected)
 
     def test_a_slow_key_repeat_held_and_steered_stops_the_fire_locally(self):
-        # macOS KeyRepeat 12, a repeat every 0.18 s, is slower than the local gap. The accepted cost (README): fire
+        # macOS KeyRepeat 12, a repeat every 0.18 s, is slower than the local gap. The accepted cost (docs/GUIDE.md): fire
         # stops after a steer while Space is still down, and the player presses Space again. Over SSH it is inside
         # the 0.25 s gap, so Space held and steered keeps firing there.
         held = [0.0] + [0.525 + 0.18 * n for n in range(4)]

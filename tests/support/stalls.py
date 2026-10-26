@@ -2,7 +2,10 @@
 
 A sleeper process that does nothing else naps NAP s at a time and measures how far each nap overran. A nap that
 overran by at least STALL (one tick) is a stall: for that long the host ran nothing of it. The sleeper is not the game,
-and it does not share the game's process or the test's, so what it measures is the machine.
+and it does not share the game's process or the test's, so what it measures is the machine. Each nap is timed from the
+clock reading that ended the one before, so from its first reading on every moment is inside a timed nap: a stall
+that lands while it prints one is seen in the next. (macOS fires timers that fall due close together at once, at
+background priority widely, so a stall can line up with the moment the sleeper wakes and prints.)
 
 There is one sleeper per CPU, each pinned to its own (Linux). A virtual machine's host can stall one vCPU and not the
 others, and a sleeper sees only the vCPU it runs on. With one unpinned sleeper, a G1.1 run failed on a 10-tick frame
@@ -28,12 +31,14 @@ import os, sys, time
 nap, stall = float(sys.argv[2]), float(sys.argv[3])
 if sys.argv[4:]:
     os.sched_setaffinity(0, {int(sys.argv[4])})
-end = time.monotonic() + float(sys.argv[1])
-while (before := time.monotonic()) < end:
+before = time.monotonic()
+end = before + float(sys.argv[1])
+while before < end:
     time.sleep(nap)
-    over = time.monotonic() - before - nap
-    if over >= stall:
-        print(f"{before + nap:.6f} {before + nap + over:.6f}", flush=True)
+    after = time.monotonic()
+    if after - before - nap >= stall:
+        print(f"{before + nap:.6f} {after:.6f}", flush=True)
+    before = after
 """
 
 

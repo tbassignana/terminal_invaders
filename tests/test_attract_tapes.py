@@ -1,9 +1,11 @@
 """The title demo's two tapes (spec 5.1): pinned like test_replay.py's goldens, cut by tools/make_attract.py, shipped
 as package data and loaded with structural checks only."""
 
+import gc
 import importlib.util
 import json
 import logging
+import os
 import shutil
 import stat
 import time
@@ -15,7 +17,7 @@ import pytest
 
 from terminal_invaders import tapes
 from terminal_invaders.replay import FORMAT_VERSION, Playback, Tape
-from terminal_invaders.rules import ARCADE, CAMPAIGN
+from terminal_invaders.rules import ARCADE, CAMPAIGN, LEGACY, RULESETS
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMOS = ROOT / "terminal_invaders" / "demos"
@@ -93,16 +95,55 @@ def test_the_tapes_are_declared_package_data_under_demos():
 
 
 def test_loading_is_structural_only_and_fast(monkeypatch):
-    """No simulation at load time (spec 5.1): a loader call stays under 50 ms once the modules are imported."""
+    """No simulation at load time (spec 5.1), as verifying a tape costs 0.07 s to 1 s, which would stall keys and
+    frames: a loader call builds and runs no game, in this thread or another, and costs what the structural checks
+    do. Timed against controls on the same files in the same test, in CPU time (the best of 5 rounds, once the
+    modules are imported), so the machine's speed and whatever else runs on it cancel out: a load, with any child
+    process it waits for (a tape verified by invaders --verify-replay, say), takes under 3 times as long as
+    Playback's parse of the two files (about as long), and that parse under 45 times as long as json.loads of them
+    (2 to 4 times, 7 to 13 under coverage's C tracer)."""
     tapes.attract_tapes()  # warm: imports and the first read
-    monkeypatch.setattr(Tape, "simulate", lambda self: pytest.fail("a tape was simulated at load time"))
-    monkeypatch.setattr(Tape, "verify", lambda self, game: pytest.fail("a tape was verified at load time"))
-    best = float("inf")
-    for _ in range(5):
-        began = time.perf_counter()
-        loaded = tapes.attract_tapes()
-        best = min(best, time.perf_counter() - began)
-    assert best < 0.050, best
+    refused = []  # recorded too, as pytest.fail in a worker thread only makes pytest warn
+
+    def refuse(what):
+        def refused_call(*args, **kw):
+            refused.append(what)
+            pytest.fail(f"{what} at load time")
+
+        return refused_call
+
+    monkeypatch.setattr(Tape, "simulate", refuse("a tape was simulated"))
+    monkeypatch.setattr(Tape, "verify", refuse("a tape was verified"))
+    for game in {*RULESETS.values(), *LEGACY.values()}:
+        monkeypatch.setattr(game, "__init__", refuse("a game was built"))
+        monkeypatch.setattr(game, "step", refuse("a game was run"))
+
+    def cpu():
+        """This thread's CPU time and that of the child processes it has waited for."""
+        times = os.times()
+        return time.thread_time() + times.children_user + times.children_system
+
+    def ratio(a, b):
+        """a / b; b can be 0, as a VM takes the time its host stole off what its thread runs next."""
+        return a / b if b else float("inf")
+
+    rounds = []
+    gc.disable()  # a collection lands in whichever phase the heap's history puts it, up to ten times that phase's time
+    try:
+        for _ in range(5):
+            began = cpu()
+            loaded = tapes.attract_tapes()
+            parsing = cpu()
+            [Playback(DEMOS / name) for name in tapes.TAPES]
+            reading = cpu()
+            [json.loads((DEMOS / name).read_text(encoding="utf-8")) for name in tapes.TAPES]
+            done = cpu()
+            rounds.append((ratio(parsing - began, reading - parsing), ratio(reading - parsing, done - reading)))
+    finally:
+        gc.enable()
+    assert not refused, refused
+    load, parse = (min(ratios) for ratios in zip(*rounds))
+    assert load < 3 and parse < 45, rounds
     assert [playback.ruleset for playback in loaded] == [CAMPAIGN, ARCADE]
     assert [playback.tapes[0].digest for playback in loaded] == [digest for _, digest in PINS.values()]
 

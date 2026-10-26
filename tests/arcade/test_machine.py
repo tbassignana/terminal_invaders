@@ -11,6 +11,7 @@ and the player switch), BCD arithmetic and speed.
 The program image is build_image(): the ROM's tables and art.py's pictures (some of them the ROM's, for play); the
 ROM image file is never read."""
 
+import sys
 import time
 
 import pytest
@@ -1097,11 +1098,39 @@ def test_bcd_add_is_add_then_daa():
 
 
 def test_step_is_fast(started):
+    """The port doing several times the work per frame, held two ways that neither the machine's speed nor its load
+    moves (a median step under 1 ms held it on a fast machine, at 0.2 ms, but not under 3.11's coverage tracer, at
+    1 ms). The calls step() makes, to Python functions and builtins alike (sys.setprofile), come out the same on
+    Python 3.11 to 3.15 with coverage or without: about 1,100 a frame, held under 3,000. And a step's CPU time is
+    weighed against 500 BCD additions timed right after it on this thread, so that both see the machine as it is
+    then: 575 to 970 additions at the median of 300 steps, on 3.11 to 3.15 with any coverage core or none and with
+    up to six busy processes sharing its core, held under 2,500. CPU time leaves out a step that waits, but the port
+    has nothing to wait on."""
     game = started
-    times = []
-    for k in range(300):
-        t = time.perf_counter()
+    calls = 0
+
+    def count(frame, event, arg):
+        nonlocal calls
+        calls += event in ("call", "c_call")
+
+    previous = sys.getprofile()
+    sys.setprofile(count)
+    try:
+        for k in range(300):
+            game.step(script(k))
+    finally:
+        sys.setprofile(previous)
+    assert calls / 300 < 3000, calls / 300
+    additions = []
+    for k in range(300, 600):
+        began = time.thread_time()
         game.step(script(k))
-        times.append(time.perf_counter() - t)
-    times.sort()
-    assert times[len(times) // 2] < 0.001
+        stepped = time.thread_time()
+        for a in range(5):
+            for b in range(100):
+                bcd_add(a, b)
+        # This can be 0, as a VM takes the time its host stole off what its thread runs next
+        added = time.thread_time() - stepped
+        additions.append((stepped - began) / added * 500 if added else float("inf"))
+    additions.sort()
+    assert additions[150] < 2500, additions[150]

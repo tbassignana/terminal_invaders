@@ -134,7 +134,7 @@ def test_timed_controls_move_while_a_key_is_held_and_latch_a_quick_press(balance
     while held and stops it once the repeats stop; a press shorter than the delay latches, so the ship keeps moving
     after it until S, or until a quick press the other way, which stops it instead of reversing (TimedControls). A
     hold the other way turns the ship at once. Space pressed while a direction is held takes the OS repeat from it,
-    so the game can't see the direction let go and the ship moves on until S (README, `--controls`)."""
+    so the game can't see the direction let go and the ship moves on until S (docs/GUIDE.md, `--controls`)."""
     from terminal_invaders.input import IntentDriver
 
     keyboard = balance.Keyboard("timed", Config("normal", "classic", 3))

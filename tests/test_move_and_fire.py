@@ -525,7 +525,7 @@ class ArcadeFireTests(unittest.TestCase):
         self.assertIsNone(rig.session.router.gate.repeat.slow)
 
     def test_before_any_delay_is_learned_a_held_spaces_first_repeat_counts_too(self):
-        """The case left (README, Arcade mode): without release events, the first hold before the game knows the
+        """The case left (docs/GUIDE.md, Arcade mode): without release events, the first hold before the game knows the
         keyboard's delay reads its first repeat as a second press, and with a slow repeat the four after it too."""
         slower = RepeatProfile("slower", 0.525, 0.18)
         for profile, count in [(profile, 2) for profile in PROFILES.values()] + [(slower, 6)]:

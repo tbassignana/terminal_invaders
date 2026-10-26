@@ -2,6 +2,7 @@
 fake player on a real pipe and a fake clock; PulseSink against a fake libpulse-simple that converts every argument
 with the code's own argtypes, as ctypes does."""
 
+import contextlib
 import ctypes
 import functools
 import json
@@ -18,6 +19,7 @@ from terminal_invaders.audio import linux
 from terminal_invaders.audio.protocol import BLOCK_BYTES, BLOCK_SAMPLES
 from terminal_invaders.audio.sink import SinkError
 from tests.support import fakeplayer
+from tests.support.audioprocs import state
 
 pipes = pytest.mark.skipif(sys.platform == "darwin", reason="FIONREAD on a pipe's write end works only on Linux")
 ARGV = {  # spec 3, as written there
@@ -53,13 +55,25 @@ def gone(pid: int) -> bool:
     return False
 
 
-def play(sink, mixer, seconds: float) -> float:
-    """Run the helper's loop for up to `seconds`; returns how long it ran (until a SinkError, which propagates)."""
+def play(sink, mixer, seconds: float, until=lambda: False, ticks=None) -> float:
+    """Run the helper's loop for up to `seconds`, or until `until()` holds; returns how long it ran (until a
+    SinkError, which propagates). `ticks`, a list, gets (began, ended) for each feed that returned."""
     start = time.monotonic()
-    while time.monotonic() - start < seconds:
+    while time.monotonic() - start < seconds and not until():
         time.sleep(sink.wait(True))
+        began = time.monotonic()
         sink.feed(mixer, True)
+        if ticks is not None:
+            ticks.append((began, time.monotonic()))
     return time.monotonic() - start
+
+
+def wait_until(condition, timeout: float):
+    """Poll `condition()` every 10 ms until it holds or `timeout` s pass; returns its last value."""
+    deadline = time.monotonic() + timeout
+    while not (result := condition()) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return result
 
 
 @pytest.fixture
@@ -120,26 +134,59 @@ def test_a_player_that_exits_or_is_missing_fails_open(players):
 @pipes
 def test_a_player_that_never_reads_fails_the_health_check_and_is_killed(players):
     players("noread")
-    start = time.monotonic()
+    procs, readings = [], []
+
+    def popen(argv, **options):
+        """Start the player and wait for its JSON line, so that it is running when the health check begins and its
+        start-up (slow on a loaded machine) is not counted as health check time."""
+        procs.append(subprocess.Popen(argv, **options))
+        assert wait_until(players, 10.0)
+        return procs[-1]
+
+    def clock() -> float:
+        """The sink's clock, keeping each reading."""
+        readings.append(time.monotonic())
+        return readings[-1]
+
     with pytest.raises(SinkError, match="^health check timed out$"):
-        linux.PipeSink("pw-cat", health_timeout=0.2).open()
-    assert 0.2 <= time.monotonic() - start < 0.6
-    assert gone(players()[0]["pid"])
+        linux.PipeSink("pw-cat", clock=clock, popen=popen, health_timeout=0.2).open()
+    closed = time.monotonic()
+    deadline = readings[0] + 0.2  # the first reading sets the deadline
+    # On its own clock the check waited the whole 0.2 s, not the default 1 s, and gave up at its first poll past
+    # it, which came soon after: it polls every 2 ms, so 0.5 s late is a hang, not a slow machine.
+    assert readings[-2] < deadline <= readings[-1] < deadline + 0.5
+    assert closed - readings[-1] < 0.5  # then it killed the player at once, with no drain
+    (run,) = players()
+    assert run["pid"] == procs[0].pid and procs[0].returncode == -signal.SIGKILL and gone(run["pid"])
 
 
 @pipes
 def test_a_player_that_stops_reading_is_stalled_after_half_a_second(players):
-    players("stall_after:0.2")
-    sink = linux.PipeSink("pacat")
+    players("ok")
+    sink, mixer = linux.PipeSink("pacat"), Counter()
     sink.open()
+    (run,) = players()  # it has read the health check's silence, so it has written its line
     try:
-        start = time.monotonic()
+        play(sink, mixer, 0.2)  # 0.2 s of reading: a player that reads is never stalled
+        stopping = time.monotonic()
+        for _ in range(2):  # two more reads: the second began after the first reached FAKEPLAYER_OUT, so after
+            heard = players.out.stat().st_size  # `stopping`, and the sink saw the pipe move after `stopping`
+            play(sink, mixer, 5.0, until=lambda: players.out.stat().st_size > heard)
+            assert players.out.stat().st_size > heard
+        os.kill(run["pid"], signal.SIGSTOP)  # then it stops reading, still alive
+        assert wait_until(lambda: "T" in state(run["pid"]), 10.0)
+        ticks = []
         with pytest.raises(SinkError, match="^stalled$"):
-            play(sink, Counter(), 3.0)
-        assert 0.6 < time.monotonic() - start < 1.5  # 0.2 s of reading, then 0.5 s with no move
+            play(sink, mixer, 3.0, ticks=ticks)
+        assert time.monotonic() - stopping >= 0.5  # 0.5 s with no move, and never sooner, however slow the machine
+        # Nor later: with the player stopped, the pipe last moved by the end of the first tick after the stop, so
+        # each tick that began 0.5 s after that had to raise.
+        assert not ticks or ticks[-1][0] < ticks[0][1] + 0.5
     finally:
+        with contextlib.suppress(ProcessLookupError):  # never leave it stopped: a stopped player ignores its
+            os.kill(run["pid"], signal.SIGCONT)  # SIGALRM, and a close() that waited for it would hang
         sink.close()
-    assert gone(players()[0]["pid"])
+    assert gone(run["pid"])
 
 
 @pipes

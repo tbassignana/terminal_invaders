@@ -465,7 +465,7 @@ def clock(ticks: int) -> str:
     return f"{hours}:{rest // 60:02d}:{rest % 60:02d}" if hours else f"{rest // 60}:{rest % 60:02d}"
 
 
-def boss_list(count: int) -> str:
+def boss_list(count: int) -> list[str]:
     """The bosses beaten, in the order a run meets them (Endless's loops replay acts II-IV, so every boss but the
     WARDEN again); a boss beaten more than once gets a count."""
     order = [row.name for row in sorted(BOSSES.values(), key=lambda row: row.wave)]
@@ -473,7 +473,7 @@ def boss_list(count: int) -> str:
     for index in range(count):
         name = order[index] if index < len(order) else order[1 + (index - len(order)) % (len(order) - 1)]
         beaten[name] = beaten.get(name, 0) + 1
-    return ", ".join(name + (f" x{times}" if times > 1 else "") for name, times in beaten.items())
+    return [name + (f" x{times}" if times > 1 else "") for name, times in beaten.items()]
 
 
 def upgrade_names(game) -> list[str]:
@@ -528,8 +528,9 @@ def run_rows(session, pilot, replay: bool) -> list[tuple[str, str, str]]:
     rows.append(("TIME", clock(result["ticks"]), ""))
     accuracy = 100 * result["hits"] / max(1, result["shots"])
     rows.append(("KILLS", f"{result['kills']:<8}ACCURACY {accuracy:.0f}%     BEST COMBO x{result['best_combo']}", ""))
-    if result.get("bosses"):
-        rows.append(("BOSSES", boss_list(result["bosses"]), ""))
+    if result.get("bosses"):  # all four bosses are wider than one row: they take a second
+        for number, line in enumerate(listed(boss_list(result["bosses"]), VALUE_WIDTH, 2)):
+            rows.append(("BOSSES" if number == 0 else "", line, ""))
     if result.get("perfect_waves"):
         count = result["perfect_waves"]
         rows.append(("PERFECT", f"{count} wave{'' if count == 1 else 's'}", ""))
